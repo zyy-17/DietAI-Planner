@@ -81,10 +81,12 @@ public class User {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
+        if (this.email != null && this.email.isEmpty()) this.email = null;
     }
 
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+        if (this.email != null && this.email.isEmpty()) this.email = null;
     }
 }

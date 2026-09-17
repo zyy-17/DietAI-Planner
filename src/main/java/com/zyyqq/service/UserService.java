@@ -35,7 +35,7 @@ public class UserService {
 
         User user = User.builder()
                 .username(request.getUsername())
-                .email(request.getEmail())
+                .email(request.getEmail() != null && !request.getEmail().isEmpty() ? request.getEmail() : null)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .role("user")
                 .status(1)
