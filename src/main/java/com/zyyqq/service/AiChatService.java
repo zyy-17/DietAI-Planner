@@ -178,9 +178,19 @@ public class AiChatService {
             requestBody.put("session_id", sessionId);
             requestBody.put("user_id", userId);
 
+            List<AiChatMessage> historyMessages = messageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+            List<Map<String, String>> history = new java.util.ArrayList<>();
+            for (AiChatMessage msg : historyMessages) {
+                Map<String, String> item = new HashMap<>();
+                item.put("role", msg.getRole());
+                item.put("content", msg.getContent());
+                history.add(item);
+            }
+            requestBody.put("history", history);
+
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restTemplate.postForObject(
-                    aiServiceUrl + "/api/chat",
+                    aiServiceUrl + "/api/chat/history",
                     requestBody,
                     Map.class
             );

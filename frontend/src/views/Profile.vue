@@ -76,7 +76,9 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UserFilled } from '@element-plus/icons-vue'
 import api from '../utils/api'
+import { useUserStore } from '../stores/user'
 
+const userStore = useUserStore()
 const saving = ref(false)
 const selectedPreferences = ref([])
 const form = reactive({
@@ -112,6 +114,7 @@ function beforeAvatarUpload(file) {
 function handleAvatarSuccess(response) {
   if (response.code === 200) {
     form.avatarUrl = response.data
+    userStore.setAvatar(response.data)
     ElMessage.success('头像上传成功')
   } else {
     ElMessage.error(response.message || '上传失败')

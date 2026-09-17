@@ -14,7 +14,7 @@
       <div class="header-right">
         <el-dropdown @command="handleCommand">
           <span class="user-info">
-            <el-avatar :size="28" icon="UserFilled" />
+            <el-avatar :size="28" :src="userStore.avatarUrl || undefined" :icon="UserFilled" />
             {{ userStore.username }}
           </span>
           <template #dropdown>
@@ -34,15 +34,22 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import { UserFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 
 const currentRoute = computed(() => route.path)
+
+onMounted(() => {
+  if (userStore.token && !userStore.avatarUrl) {
+    userStore.fetchProfile()
+  }
+})
 
 function handleCommand(command) {
   if (command === 'logout') {
