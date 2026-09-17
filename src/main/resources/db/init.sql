@@ -1,11 +1,162 @@
 CREATE DATABASE IF NOT EXISTS diet_ai_planner DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE diet_ai_planner;
 
-INSERT INTO user (username, email, password_hash, real_name, gender, birth_date, height, weight, activity_level, diet_goal, role, status, created_at, updated_at, deleted)
-VALUES ('admin', 'admin@dietai.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', 1, '1990-01-01', 175.0, 70.0, 3, 'maintain', 'admin', 1, NOW(), NOW(), 0)
-ON DUPLICATE KEY UPDATE id=id;
+-- ============================================================
+-- 1. 用户表 (user)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `user` (
+    `id`             BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键，自增',
+    `username`       VARCHAR(50)   NOT NULL COMMENT '用户名，唯一',
+    `email`          VARCHAR(100)  DEFAULT NULL COMMENT '邮箱，唯一',
+    `password_hash`  VARCHAR(100)  NOT NULL COMMENT 'BCrypt加密密码',
+    `real_name`      VARCHAR(50)   DEFAULT NULL COMMENT '真实姓名',
+    `gender`         TINYINT       DEFAULT NULL COMMENT '性别：0未知/1男/2女',
+    `birth_date`     DATE          DEFAULT NULL COMMENT '出生日期',
+    `height`         DECIMAL(5,1)  DEFAULT NULL COMMENT '身高(cm)',
+    `weight`         DECIMAL(5,1)  DEFAULT NULL COMMENT '体重(kg)',
+    `activity_level` TINYINT       DEFAULT NULL COMMENT '活动水平1-5',
+    `diet_goal`      VARCHAR(20)   DEFAULT NULL COMMENT '减脂/维持/增肌/健康管理',
+    `role`           VARCHAR(20)   NOT NULL DEFAULT 'user' COMMENT '角色：user/admin',
+    `status`         TINYINT       NOT NULL DEFAULT 1 COMMENT '状态：1正常/0禁用',
+    `created_at`     DATETIME      NOT NULL COMMENT '注册时间',
+    `updated_at`     DATETIME      NOT NULL COMMENT '更新时间',
+    `deleted`        TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常/1删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_username` (`username`),
+    UNIQUE KEY `uk_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
-INSERT INTO food_category (name, parent_id, sort_order, icon, status) VALUES
+-- ============================================================
+-- 2. 食品分类表 (food_category)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `food_category` (
+    `id`         BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `name`       VARCHAR(50)  NOT NULL COMMENT '分类名称',
+    `parent_id`  BIGINT       DEFAULT 0 COMMENT '父分类ID，0为一级分类',
+    `sort_order` INT          NOT NULL DEFAULT 0 COMMENT '排序权重',
+    `icon`       VARCHAR(100) DEFAULT NULL COMMENT '分类图标URL',
+    `status`     TINYINT      NOT NULL DEFAULT 1 COMMENT '1启用/0禁用',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='食品分类表';
+
+-- ============================================================
+-- 3. 食物表 (food)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `food` (
+    `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `name`          VARCHAR(100)  NOT NULL COMMENT '食物名称',
+    `category_id`   BIGINT        NOT NULL COMMENT '关联分类ID',
+    `calories`      DECIMAL(8,2)  NOT NULL COMMENT '热量(kcal/100g)',
+    `protein`       DECIMAL(8,2)  DEFAULT NULL COMMENT '蛋白质(g/100g)',
+    `carbohydrate`  DECIMAL(8,2)  DEFAULT NULL COMMENT '碳水(g/100g)',
+    `fat`           DECIMAL(8,2)  DEFAULT NULL COMMENT '脂肪(g/100g)',
+    `fiber`         DECIMAL(8,2)  DEFAULT NULL COMMENT '膳食纤维(g/100g)',
+    `image_url`     VARCHAR(255)  DEFAULT NULL COMMENT '食物图片',
+    `source`        VARCHAR(20)   NOT NULL DEFAULT 'system' COMMENT '来源：system/user',
+    `status`        VARCHAR(20)   NOT NULL DEFAULT 'approved' COMMENT 'pending/approved/rejected',
+    `created_by`    BIGINT        DEFAULT NULL COMMENT '提交用户ID',
+    `created_at`    DATETIME      NOT NULL COMMENT '创建时间',
+    `updated_at`    DATETIME      NOT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_category` (`category_id`),
+    KEY `idx_status` (`status`),
+    KEY `idx_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='食物表';
+
+-- ============================================================
+-- 4. 饮食记录表 (diet_record)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `diet_record` (
+    `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`       BIGINT        NOT NULL COMMENT '用户ID',
+    `food_id`       BIGINT        NOT NULL COMMENT '食物ID',
+    `meal_type`     VARCHAR(20)   NOT NULL COMMENT 'breakfast/lunch/dinner/snack',
+    `amount`        DECIMAL(8,2)  NOT NULL COMMENT '食用份量(克)',
+    `calories`      DECIMAL(8,2)  NOT NULL COMMENT '本条记录热量',
+    `protein`       DECIMAL(8,2)  DEFAULT NULL COMMENT '本条蛋白质(g)',
+    `carbohydrate`  DECIMAL(8,2)  DEFAULT NULL COMMENT '本条碳水(g)',
+    `fat`           DECIMAL(8,2)  DEFAULT NULL COMMENT '本条脂肪(g)',
+    `record_date`   DATE          NOT NULL COMMENT '记录日期',
+    `created_at`    DATETIME      NOT NULL COMMENT '记录时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_user_date` (`user_id`, `record_date`),
+    KEY `idx_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='饮食记录表';
+
+-- ============================================================
+-- 5. AI对话会话表 (ai_chat_session)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `ai_chat_session` (
+    `id`         BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`    BIGINT       NOT NULL COMMENT '用户ID',
+    `title`      VARCHAR(200) DEFAULT NULL COMMENT '会话标题',
+    `created_at` DATETIME     NOT NULL COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI对话会话表';
+
+-- ============================================================
+-- 6. AI对话消息表 (ai_chat_message)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `ai_chat_message` (
+    `id`              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `session_id`      BIGINT       NOT NULL COMMENT '会话ID',
+    `user_id`         BIGINT       NOT NULL COMMENT '用户ID',
+    `role`            VARCHAR(20)  NOT NULL COMMENT 'user/assistant/system',
+    `content`         TEXT         NOT NULL COMMENT '消息内容',
+    `context_snapshot` TEXT        DEFAULT NULL COMMENT '当时注入的用户上下文快照',
+    `created_at`      DATETIME     NOT NULL COMMENT '发送时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_session` (`session_id`),
+    KEY `idx_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI对话消息表';
+
+-- ============================================================
+-- 7. AI生成记录表 (ai_generation_log)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `ai_generation_log` (
+    `id`             BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`        BIGINT       NOT NULL COMMENT '用户ID',
+    `type`           VARCHAR(30)  NOT NULL COMMENT 'chat/diet_plan/nutrition_analysis',
+    `input_summary`  TEXT         DEFAULT NULL COMMENT '输入摘要',
+    `output_content` TEXT         DEFAULT NULL COMMENT 'AI生成内容',
+    `model_name`     VARCHAR(50)  DEFAULT NULL COMMENT '使用的模型名称',
+    `tokens_used`    INT          DEFAULT NULL COMMENT '消耗Token数',
+    `is_abnormal`    TINYINT      NOT NULL DEFAULT 0 COMMENT '是否异常',
+    `created_at`     DATETIME     NOT NULL COMMENT '生成时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_user` (`user_id`),
+    KEY `idx_type` (`type`),
+    KEY `idx_abnormal` (`is_abnormal`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI生成记录表';
+
+-- ============================================================
+-- 8. 营养标准配置表 (nutrition_standard)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `nutrition_standard` (
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `gender`        TINYINT      NOT NULL COMMENT '性别：1男/2女',
+    `age_min`       INT          NOT NULL COMMENT '年龄下限',
+    `age_max`       INT          NOT NULL COMMENT '年龄上限',
+    `calories_kcal` INT          NOT NULL COMMENT '推荐热量(kcal)',
+    `protein_g`     DECIMAL(8,2) DEFAULT NULL COMMENT '推荐蛋白质(g)',
+    `carb_g`        DECIMAL(8,2) DEFAULT NULL COMMENT '推荐碳水(g)',
+    `fat_g`         DECIMAL(8,2) DEFAULT NULL COMMENT '推荐脂肪(g)',
+    PRIMARY KEY (`id`),
+    KEY `idx_gender_age` (`gender`, `age_min`, `age_max`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='营养标准配置表';
+
+-- ============================================================
+-- 初始数据
+-- ============================================================
+
+-- 管理员账号 (密码: admin123)
+INSERT INTO `user` (`username`, `email`, `password_hash`, `real_name`, `gender`, `birth_date`, `height`, `weight`, `activity_level`, `diet_goal`, `role`, `status`, `created_at`, `updated_at`, `deleted`)
+VALUES ('admin', 'admin@dietai.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', 1, '1990-01-01', 175.0, 70.0, 3, 'maintain', 'admin', 1, NOW(), NOW(), 0)
+ON DUPLICATE KEY UPDATE `id`=`id`;
+
+-- 食品分类
+INSERT INTO `food_category` (`name`, `parent_id`, `sort_order`, `icon`, `status`) VALUES
 ('主食', 0, 1, 'rice', 1),
 ('肉类', 0, 2, 'meat', 1),
 ('蔬菜', 0, 3, 'vegetable', 1),
@@ -17,7 +168,8 @@ INSERT INTO food_category (name, parent_id, sort_order, icon, status) VALUES
 ('海鲜', 0, 9, 'seafood', 1),
 ('蛋类', 0, 10, 'egg', 1);
 
-INSERT INTO food (name, category_id, calories, protein, carbohydrate, fat, fiber, image_url, source, status, created_by, created_at, updated_at) VALUES
+-- 常见食物数据
+INSERT INTO `food` (`name`, `category_id`, `calories`, `protein`, `carbohydrate`, `fat`, `fiber`, `image_url`, `source`, `status`, `created_by`, `created_at`, `updated_at`) VALUES
 ('白米饭', 1, 116.00, 2.60, 25.90, 0.30, 0.30, NULL, 'system', 'approved', NULL, NOW(), NOW()),
 ('馒头', 1, 221.00, 7.00, 47.00, 1.10, 1.30, NULL, 'system', 'approved', NULL, NOW(), NOW()),
 ('面条(煮)', 1, 110.00, 3.50, 22.80, 0.40, 0.80, NULL, 'system', 'approved', NULL, NOW(), NOW()),
@@ -39,7 +191,8 @@ INSERT INTO food (name, category_id, calories, protein, carbohydrate, fat, fiber
 ('虾', 9, 87.00, 18.60, 0.80, 0.80, 0.00, NULL, 'system', 'approved', NULL, NOW(), NOW()),
 ('燕麦片', 1, 377.00, 13.50, 66.30, 6.70, 5.30, NULL, 'system', 'approved', NULL, NOW(), NOW());
 
-INSERT INTO nutrition_standard (gender, age_min, age_max, calories_kcal, protein_g, carb_g, fat_g) VALUES
+-- 营养标准配置
+INSERT INTO `nutrition_standard` (`gender`, `age_min`, `age_max`, `calories_kcal`, `protein_g`, `carb_g`, `fat_g`) VALUES
 (1, 18, 30, 2600, 65.00, 325.00, 72.00),
 (1, 31, 50, 2400, 60.00, 300.00, 67.00),
 (1, 51, 70, 2200, 55.00, 275.00, 61.00),
