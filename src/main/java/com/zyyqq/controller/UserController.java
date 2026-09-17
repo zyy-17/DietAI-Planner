@@ -66,12 +66,12 @@ public class UserController {
         String filename = UUID.randomUUID().toString() + extension;
 
         try {
-            Path dirPath = Paths.get(avatarDir);
+            Path dirPath = Paths.get(avatarDir).toAbsolutePath();
             if (!Files.exists(dirPath)) {
                 Files.createDirectories(dirPath);
             }
             Path filePath = dirPath.resolve(filename);
-            file.transferTo(filePath.toFile());
+            Files.copy(file.getInputStream(), filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
             String avatarUrl = avatarUrlPrefix + "/" + filename;
 
