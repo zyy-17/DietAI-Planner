@@ -87,8 +87,11 @@ def call_ollama(message: str, context: Optional[str] = None,
     if history:
         for item in history:
             messages.append({'role': item.role, 'content': item.content})
-
-    messages.append({'role': 'user', 'content': message})
+        last_role = history[-1].role if history else None
+        if last_role != 'user':
+            messages.append({'role': 'user', 'content': message})
+    else:
+        messages.append({'role': 'user', 'content': message})
 
     response: ChatResponse = ollama_chat(
         model=OLLAMA_MODEL,
@@ -108,8 +111,11 @@ def call_ollama_stream(message: str, context: Optional[str] = None,
     if history:
         for item in history:
             messages.append({'role': item.role, 'content': item.content})
-
-    messages.append({'role': 'user', 'content': message})
+        last_role = history[-1].role if history else None
+        if last_role != 'user':
+            messages.append({'role': 'user', 'content': message})
+    else:
+        messages.append({'role': 'user', 'content': message})
 
     response: ChatResponse = ollama_chat(
         model=OLLAMA_MODEL,
