@@ -215,7 +215,7 @@ const addForm = reactive({ foodId: null, amount: 100, mealType: 'breakfast' })
 
 const meals = [
   { type: 'breakfast', name: '早餐', icon: '🍳', time: '07:00 - 09:00' },
-  { type: 'lunch', name: '午餐', icon: '🥗', time: '11:30 - 13:30' },
+  { type: 'lunch', name: '午餐', icon: '🥗', time: '11:00 - 13:00' },
   { type: 'dinner', name: '晚餐', icon: '🍗', time: '17:30 - 19:30' },
   { type: 'snack', name: '加餐', icon: '🍪', time: '15:00 - 16:00' }
 ]
