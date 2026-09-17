@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS `user` (
     `weight`         DECIMAL(5,1)  DEFAULT NULL COMMENT '体重(kg)',
     `activity_level` TINYINT       DEFAULT NULL COMMENT '活动水平1-5',
     `diet_goal`      VARCHAR(20)   DEFAULT NULL COMMENT '减脂/维持/增肌/健康管理',
+    `diet_preference` VARCHAR(200) DEFAULT NULL COMMENT '饮食偏好，如：清淡、素食、低糖等',
+    `avatar_url`     VARCHAR(255)  DEFAULT NULL COMMENT '头像URL',
     `role`           VARCHAR(20)   NOT NULL DEFAULT 'user' COMMENT '角色：user/admin',
     `status`         TINYINT       NOT NULL DEFAULT 1 COMMENT '状态：1正常/0禁用',
     `created_at`     DATETIME      NOT NULL COMMENT '注册时间',

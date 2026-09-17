@@ -90,6 +90,8 @@ public class UserService {
         if (request.getWeight() != null) user.setWeight(request.getWeight());
         if (request.getActivityLevel() != null) user.setActivityLevel(request.getActivityLevel());
         if (request.getDietGoal() != null) user.setDietGoal(request.getDietGoal());
+        if (request.getDietPreference() != null) user.setDietPreference(request.getDietPreference());
+        if (request.getAvatarUrl() != null) user.setAvatarUrl(request.getAvatarUrl());
         return userRepository.save(user);
     }
 

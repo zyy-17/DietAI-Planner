@@ -52,6 +52,12 @@ public class User {
     @Column(name = "diet_goal", length = 20)
     private String dietGoal;
 
+    @Column(name = "diet_preference", length = 200)
+    private String dietPreference;
+
+    @Column(name = "avatar_url", length = 255)
+    private String avatarUrl;
+
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String role = "user";

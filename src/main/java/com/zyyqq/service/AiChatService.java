@@ -117,21 +117,54 @@ public class AiChatService {
         User user = userService.getUserById(userId);
         StringBuilder sb = new StringBuilder();
         sb.append("用户画像：");
-        if (user.getGender() != null) sb.append("性别=").append(user.getGender() == 1 ? "男" : "女");
+        if (user.getRealName() != null) sb.append("姓名=").append(user.getRealName());
+        if (user.getGender() != null) sb.append(", 性别=").append(user.getGender() == 1 ? "男" : "女");
         if (user.getBirthDate() != null) {
             int age = java.time.Period.between(user.getBirthDate(), java.time.LocalDate.now()).getYears();
-            sb.append(", 年龄=").append(age);
+            sb.append(", 年龄=").append(age).append("岁");
         }
         if (user.getHeight() != null) sb.append(", 身高=").append(user.getHeight()).append("cm");
         if (user.getWeight() != null) sb.append(", 体重=").append(user.getWeight()).append("kg");
-        if (user.getDietGoal() != null) sb.append(", 目标=").append(user.getDietGoal());
+
+        String activityDesc = switch (user.getActivityLevel() != null ? user.getActivityLevel() : 0) {
+            case 1 -> "久坐(几乎不运动)";
+            case 2 -> "轻度活动(每周1-3次)";
+            case 3 -> "中度活动(每周3-5次)";
+            case 4 -> "高度活动(每周6-7次)";
+            case 5 -> "极高活动(体力劳动)";
+            default -> "未知";
+        };
+        sb.append(", 活动水平=").append(activityDesc);
+
+        if (user.getDietGoal() != null) {
+            String goalDesc = switch (user.getDietGoal()) {
+                case "lose" -> "减脂";
+                case "maintain" -> "维持体重";
+                case "gain" -> "增肌";
+                default -> user.getDietGoal();
+            };
+            sb.append(", 饮食目标=").append(goalDesc);
+        }
+
+        if (user.getDietPreference() != null && !user.getDietPreference().isEmpty()) {
+            sb.append(", 饮食偏好=").append(user.getDietPreference());
+        }
 
         BigDecimal targetCal = userService.calculateTargetCalories(user);
         sb.append(", 每日目标热量=").append(targetCal).append("kcal");
 
+        BigDecimal proteinTarget = targetCal.multiply(new BigDecimal("0.20")).divide(new BigDecimal("4"), 1, java.math.RoundingMode.HALF_UP);
+        BigDecimal carbTarget = targetCal.multiply(new BigDecimal("0.50")).divide(new BigDecimal("4"), 1, java.math.RoundingMode.HALF_UP);
+        BigDecimal fatTarget = targetCal.multiply(new BigDecimal("0.30")).divide(new BigDecimal("9"), 1, java.math.RoundingMode.HALF_UP);
+        sb.append("\n推荐营养素：蛋白质").append(proteinTarget).append("g, 碳水").append(carbTarget).append("g, 脂肪").append(fatTarget).append("g");
+
         List<DietRecord> todayRecords = dietRecordService.getTodayRecords(userId);
         BigDecimal todayCal = todayRecords.stream().map(DietRecord::getCalories).reduce(BigDecimal.ZERO, BigDecimal::add);
-        sb.append("\n今日已摄入：").append(todayCal).append("kcal，剩余：").append(targetCal.subtract(todayCal)).append("kcal");
+        BigDecimal todayProtein = todayRecords.stream().map(r -> r.getProtein() != null ? r.getProtein() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal todayCarb = todayRecords.stream().map(r -> r.getCarbohydrate() != null ? r.getCarbohydrate() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal todayFat = todayRecords.stream().map(r -> r.getFat() != null ? r.getFat() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add);
+        sb.append("\n今日已摄入：热量").append(todayCal).append("kcal(剩余").append(targetCal.subtract(todayCal)).append("kcal)");
+        sb.append(", 蛋白质").append(todayProtein).append("g, 碳水").append(todayCarb).append("g, 脂肪").append(todayFat).append("g");
 
         return sb.toString();
     }

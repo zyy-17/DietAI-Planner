@@ -21,4 +21,8 @@ public class UpdateProfileRequest {
     private Integer activityLevel;
 
     private String dietGoal;
+
+    private String dietPreference;
+
+    private String avatarUrl;
 }
