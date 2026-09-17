@@ -35,6 +35,11 @@ public class FoodController {
         return ApiResponse.success(foodService.searchFoods(keyword));
     }
 
+    @GetMapping("/all")
+    public ApiResponse<java.util.List<Food>> getAllFoods() {
+        return ApiResponse.success(foodService.getAllApprovedFoods());
+    }
+
     @PostMapping
     public ApiResponse<Food> addFood(Authentication authentication,
                                      @RequestBody AddFoodRequest request) {

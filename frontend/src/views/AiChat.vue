@@ -68,7 +68,7 @@ async function loadSession(sessionId) {
 
 function confirmDeleteSession(sessionId) {
   ElMessageBox.confirm('确定要删除该会话吗？删除后无法恢复。', '删除确认', {
-    confirmButtonText: '确定删除',
+    confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning'
   }).then(() => {

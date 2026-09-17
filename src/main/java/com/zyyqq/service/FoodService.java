@@ -40,6 +40,10 @@ public class FoodService {
         return foodRepository.searchApproved(keyword);
     }
 
+    public List<Food> getAllApprovedFoods() {
+        return foodRepository.findByStatus("approved");
+    }
+
     @Transactional
     public Food addFoodByUser(AddFoodRequest request, Long userId) {
         Food food = Food.builder()

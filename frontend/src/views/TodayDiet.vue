@@ -210,6 +210,7 @@ const searchKeyword = ref('')
 const searchResults = ref([])
 const dialogSearchKeyword = ref('')
 const dialogSearchResults = ref([])
+const allFoods = ref([])
 const addForm = reactive({ foodId: null, amount: 100, mealType: 'breakfast' })
 
 const meals = [
@@ -323,6 +324,10 @@ async function loadData() {
     records.value = await api.get('/diet/today/records')
     computeFrequentFoods()
   } catch (e) {}
+  try {
+    allFoods.value = await api.get('/foods/all')
+    dialogSearchResults.value = allFoods.value
+  } catch (e) {}
 }
 
 function computeFrequentFoods() {
@@ -344,7 +349,7 @@ function openAddDialog(mealType) {
   addForm.foodId = null
   addForm.amount = 100
   dialogSearchKeyword.value = ''
-  dialogSearchResults.value = []
+  dialogSearchResults.value = allFoods.value
   addDialogVisible.value = true
 }
 
@@ -354,8 +359,12 @@ async function searchFood() {
 }
 
 async function dialogSearchFood() {
-  if (dialogSearchKeyword.value.length < 1) { dialogSearchResults.value = []; return }
-  try { dialogSearchResults.value = await api.get('/foods/search', { params: { keyword: dialogSearchKeyword.value } }) } catch (e) {}
+  if (dialogSearchKeyword.value.length < 1) {
+    dialogSearchResults.value = allFoods.value
+    return
+  }
+  const kw = dialogSearchKeyword.value.toLowerCase()
+  dialogSearchResults.value = allFoods.value.filter(f => f.name.toLowerCase().includes(kw))
 }
 
 function selectFood(food) {
