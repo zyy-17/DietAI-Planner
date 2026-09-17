@@ -2,6 +2,7 @@ package com.zyyqq.controller;
 
 import com.zyyqq.dto.request.UpdateProfileRequest;
 import com.zyyqq.dto.response.ApiResponse;
+import com.zyyqq.dto.response.UserProfileVO;
 import com.zyyqq.entity.User;
 import com.zyyqq.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -30,16 +31,50 @@ public class UserController {
     private String avatarUrlPrefix;
 
     @GetMapping("/profile")
-    public ApiResponse<User> getProfile(Authentication authentication) {
+    public ApiResponse<UserProfileVO> getProfile(Authentication authentication) {
         Long userId = getUserId(authentication);
-        return ApiResponse.success(userService.getUserById(userId));
+        User user = userService.getUserById(userId);
+        UserProfileVO vo = UserProfileVO.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .realName(user.getRealName())
+                .gender(user.getGender())
+                .birthDate(user.getBirthDate())
+                .height(user.getHeight())
+                .weight(user.getWeight())
+                .activityLevel(user.getActivityLevel())
+                .dietGoal(user.getDietGoal())
+                .dietPreference(user.getDietPreference())
+                .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole())
+                .createdAt(user.getCreatedAt())
+                .build();
+        return ApiResponse.success(vo);
     }
 
     @PutMapping("/profile")
-    public ApiResponse<User> updateProfile(Authentication authentication,
-                                           @RequestBody UpdateProfileRequest request) {
+    public ApiResponse<UserProfileVO> updateProfile(Authentication authentication,
+                                                    @RequestBody UpdateProfileRequest request) {
         Long userId = getUserId(authentication);
-        return ApiResponse.success(userService.updateProfile(userId, request));
+        User user = userService.updateProfile(userId, request);
+        UserProfileVO vo = UserProfileVO.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .realName(user.getRealName())
+                .gender(user.getGender())
+                .birthDate(user.getBirthDate())
+                .height(user.getHeight())
+                .weight(user.getWeight())
+                .activityLevel(user.getActivityLevel())
+                .dietGoal(user.getDietGoal())
+                .dietPreference(user.getDietPreference())
+                .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole())
+                .createdAt(user.getCreatedAt())
+                .build();
+        return ApiResponse.success(vo);
     }
 
     @PostMapping("/avatar")

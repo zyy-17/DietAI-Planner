@@ -124,11 +124,12 @@ function onPreferenceChange(values) {
 
 async function loadProfile() {
   try {
-    const res = await api.get('/user/profile')
-    const data = res.data || res
-    Object.assign(form, data)
-    if (form.dietPreference) {
-      selectedPreferences.value = form.dietPreference.split('、').filter(Boolean)
+    const data = await api.get('/user/profile')
+    if (data) {
+      Object.assign(form, data)
+      if (form.dietPreference) {
+        selectedPreferences.value = form.dietPreference.split('、').filter(Boolean)
+      }
     }
   } catch (e) {
     console.error(e)
