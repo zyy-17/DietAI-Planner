@@ -44,7 +44,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api from '../../../utils/api'
+import api from '../../utils/api'
 
 const categories = ref([])
 const dialogVisible = ref(false)

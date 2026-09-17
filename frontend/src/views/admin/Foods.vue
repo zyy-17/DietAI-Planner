@@ -37,7 +37,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api from '../../../utils/api'
+import api from '../../utils/api'
 
 const foods = ref([])
 const page = ref(1)

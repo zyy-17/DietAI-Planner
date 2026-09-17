@@ -36,7 +36,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import api from '../../../utils/api'
+import api from '../../utils/api'
 
 const logs = ref([])
 const page = ref(1)

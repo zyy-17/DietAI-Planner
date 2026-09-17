@@ -1,7 +1,7 @@
 <template>
   <div class="food-library">
     <el-row :gutter="20">
-      <el-col :span="4">
+      <el-col :span="4" v-if="showCategory">
         <el-card class="category-card">
           <div class="cat-item" :class="{ active: !selectedCategory }" @click="selectedCategory = null; loadFoods()">全部分类</div>
           <div v-for="cat in categories" :key="cat.id" class="cat-item" :class="{ active: selectedCategory === cat.id }" @click="selectedCategory = cat.id; loadFoods()">
@@ -9,11 +9,11 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="20">
+      <el-col :span="showCategory ? 20 : 24">
         <el-card>
           <template #header>
             <div class="card-header">
-              <el-input v-model="keyword" placeholder="搜索食物..." @input="loadFoods" clearable style="width:300px" />
+              <el-input v-model="keyword" :placeholder="searchPlaceholder" @input="loadFoods" clearable style="width:300px" />
               <el-button type="primary" @click="addFoodDialogVisible = true">添加新食物</el-button>
             </div>
           </template>
@@ -65,9 +65,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
+
+const route = useRoute()
+const mode = computed(() => route.meta.mode || 'default')
+
+const showCategory = computed(() => mode.value !== 'search')
+const searchPlaceholder = computed(() => mode.value === 'search' ? '输入食物名称搜索...' : '搜索食物...')
 
 const categories = ref([])
 const foods = ref([])
@@ -81,16 +88,18 @@ const currentFood = ref(null)
 const newFood = reactive({ name: '', categoryId: null, calories: 0, protein: 0, carbohydrate: 0, fat: 0 })
 
 async function loadCategories() {
-  categories.value = await api.get('/categories')
+  try { categories.value = await api.get('/categories') } catch (e) {}
 }
 
 async function loadFoods() {
-  const params = { page: page.value - 1, size: 20 }
-  if (keyword.value) params.keyword = keyword.value
-  if (selectedCategory.value) params.categoryId = selectedCategory.value
-  const data = await api.get('/foods', { params })
-  foods.value = data.content
-  total.value = data.totalElements
+  try {
+    const params = { page: page.value - 1, size: 20 }
+    if (keyword.value) params.keyword = keyword.value
+    if (selectedCategory.value) params.categoryId = selectedCategory.value
+    const data = await api.get('/foods', { params })
+    foods.value = data.content || []
+    total.value = data.totalElements || 0
+  } catch (e) {}
 }
 
 function showFoodDetail(food) {
@@ -105,10 +114,17 @@ async function addFood() {
   loadFoods()
 }
 
-onMounted(() => { loadCategories(); loadFoods() })
+onMounted(() => {
+  loadCategories()
+  loadFoods()
+  if (mode.value === 'add') {
+    addFoodDialogVisible.value = true
+  }
+})
 </script>
 
 <style scoped>
+.food-library { padding: 18px; }
 .category-card { min-height: 400px; }
 .cat-item { padding: 8px 12px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
 .cat-item:hover { background: #f5f7fa; }
