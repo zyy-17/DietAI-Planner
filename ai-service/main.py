@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
+from ollama import chat as ollama_chat
+from ollama import ChatResponse
 import uvicorn
 
 app = FastAPI(title="DietAI AI Service", version="1.0.0")
@@ -14,12 +16,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+OLLAMA_MODEL = "qwen2.5-coder:7b"
+
 
 class ChatMessage(BaseModel):
     message: str
     context: Optional[str] = None
     session_id: Optional[int] = None
     user_id: Optional[int] = None
+
+
+class ChatHistoryItem(BaseModel):
+    role: str
+    content: str
+
+
+class ChatWithHistoryRequest(BaseModel):
+    message: str
+    context: Optional[str] = None
+    session_id: Optional[int] = None
+    user_id: Optional[int] = None
+    history: Optional[List[ChatHistoryItem]] = None
 
 
 class DietPlanRequest(BaseModel):
@@ -40,23 +57,66 @@ SYSTEM_PROMPT = """你是一个专业的AI膳食营养助手，名叫"智慧膳�
 - 推荐食物时考虑营养均衡（碳水50%、蛋白质20%、脂肪30%）
 - 如果用户有特殊健康状况，建议咨询专业医生或营养师
 - 回答要简洁实用，给出具体可操作的建议
+- 合适的时候可以用🍎🥗💪🍽️📊这类emoji让回复更生动
 """
 
 
-def build_prompt(message: str, context: Optional[str] = None) -> str:
+def build_system_prompt(context: Optional[str] = None) -> str:
     prompt = SYSTEM_PROMPT
     if context:
         prompt += f"\n\n当前用户健康数据：\n{context}\n"
-    prompt += f"\n用户提问：{message}\n\n请给出专业、实用的回答："
     return prompt
 
 
-def generate_diet_response(message: str, context: Optional[str] = None) -> str:
-    prompt = build_prompt(message, context)
+def call_ollama(message: str, context: Optional[str] = None,
+                history: Optional[List[ChatHistoryItem]] = None) -> str:
+    system_content = build_system_prompt(context)
 
+    messages = [{'role': 'system', 'content': system_content}]
+
+    if history:
+        for item in history:
+            messages.append({'role': item.role, 'content': item.content})
+
+    messages.append({'role': 'user', 'content': message})
+
+    response: ChatResponse = ollama_chat(
+        model=OLLAMA_MODEL,
+        messages=messages,
+        stream=False
+    )
+
+    return response.message.content
+
+
+def call_ollama_stream(message: str, context: Optional[str] = None,
+                       history: Optional[List[ChatHistoryItem]] = None):
+    system_content = build_system_prompt(context)
+
+    messages = [{'role': 'system', 'content': system_content}]
+
+    if history:
+        for item in history:
+            messages.append({'role': item.role, 'content': item.content})
+
+    messages.append({'role': 'user', 'content': message})
+
+    response: ChatResponse = ollama_chat(
+        model=OLLAMA_MODEL,
+        messages=messages,
+        stream=True
+    )
+
+    full_response = ""
+    for chunk in response:
+        if chunk.message.content is not None:
+            full_response += chunk.message.content
+
+    return full_response
+
+
+def generate_fallback_response(message: str, context: Optional[str] = None) -> str:
     if "吃什么" in message or "推荐" in message or "食谱" in message:
-        if context and "剩余" in context:
-            return generate_meal_recommendation(context)
         return """根据营养均衡原则，为您推荐以下膳食搭配：
 
 🍽️ 推荐餐食方案：
@@ -65,105 +125,54 @@ def generate_diet_response(message: str, context: Optional[str] = None) -> str:
 • 蔬菜：西兰花、菠菜等深色蔬菜200-300g
 • 优质脂肪：少量坚果或橄榄油
 
-📊 营养配比参考：
-- 碳水化合物：50%（约250-325g）
-- 蛋白质：20%（约65-80g）
-- 脂肪：30%（约47-72g）
+📊 营养配比参考：碳水50%、蛋白质20%、脂肪30%
 
 💡 小贴士：每餐先吃蔬菜，再吃蛋白质，最后吃主食，有助于控制血糖和饱腹感。"""
 
-    elif "热量" in message or "卡路里" in message or "多少" in message:
-        return """关于热量摄入，以下是一些参考建议：
+    elif "热量" in message or "卡路里" in message:
+        return """📊 每日热量需求 = BMR × 活动系数
+• 减脂：TDEE × 0.8
+• 维持：TDEE × 1.0
+• 增肌：TDEE × 1.15
 
-📊 每日热量需求计算：
-• 基础代谢率(BMR)：根据Mifflin-St Jeor公式计算
-• 每日总消耗(TDEE) = BMR × 活动系数
-• 减脂目标：TDEE × 0.8（热量缺口约20%）
-• 维持体重：TDEE × 1.0
-• 增肌目标：TDEE × 1.15（热量盈余约15%）
-
-🍽️ 常见食物热量参考（每100g）：
-• 白米饭：116 kcal
-• 鸡胸肉：133 kcal
-• 西兰花：36 kcal
-• 苹果：53 kcal
-• 鸡蛋：144 kcal
-
-建议您在"今日饮食"页面记录每日摄入，系统会自动计算并提醒您剩余可摄入热量。"""
+建议在"今日饮食"页面记录每日摄入，系统会自动计算剩余可摄入热量。"""
 
     elif "减脂" in message or "减肥" in message or "瘦" in message:
-        return """科学减脂饮食建议：
-
-🎯 减脂核心原则：
-• 热量缺口：每日摄入比消耗少300-500千卡
-• 高蛋白：保护肌肉，提高饱腹感（1.6-2.2g/kg体重）
-• 适量碳水：优先选择低GI食物
-• 健康脂肪：不刻意追求极低脂肪
-
-📋 减脂一日食谱参考：
-早餐：燕麦片50g + 鸡蛋1个 + 牛奶250ml（约350kcal）
-午餐：糙米饭100g + 鸡胸肉150g + 西兰花200g（约450kcal）
-晚餐：清蒸鱼150g + 菠菜200g + 少量红薯（约350kcal）
-加餐：苹果1个 或 坚果一小把（约100kcal）
-
-⚠️ 注意：减脂不等于节食，保证营养均衡才是可持续的健康方式！"""
+        return """🎯 减脂核心：热量缺口300-500kcal/天，高蛋白保护肌肉，优先低GI碳水。
+⚠️ 减脂≠节食，营养均衡才是可持续的健康方式！"""
 
     elif "增肌" in message or "肌肉" in message:
-        return """科学增肌饮食建议：
-
-💪 增肌核心原则：
-• 热量盈余：每日摄入比消耗多200-400千卡
-• 高蛋白：每kg体重1.6-2.2g蛋白质
-• 充足碳水：为训练提供能量（4-6g/kg体重）
-• 训练前后营养补充
-
-📋 增肌一日食谱参考：
-早餐：全麦面包2片 + 鸡蛋3个 + 牛奶300ml（约550kcal）
-午餐：米饭200g + 牛肉200g + 西兰花200g（约650kcal）
-加餐：蛋白粉1勺 + 香蕉1根（约250kcal）
-晚餐：糙米饭150g + 鸡胸肉200g + 番茄200g（约550kcal）
-睡前：酪蛋白/牛奶200ml（约150kcal）
-
-💡 建议：训练后30分钟内补充蛋白质+碳水，促进肌肉恢复和生长。"""
+        return """💪 增肌核心：热量盈余200-400kcal/天，蛋白质1.6-2.2g/kg体重，训练后30分钟内补充蛋白+碳水。"""
 
     else:
-        return f"""您好！我是您的智能膳食助手，很高兴为您服务 🍎
-
-我可以帮您：
-• 🍽️ 制定个性化膳食计划（减脂/维持/增肌）
-• 📊 分析每日营养摄入是否合理
-• 🔍 查询食物热量和营养成分
-• 💡 提供健康饮食建议
-
-请告诉我您想了解什么？例如：
-- "今天晚餐吃什么好？"
-- "帮我制定减脂食谱"
-- "鸡胸肉的热量是多少？"
-- "我还能吃多少热量？"
-"""
-
-
-def generate_meal_recommendation(context: str) -> str:
-    return f"""根据您的健康数据，为您智能推荐：
-
-{context}
-
-🍽️ 个性化推荐方案：
-• 建议选择高蛋白、低脂肪的食物组合
-• 主食优先选择全谷物，控制份量
-• 每餐蔬菜不少于200g
-• 避免高糖饮料和加工食品
-
-如需更详细的膳食计划，请告诉我您的具体需求！"""
+        return """您好！我是您的智能膳食助手 🍎\n我可以帮您制定膳食计划、分析营养摄入、查询食物热量。请告诉我您想了解什么？"""
 
 
 @app.post("/api/chat")
 async def chat(chat_message: ChatMessage):
     try:
-        response = generate_diet_response(chat_message.message, chat_message.context)
+        response = call_ollama(
+            message=chat_message.message,
+            context=chat_message.context
+        )
         return {"response": response, "session_id": chat_message.session_id}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        fallback = generate_fallback_response(chat_message.message, chat_message.context)
+        return {"response": fallback, "session_id": chat_message.session_id, "fallback": True, "error": str(e)}
+
+
+@app.post("/api/chat/history")
+async def chat_with_history(request: ChatWithHistoryRequest):
+    try:
+        response = call_ollama(
+            message=request.message,
+            context=request.context,
+            history=request.history
+        )
+        return {"response": response, "session_id": request.session_id}
+    except Exception as e:
+        fallback = generate_fallback_response(request.message, request.context)
+        return {"response": fallback, "session_id": request.session_id, "fallback": True, "error": str(e)}
 
 
 @app.post("/api/diet-plan")
@@ -172,25 +181,41 @@ async def generate_diet_plan(request: DietPlanRequest):
         target = request.target_calories or 2000
         goal = request.diet_goal or "maintain"
 
+        goal_desc = {"lose": "减脂", "maintain": "维持体重", "gain": "增肌"}.get(goal, "维持体重")
+
         if goal == "lose":
             target = target * 0.8
         elif goal == "gain":
             target = target * 1.15
 
-        breakfast_cal = target * 0.30
-        lunch_cal = target * 0.40
-        dinner_cal = target * 0.25
-        snack_cal = target * 0.05
+        prompt = f"""请为以下用户生成一日膳食计划：
+- 每日目标热量：{round(target)}kcal
+- 饮食目标：{goal_desc}
+- 要求：给出早中晚三餐+加餐的具体食物和份量建议，注意营养均衡（碳水50%/蛋白质20%/脂肪30%）
+- 格式简洁，用emoji标注每餐"""
 
-        plan = {
-            "target_calories": round(target, 0),
-            "meals": {
-                "breakfast": {"calories": round(breakfast_cal, 0), "suggestion": "燕麦+鸡蛋+牛奶"},
-                "lunch": {"calories": round(lunch_cal, 0), "suggestion": "糙米饭+鸡胸肉+蔬菜"},
-                "dinner": {"calories": round(dinner_cal, 0), "suggestion": "清蒸鱼+蔬菜+少量主食"},
-                "snack": {"calories": round(snack_cal, 0), "suggestion": "水果或坚果"},
+        try:
+            response = call_ollama(message=prompt)
+            plan = {
+                "target_calories": round(target, 0),
+                "ai_plan": response,
+                "meals": {
+                    "breakfast": {"calories": round(target * 0.30, 0), "suggestion": "燕麦+鸡蛋+牛奶"},
+                    "lunch": {"calories": round(target * 0.40, 0), "suggestion": "糙米饭+鸡胸肉+蔬菜"},
+                    "dinner": {"calories": round(target * 0.25, 0), "suggestion": "清蒸鱼+蔬菜+少量主食"},
+                    "snack": {"calories": round(target * 0.05, 0), "suggestion": "水果或坚果"},
+                }
             }
-        }
+        except Exception:
+            plan = {
+                "target_calories": round(target, 0),
+                "meals": {
+                    "breakfast": {"calories": round(target * 0.30, 0), "suggestion": "燕麦+鸡蛋+牛奶"},
+                    "lunch": {"calories": round(target * 0.40, 0), "suggestion": "糙米饭+鸡胸肉+蔬菜"},
+                    "dinner": {"calories": round(target * 0.25, 0), "suggestion": "清蒸鱼+蔬菜+少量主食"},
+                    "snack": {"calories": round(target * 0.05, 0), "suggestion": "水果或坚果"},
+                }
+            }
         return plan
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -198,7 +223,7 @@ async def generate_diet_plan(request: DietPlanRequest):
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "service": "DietAI AI Service"}
+    return {"status": "ok", "service": "DietAI AI Service", "model": OLLAMA_MODEL}
 
 
 if __name__ == "__main__":
