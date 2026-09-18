@@ -23,12 +23,14 @@ public class NutritionAnalysisService {
     private final UserService userService;
     private final AiGenerationLogRepository aiGenerationLogRepository;
 
+    /** 分析指定天数内的营养摄入，计算日均和三大营养素比例 */
     public NutritionAnalysisResponse analyze(Long userId, int days) {
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusDays(days - 1);
 
         List<DietRecord> records = dietRecordService.getRecordsByDateRange(userId, startDate, endDate);
 
+        // 初始化每日营养数据Map，确保无记录的日期也显示零值
         java.util.Map<LocalDate, NutritionAnalysisResponse.DailyNutrition> dailyMap = new java.util.LinkedHashMap<>();
         for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
             dailyMap.put(date, NutritionAnalysisResponse.DailyNutrition.builder()
@@ -78,6 +80,7 @@ public class NutritionAnalysisService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .divide(BigDecimal.valueOf(daysWithData), 2, RoundingMode.HALF_UP);
 
+        // 按三大营养素热量贡献计算比例（蛋白质4kcal/g, 碳水4kcal/g, 脂肪9kcal/g）
         BigDecimal totalCalFromMacros = avgProtein.multiply(new BigDecimal("4"))
                 .add(avgCarbohydrate.multiply(new BigDecimal("4")))
                 .add(avgFat.multiply(new BigDecimal("9")));
@@ -110,6 +113,7 @@ public class NutritionAnalysisService {
                 .build();
     }
 
+    /** 根据营养数据生成AI解读建议 */
     private String generateInterpretation(BigDecimal avgCalories, BigDecimal targetCalories,
                                            BigDecimal proteinRatio, BigDecimal carbRatio, BigDecimal fatRatio) {
         StringBuilder sb = new StringBuilder();

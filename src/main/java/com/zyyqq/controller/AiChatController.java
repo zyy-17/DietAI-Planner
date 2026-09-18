@@ -39,6 +39,7 @@ public class AiChatController {
         return ApiResponse.success(aiChatService.chat(userId, request));
     }
 
+    /** 创建新的AI对话会话 */
     @PostMapping("/sessions")
     public ApiResponse<AiChatSession> createSession(Authentication authentication,
                                                     @RequestBody(required = false) java.util.Map<String, String> body) {
@@ -55,6 +56,7 @@ public class AiChatController {
         return ApiResponse.success("删除成功", null);
     }
 
+    /** 从认证信息中提取用户ID */
     private Long getUserId(Authentication authentication) {
         return (Long) authentication.getPrincipal();
     }

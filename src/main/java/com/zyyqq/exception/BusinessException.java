@@ -14,6 +14,7 @@ public class BusinessException extends RuntimeException {
         this.code = code;
     }
 
+    /** 获取异常状态码 */
     public int getCode() {
         return code;
     }

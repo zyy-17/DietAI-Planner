@@ -13,6 +13,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Value("${app.upload.avatar-dir:uploads/avatars}")
     private String avatarDir;
 
+    /** 配置静态资源映射，将头像目录映射到/avatars/**路径 */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         String absolutePath = Paths.get(avatarDir).toAbsolutePath().toString();

@@ -52,10 +52,12 @@ public class JwtTokenProvider {
         return getClaimFromToken(token, claims -> claims.get("userId", Long.class));
     }
 
+    /** 从令牌中提取用户角色 */
     public String getRoleFromToken(String token) {
         return getClaimFromToken(token, claims -> claims.get("role", String.class));
     }
 
+    /** 从令牌中提取指定声明 */
     public <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = getAllClaimsFromToken(token);
         return claimsResolver.apply(claims);
@@ -69,6 +71,7 @@ public class JwtTokenProvider {
                 .getPayload();
     }
 
+    /** 验证令牌是否有效（未过期且签名正确） */
     public boolean validateToken(String token) {
         try {
             getAllClaimsFromToken(token);

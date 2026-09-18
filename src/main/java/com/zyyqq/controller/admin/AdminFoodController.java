@@ -40,6 +40,7 @@ public class AdminFoodController {
         return ApiResponse.success("删除成功", null);
     }
 
+    /** 获取用户提交的待审核食物列表 */
     @GetMapping("/pending")
     public ApiResponse<java.util.List<Food>> getPendingFoods() {
         return ApiResponse.success(foodService.getPendingFoods());

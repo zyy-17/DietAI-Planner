@@ -124,6 +124,7 @@ public class UserController {
         }
     }
 
+    /** 获取用户偏好设置 */
     @GetMapping("/settings")
     public ApiResponse<UserSettingsVO> getSettings(Authentication authentication) {
         Long userId = getUserId(authentication);
@@ -139,6 +140,7 @@ public class UserController {
         return ApiResponse.success("设置已保存", null);
     }
 
+    /** 修改密码，校验新旧密码一致性和长度 */
     @PutMapping("/password")
     public ApiResponse<Void> changePassword(Authentication authentication,
                                             @RequestBody ChangePasswordRequest request) {
@@ -156,6 +158,7 @@ public class UserController {
         return ApiResponse.success("密码修改成功", null);
     }
 
+    /** 从认证信息中提取用户ID */
     private Long getUserId(Authentication authentication) {
         return (Long) authentication.getPrincipal();
     }

@@ -31,10 +31,12 @@ public class AiChatService {
     @Value("${ai-service.url}")
     private String aiServiceUrl;
 
+    /** 获取用户的所有AI对话会话列表 */
     public List<AiChatSession> getUserSessions(Long userId) {
         return sessionRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
+    /** 获取指定会话的消息列表，校验会话归属 */
     public List<AiChatMessage> getSessionMessages(Long sessionId, Long userId) {
         AiChatSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("会话不存在"));
@@ -44,6 +46,7 @@ public class AiChatService {
         return messageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
     }
 
+    /** 发送消息并获取AI回复，自动创建或续接会话 */
     @Transactional
     public AiChatMessage chat(Long userId, ChatRequest request) {
         AiChatSession session;
@@ -58,6 +61,7 @@ public class AiChatService {
                     .orElseThrow(() -> new RuntimeException("会话不存在"));
         }
 
+        // 构建用户上下文快照（画像+今日摄入）
         String contextSnapshot = buildContextSnapshot(userId);
 
         AiChatMessage userMessage = AiChatMessage.builder()
@@ -92,6 +96,7 @@ public class AiChatService {
         return assistantMessage;
     }
 
+    /** 创建新的AI对话会话 */
     @Transactional
     public AiChatSession createSession(Long userId, String title) {
         AiChatSession session = AiChatSession.builder()
@@ -101,6 +106,7 @@ public class AiChatService {
         return sessionRepository.save(session);
     }
 
+    /** 删除会话及其所有消息 */
     @Transactional
     public void deleteSession(Long sessionId, Long userId) {
         AiChatSession session = sessionRepository.findById(sessionId)
@@ -113,6 +119,7 @@ public class AiChatService {
         sessionRepository.deleteById(sessionId);
     }
 
+    /** 构建用户上下文快照，包含个人画像和今日饮食数据 */
     private String buildContextSnapshot(Long userId) {
         User user = userService.getUserById(userId);
         StringBuilder sb = new StringBuilder();
@@ -169,6 +176,7 @@ public class AiChatService {
         return sb.toString();
     }
 
+    /** 调用外部AI服务获取回复，失败时降级为本地生成 */
     private String callAiService(Long userId, String message, String context, Long sessionId) {
         try {
             RestTemplate restTemplate = new RestTemplate();
@@ -204,6 +212,7 @@ public class AiChatService {
         return generateLocalResponse(message, context);
     }
 
+    /** 本地降级回复：当AI服务不可用时提供基础膳食建议 */
     private String generateLocalResponse(String message, String context) {
         StringBuilder sb = new StringBuilder();
         sb.append("根据您的健康数据，");

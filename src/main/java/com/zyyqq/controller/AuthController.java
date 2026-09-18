@@ -21,6 +21,7 @@ public class AuthController {
         return ApiResponse.success(userService.register(request));
     }
 
+    /** 用户登录接口 */
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success(userService.login(request));

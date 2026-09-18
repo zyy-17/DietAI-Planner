@@ -23,6 +23,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
+    /** 用户注册，校验用户名和邮箱唯一性后创建账户并签发Token */
     @Transactional
     public LoginResponse register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
@@ -53,6 +54,7 @@ public class UserService {
                 .build();
     }
 
+    /** 用户登录，校验账户状态和密码后签发Token */
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByUsernameActive(request.getUsername())
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
@@ -74,12 +76,14 @@ public class UserService {
                 .build();
     }
 
+    /** 根据ID获取未删除的用户 */
     public User getUserById(Long userId) {
         return userRepository.findById(userId)
                 .filter(u -> u.getDeleted() == 0)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
     }
 
+    /** 更新用户个人资料，仅更新非空字段 */
     @Transactional
     public User updateProfile(Long userId, UpdateProfileRequest request) {
         User user = getUserById(userId);
@@ -95,6 +99,7 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    /** 计算基础代谢率BMR（Mifflin-St Jeor公式） */
     public java.math.BigDecimal calculateBMR(User user) {
         if (user.getWeight() == null || user.getHeight() == null || user.getBirthDate() == null || user.getGender() == null) {
             return java.math.BigDecimal.ZERO;
@@ -118,6 +123,7 @@ public class UserService {
         return bmr;
     }
 
+    /** 计算每日总消耗TDEE（BMR × 活动系数） */
     public java.math.BigDecimal calculateTDEE(User user) {
         java.math.BigDecimal bmr = calculateBMR(user);
         if (bmr.compareTo(java.math.BigDecimal.ZERO) == 0) return java.math.BigDecimal.ZERO;
@@ -135,6 +141,7 @@ public class UserService {
         return bmr.multiply(activityFactor);
     }
 
+    /** 根据饮食目标计算每日目标热量（减脂×0.8，增肌×1.15，维持×1.0） */
     public java.math.BigDecimal calculateTargetCalories(User user) {
         java.math.BigDecimal tdee = calculateTDEE(user);
         if (tdee.compareTo(java.math.BigDecimal.ZERO) == 0) return java.math.BigDecimal.ZERO;
@@ -149,6 +156,7 @@ public class UserService {
         return tdee.multiply(goalFactor).setScale(0, java.math.RoundingMode.HALF_UP);
     }
 
+    /** 更新用户营养目标（热量/蛋白质/碳水/脂肪） */
     @org.springframework.transaction.annotation.Transactional
     public void updateTarget(Long userId, java.util.Map<String, java.math.BigDecimal> targetMap) {
         User user = getUserById(userId);
@@ -159,6 +167,7 @@ public class UserService {
         userRepository.save(user);
     }
 
+    /** 更新用户偏好设置 */
     @Transactional
     public void updateSettings(Long userId, com.zyyqq.dto.request.UpdateSettingsRequest request) {
         User user = getUserById(userId);
@@ -174,6 +183,7 @@ public class UserService {
         userRepository.save(user);
     }
 
+    /** 修改密码，校验旧密码正确性 */
     @Transactional
     public void changePassword(Long userId, String oldPassword, String newPassword) {
         User user = getUserById(userId);
@@ -184,6 +194,7 @@ public class UserService {
         userRepository.save(user);
     }
 
+    /** 获取用户偏好设置 */
     public com.zyyqq.dto.response.UserSettingsVO getSettings(Long userId) {
         User user = getUserById(userId);
         return com.zyyqq.dto.response.UserSettingsVO.builder()

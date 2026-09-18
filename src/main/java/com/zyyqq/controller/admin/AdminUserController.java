@@ -38,6 +38,7 @@ public class AdminUserController {
         return ApiResponse.success("更新成功", null);
     }
 
+    /** 软删除用户（标记为已删除） */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> deleteUser(@PathVariable Long id) {
         User user = userRepository.findById(id).orElseThrow(() -> new RuntimeException("用户不存在"));

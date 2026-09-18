@@ -19,6 +19,7 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(e.getCode(), e.getMessage()));
     }
 
+    /** 处理资源未找到异常，返回404状态码 */
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleResourceNotFoundException(ResourceNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

@@ -20,6 +20,7 @@ public class FoodCategoryController {
         return ApiResponse.success(foodCategoryService.getAllCategories());
     }
 
+    /** 获取指定父分类下的子分类 */
     @GetMapping("/{parentId}/sub")
     public ApiResponse<List<FoodCategory>> getSubCategories(@PathVariable Long parentId) {
         return ApiResponse.success(foodCategoryService.getSubCategories(parentId));

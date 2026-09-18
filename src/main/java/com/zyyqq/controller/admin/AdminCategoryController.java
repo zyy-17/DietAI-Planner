@@ -23,6 +23,7 @@ public class AdminCategoryController {
         return ApiResponse.success(foodCategoryService.updateCategory(id, category));
     }
 
+    /** 删除食物分类 */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> deleteCategory(@PathVariable Long id) {
         foodCategoryService.deleteCategory(id);

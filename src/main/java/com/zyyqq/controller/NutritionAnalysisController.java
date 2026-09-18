@@ -22,6 +22,7 @@ public class NutritionAnalysisController {
         return ApiResponse.success(nutritionAnalysisService.analyze(userId, days));
     }
 
+    /** 从认证信息中提取用户ID */
     private Long getUserId(Authentication authentication) {
         return (Long) authentication.getPrincipal();
     }

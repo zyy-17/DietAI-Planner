@@ -22,6 +22,7 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
         this.objectMapper = objectMapper;
     }
 
+    /** 处理403权限不足异常，返回JSON格式的错误响应 */
     @Override
     public void handle(HttpServletRequest request,
                        HttpServletResponse response,

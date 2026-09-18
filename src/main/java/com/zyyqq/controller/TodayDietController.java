@@ -54,6 +54,7 @@ public class TodayDietController {
         return ApiResponse.success(results);
     }
 
+    /** 更新用户的每日营养目标（热量/蛋白质/碳水/脂肪） */
     @PutMapping("/today/target")
     public ApiResponse<Void> updateTodayTarget(Authentication authentication,
                                                @RequestBody Map<String, BigDecimal> targetMap) {
@@ -62,6 +63,7 @@ public class TodayDietController {
         return ApiResponse.success("目标已更新", null);
     }
 
+    /** 删除指定饮食记录 */
     @DeleteMapping("/record/{id}")
     public ApiResponse<Void> deleteDietRecord(Authentication authentication,
                                               @PathVariable Long id) {
@@ -95,6 +97,7 @@ public class TodayDietController {
         return ApiResponse.success(stats);
     }
 
+    /** 从认证信息中提取用户ID */
     private Long getUserId(Authentication authentication) {
         return (Long) authentication.getPrincipal();
     }

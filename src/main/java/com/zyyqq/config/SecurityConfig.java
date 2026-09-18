@@ -59,6 +59,7 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    /** 配置跨域资源共享（CORS）策略，允许所有来源和方法 */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

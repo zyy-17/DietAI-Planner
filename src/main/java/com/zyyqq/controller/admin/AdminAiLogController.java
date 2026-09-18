@@ -29,6 +29,7 @@ public class AdminAiLogController {
         return ApiResponse.success(aiGenerationLogRepository.findAllByOrderByCreatedAtDesc(pageable));
     }
 
+    /** 标记AI生成日志为异常 */
     @PutMapping("/{id}/abnormal")
     public ApiResponse<Void> markAbnormal(@PathVariable Long id) {
         AiGenerationLog log = aiGenerationLogRepository.findById(id).orElseThrow(() -> new RuntimeException("记录不存在"));

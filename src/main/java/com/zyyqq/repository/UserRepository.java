@@ -13,6 +13,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmailAndDeleted(String email, Integer deleted);
 
+    /** 查询未删除的活跃用户（按用户名） */
     default Optional<User> findByUsernameActive(String username) {
         return findByUsernameAndDeleted(username, 0);
     }
@@ -23,5 +24,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByUsername(String username);
 
+    /** 检查邮箱是否已注册 */
     boolean existsByEmail(String email);
 }

@@ -35,6 +35,7 @@ public class FoodController {
         return ApiResponse.success(foodService.searchFoods(keyword));
     }
 
+    /** 获取所有已审核食物列表 */
     @GetMapping("/all")
     public ApiResponse<java.util.List<Food>> getAllFoods() {
         return ApiResponse.success(foodService.getAllApprovedFoods());
@@ -47,6 +48,7 @@ public class FoodController {
         return ApiResponse.success(foodService.addFoodByUser(request, userId));
     }
 
+    /** 从认证信息中提取用户ID */
     private Long getUserId(Authentication authentication) {
         return (Long) authentication.getPrincipal();
     }

@@ -16,6 +16,7 @@ public interface DietRecordRepository extends JpaRepository<DietRecord, Long> {
 
     List<DietRecord> findByUserIdAndRecordDateBetweenOrderByRecordDateDescCreatedAtDesc(Long userId, LocalDate startDate, LocalDate endDate);
 
+    /** 查询用户所有饮食记录，按日期倒序排列 */
     @Query("SELECT dr FROM DietRecord dr WHERE dr.userId = :userId ORDER BY dr.recordDate DESC, dr.createdAt DESC")
     List<DietRecord> findAllByUserIdOrderByDateDesc(@Param("userId") Long userId);
 
@@ -25,5 +26,6 @@ public interface DietRecordRepository extends JpaRepository<DietRecord, Long> {
     @Query("SELECT SUM(dr.calories) FROM DietRecord dr WHERE dr.userId = :userId")
     Double sumCaloriesByUserId(@Param("userId") Long userId);
 
+    /** 根据ID和用户ID删除饮食记录（确保只能删除自己的记录） */
     void deleteByIdAndUserId(Long id, Long userId);
 }

@@ -22,6 +22,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         this.objectMapper = objectMapper;
     }
 
+    /** 处理401未认证异常，返回JSON格式的错误响应 */
     @Override
     public void commence(HttpServletRequest request,
                          HttpServletResponse response,
