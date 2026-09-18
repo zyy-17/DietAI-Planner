@@ -17,7 +17,15 @@
             <el-avatar v-if="msg.role === 'user'" :size="32" :src="userStore.avatarUrl || undefined" :icon="UserFilled" class="msg-avatar" />
             <div v-else class="msg-avatar-ai">🤖</div>
             <div class="msg-content">
-              <div class="msg-text">{{ msg.content }}</div>
+              <!-- 用户消息：纯文本显示 -->
+              <div v-if="msg.role === 'user'" class="msg-text">{{ msg.content }}</div>
+              <!-- AI回复：Markdown渲染 + 耗时显示 -->
+              <div v-else class="msg-text ai-response">
+                <div class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
+                <div v-if="msg.duration !== undefined" class="response-time">
+                  ⏱️ 回复耗时：{{ formatDuration(msg.duration) }}
+                </div>
+              </div>
             </div>
           </div>
           <!-- AI正在思考中的提示（增强版） -->
@@ -59,6 +67,8 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, UserFilled } from '@element-plus/icons-vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import api from '../utils/api'
 import { useUserStore } from '../stores/user'
 
@@ -91,8 +101,34 @@ const waitingTime = ref(0)
 let abortController = null
 let timer = null
 let typewriterTimer = null
+let requestStartTime = null  // 记录请求开始时间
 const fullText = '正在思考中，请稍候...'
 let charIndex = 0
+
+// Markdown 渲染函数（带 XSS 防护）
+function renderMarkdown(content) {
+  if (!content) return ''
+  try {
+    // 使用 marked 解析 Markdown，再用 DOMPurify 清理 HTML 防止 XSS 攻击
+    const html = marked(content)
+    return DOMPurify.sanitize(html)
+  } catch (e) {
+    console.error('Markdown 解析失败:', e)
+    return content  // 解析失败时返回原始文本
+  }
+}
+
+// 格式化耗时显示（超过1分钟显示"X分X秒"，否则"X秒"）
+function formatDuration(seconds) {
+  if (!seconds && seconds !== 0) return ''
+  if (seconds < 60) {
+    return `${seconds}秒`
+  } else {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}分${remainingSeconds}秒`
+  }
+}
 
 // 打字机效果函数
 function startTypewriter() {
@@ -195,6 +231,9 @@ async function sendMessage() {
   // 创建AbortController用于取消请求
   abortController = new AbortController()
 
+  // 记录请求开始时间
+  requestStartTime = Date.now()
+
   sending.value = true
   const text = inputText.value
   inputText.value = ''
@@ -216,10 +255,19 @@ async function sendMessage() {
       signal: abortController.signal  // 传递取消信号
     })
 
+    // 计算AI回复耗时（秒）
+    const duration = Math.round((Date.now() - requestStartTime) / 1000)
+
     if (!currentSessionId.value) {
       currentSessionId.value = res.sessionId
     }
-    messages.value.push(res)
+
+    // 将耗时信息添加到AI回复消息中
+    messages.value.push({
+      ...res,
+      duration: duration  // 添加耗时字段
+    })
+
     await nextTick()
     scrollToBottom()
     loadSessions()
@@ -235,6 +283,7 @@ async function sendMessage() {
   } finally {
     sending.value = false
     abortController = null
+    requestStartTime = null  // 清空开始时间
     // 停止打字机效果和计时器
     stopTypewriter()
     stopTimer()
@@ -287,6 +336,105 @@ onUnmounted(() => {
 .msg-text { padding: 10px 14px; border-radius: 8px; line-height: 1.6; white-space: pre-wrap; }
 .message.user .msg-text { background: #409eff; color: #fff; }
 .message.assistant .msg-text { background: #f4f4f5; color: #333; }
+
+/* AI回复消息样式（支持Markdown渲染） */
+.ai-response {
+  white-space: normal !important;  /* 覆盖父级的 pre-wrap，允许Markdown正常渲染 */
+}
+
+.markdown-body {
+  line-height: 1.7;
+  word-wrap: break-word;
+}
+
+/* Markdown 渲染后的元素样式 */
+.markdown-body :deep(p) {
+  margin: 0 0 8px 0;
+}
+
+.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.markdown-body :deep(strong) {
+  font-weight: 600;
+  color: #1f2328;
+}
+
+.markdown-body :deep(em) {
+  font-style: italic;
+  color: #1f2328;
+}
+
+.markdown-body :deep(ul), .markdown-body :deep(ol) {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.markdown-body :deep(li) {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+.markdown-body :deep(h1), .markdown-body :deep(h2),
+.markdown-body :deep(h3), .markdown-body :deep(h4) {
+  margin: 12px 0 8px 0;
+  font-weight: 600;
+  color: #1f2328;
+}
+
+.markdown-body :deep(h1) { font-size: 1.3em; }
+.markdown-body :deep(h2) { font-size: 1.2em; }
+.markdown-body :deep(h3) { font-size: 1.1em; }
+
+.markdown-body :deep(code) {
+  background: #f6f8fa;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.9em;
+  color: #e83e8c;
+}
+
+.markdown-body :deep(pre) {
+  background: #f6f8fa;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.markdown-body :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: #24292e;
+}
+
+.markdown-body :deep(blockquote) {
+  border-left: 4px solid #dfe2e5;
+  padding-left: 16px;
+  margin: 8px 0;
+  color: #6a737d;
+}
+
+.markdown-body :deep(a) {
+  color: #409eff;
+  text-decoration: none;
+}
+
+.markdown-body :deep(a:hover) {
+  text-decoration: underline;
+}
+
+/* AI回复耗时显示样式 */
+.response-time {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e4e7ed;
+  font-size: 12px;
+  color: #909399;
+  text-align: right;
+}
 .empty-chat { text-align: center; padding: 60px 0; color: #909399; font-size: 16px; }
 .chat-input { padding: 12px 16px; border-top: 1px solid #e4e7ed; background: #fff; }
 
