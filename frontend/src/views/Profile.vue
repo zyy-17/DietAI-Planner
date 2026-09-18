@@ -1,5 +1,13 @@
 <template>
   <div class="profile-page">
+    <div class="page-tabs">
+      <div v-for="tab in tabs" :key="tab.path"
+        class="tab-item" :class="{ active: isTabActive(tab) }"
+        @click="router.push(tab.path)">
+        {{ tab.icon }} {{ tab.name }}
+      </div>
+    </div>
+
     <el-card style="max-width:650px;margin:0 auto">
       <template #header><span>{{ sectionTitle }}</span></template>
 
@@ -31,12 +39,12 @@
           <el-form-item label="出生日期"><el-date-picker v-model="form.birthDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
         </template>
 
-        <template v-if="section === 'body' || section === 'default'">
+        <template v-if="section === 'body'">
           <el-form-item label="身高(cm)"><el-input-number v-model="form.height" :precision="1" :min="100" :max="250" /></el-form-item>
           <el-form-item label="体重(kg)"><el-input-number v-model="form.weight" :precision="1" :min="30" :max="300" /></el-form-item>
         </template>
 
-        <template v-if="section === 'activity' || section === 'default'">
+        <template v-if="section === 'activity'">
           <el-form-item label="活动水平">
             <el-select v-model="form.activityLevel" placeholder="请选择">
               <el-option :value="1" label="久坐（几乎不运动）" />
@@ -48,7 +56,7 @@
           </el-form-item>
         </template>
 
-        <template v-if="section === 'goal' || section === 'default'">
+        <template v-if="section === 'goal'">
           <el-form-item label="饮食目标">
             <el-select v-model="form.dietGoal" placeholder="请选择">
               <el-option value="lose" label="减脂" />
@@ -58,7 +66,7 @@
           </el-form-item>
         </template>
 
-        <template v-if="section === 'preference' || section === 'default'">
+        <template v-if="section === 'preference'">
           <el-form-item label="饮食偏好">
             <el-select v-model="selectedPreferences" multiple placeholder="选择饮食偏好" style="width:100%" @change="onPreferenceChange">
               <el-option value="清淡" label="清淡" />
@@ -120,15 +128,30 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { UserFilled } from '@element-plus/icons-vue'
 import api from '../utils/api'
 import { useUserStore } from '../stores/user'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const section = computed(() => route.meta.section || 'default')
+
+const tabs = [
+  { name: '基本资料', path: '/profile', icon: '👤' },
+  { name: '身体数据', path: '/profile/body', icon: '📏' },
+  { name: '饮食目标', path: '/profile/goal', icon: '🎯' },
+  { name: '饮食偏好', path: '/profile/preference', icon: '🥗' },
+  { name: '忌口设置', path: '/profile/allergy', icon: '🚫' },
+  { name: '活动水平', path: '/profile/activity', icon: '🏃' },
+  { name: '健康信息', path: '/profile/health', icon: '❤️' }
+]
+
+function isTabActive(tab) {
+  return route.path === tab.path
+}
 
 const sectionTitles = {
   default: '👤 基本资料',
@@ -215,4 +238,8 @@ onMounted(loadProfile)
 
 <style scoped>
 .profile-page { padding: 18px; }
+.page-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #eef2f6; padding-bottom: 0; }
+.tab-item { padding: 8px 16px; font-size: 13px; color: #55738d; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }
+.tab-item:hover { color: #2789ed; }
+.tab-item.active { color: #2589ee; border-bottom-color: #2589ee; font-weight: 600; }
 </style>

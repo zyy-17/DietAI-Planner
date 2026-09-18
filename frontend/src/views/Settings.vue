@@ -1,5 +1,13 @@
 <template>
   <div class="settings-page">
+    <div class="page-tabs">
+      <div v-for="tab in tabs" :key="tab.path"
+        class="tab-item" :class="{ active: isTabActive(tab) }"
+        @click="router.push(tab.path)">
+        {{ tab.icon }} {{ tab.name }}
+      </div>
+    </div>
+
     <el-card style="max-width:650px;margin:0 auto">
       <template #header>
         <span>⚙️ {{ sectionTitle }}</span>
@@ -81,13 +89,25 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, reactive, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
 
 const route = useRoute()
+const router = useRouter()
 const section = computed(() => route.meta.section || 'default')
+
+const tabs = [
+  { name: '通知设置', path: '/settings', icon: '🔔' },
+  { name: '界面设置', path: '/settings/appearance', icon: '🎨' },
+  { name: '隐私设置', path: '/settings/privacy', icon: '🔐' },
+  { name: '修改密码', path: '/settings/password', icon: '🔑' }
+]
+
+function isTabActive(tab) {
+  return route.path === tab.path
+}
 
 const sectionTitles = {
   default: '通知设置',
@@ -138,5 +158,9 @@ async function saveSettings() {
 
 <style scoped>
 .settings-page { padding: 18px; }
+.page-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #eef2f6; padding-bottom: 0; }
+.tab-item { padding: 8px 16px; font-size: 13px; color: #55738d; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }
+.tab-item:hover { color: #2789ed; }
+.tab-item.active { color: #2589ee; border-bottom-color: #2589ee; font-weight: 600; }
 .hint { font-size: 12px; color: #8ea1af; margin-left: 10px; }
 </style>

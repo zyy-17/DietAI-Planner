@@ -1,5 +1,13 @@
 <template>
   <div class="food-library">
+    <div class="page-tabs">
+      <div v-for="tab in tabs" :key="tab.path"
+        class="tab-item" :class="{ active: isTabActive(tab) }"
+        @click="router.push(tab.path)">
+        {{ tab.icon }} {{ tab.name }}
+      </div>
+    </div>
+
     <el-row :gutter="20">
       <el-col :span="4" v-if="showCategory">
         <el-card class="category-card">
@@ -66,12 +74,25 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
 
 const route = useRoute()
+const router = useRouter()
 const mode = computed(() => route.meta.mode || 'default')
+
+const tabs = [
+  { name: '全部食物', path: '/foods', icon: '🍎' },
+  { name: '食物搜索', path: '/foods/search', icon: '🔍' },
+  { name: '食物分类', path: '/foods/categories', icon: '🥩' },
+  { name: '我的收藏', path: '/foods/favorites', icon: '⭐' },
+  { name: '添加食物', path: '/foods/add', icon: '➕' }
+]
+
+function isTabActive(tab) {
+  return route.path === tab.path
+}
 
 const showCategory = computed(() => mode.value !== 'search')
 const searchPlaceholder = computed(() => mode.value === 'search' ? '输入食物名称搜索...' : '搜索食物...')
@@ -125,6 +146,10 @@ onMounted(() => {
 
 <style scoped>
 .food-library { padding: 18px; }
+.page-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #eef2f6; padding-bottom: 0; }
+.tab-item { padding: 8px 16px; font-size: 13px; color: #55738d; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }
+.tab-item:hover { color: #2789ed; }
+.tab-item.active { color: #2589ee; border-bottom-color: #2589ee; font-weight: 600; }
 .category-card { min-height: 400px; }
 .cat-item { padding: 8px 12px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
 .cat-item:hover { background: #f5f7fa; }

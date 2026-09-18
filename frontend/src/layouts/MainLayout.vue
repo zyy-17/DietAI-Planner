@@ -41,21 +41,11 @@
         </div>
 
         <div class="side-aux">
-          <div class="aux-group" v-for="group in auxGroups" :key="group.key">
-            <div class="aux-title" @click="toggleGroup(group.key)">
-              {{ group.icon }} {{ group.name }}
-              <span class="aux-arrow" :class="{ open: expandedGroups[group.key] }">›</span>
-            </div>
-            <transition name="slide">
-              <div v-show="expandedGroups[group.key]" class="aux-items">
-                <div v-for="m in group.children" :key="m.path"
-                  class="side-item sub"
-                  :class="{ selected: isSideActive(m.path) }"
-                  @click="router.push(m.path)">
-                  {{ m.icon }}　{{ m.name }}
-                </div>
-              </div>
-            </transition>
+          <div v-for="item in auxLinks" :key="item.path"
+            class="side-item aux-item"
+            :class="{ selected: isAuxActive(item.key) }"
+            @click="router.push(item.path)">
+            {{ item.icon }}　{{ item.name }}
           </div>
         </div>
 
@@ -72,7 +62,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { UserFilled } from '@element-plus/icons-vue'
@@ -129,51 +119,11 @@ const moduleTitleMap = {
   chat: '🤖 AI对话'
 }
 
-const auxGroups = [
-  {
-    key: 'foods',
-    name: '食物库',
-    icon: '🍱',
-    children: [
-      { name: '全部食物', path: '/foods', icon: '🍎' },
-      { name: '食物搜索', path: '/foods/search', icon: '🔍' },
-      { name: '食物分类', path: '/foods/categories', icon: '🥩' },
-      { name: '我的收藏', path: '/foods/favorites', icon: '⭐' },
-      { name: '添加食物', path: '/foods/add', icon: '➕' }
-    ]
-  },
-  {
-    key: 'profile',
-    name: '个人中心',
-    icon: '👤',
-    children: [
-      { name: '基本资料', path: '/profile', icon: '👤' },
-      { name: '身体数据', path: '/profile/body', icon: '📏' },
-      { name: '饮食目标', path: '/profile/goal', icon: '🎯' },
-      { name: '饮食偏好', path: '/profile/preference', icon: '🥗' },
-      { name: '忌口设置', path: '/profile/allergy', icon: '🚫' },
-      { name: '活动水平', path: '/profile/activity', icon: '🏃' },
-      { name: '健康信息', path: '/profile/health', icon: '❤️' }
-    ]
-  },
-  {
-    key: 'settings',
-    name: '系统设置',
-    icon: '⚙️',
-    children: [
-      { name: '通知设置', path: '/settings', icon: '🔔' },
-      { name: '界面设置', path: '/settings/appearance', icon: '🎨' },
-      { name: '隐私设置', path: '/settings/privacy', icon: '🔐' },
-      { name: '修改密码', path: '/settings/password', icon: '🔑' }
-    ]
-  }
+const auxLinks = [
+  { key: 'foods', name: '食物库', icon: '🍱', path: '/foods' },
+  { key: 'profile', name: '个人中心', icon: '👤', path: '/profile' },
+  { key: 'settings', name: '系统设置', icon: '⚙️', path: '/settings' }
 ]
-
-const expandedGroups = reactive({
-  foods: false,
-  profile: false,
-  settings: false
-})
 
 const activeTopModule = computed(() => {
   const path = route.path
@@ -181,9 +131,6 @@ const activeTopModule = computed(() => {
   if (path.startsWith('/records')) return 'records'
   if (path.startsWith('/nutrition')) return 'nutrition'
   if (path.startsWith('/chat')) return 'chat'
-  if (path.startsWith('/foods')) return 'today'
-  if (path.startsWith('/profile')) return 'today'
-  if (path.startsWith('/settings')) return 'today'
   return 'today'
 })
 
@@ -195,20 +142,18 @@ function isSideActive(path) {
   return route.path === path
 }
 
-function toggleGroup(key) {
-  expandedGroups[key] = !expandedGroups[key]
+function isAuxActive(key) {
+  const path = route.path
+  if (key === 'foods') return path.startsWith('/foods')
+  if (key === 'profile') return path.startsWith('/profile')
+  if (key === 'settings') return path.startsWith('/settings')
+  return false
 }
 
 onMounted(() => {
   if (userStore.token && !userStore.avatarUrl) {
     userStore.fetchProfile()
   }
-  const path = route.path
-  auxGroups.forEach(g => {
-    if (g.children.some(c => path === c.path || path.startsWith(c.path + '/'))) {
-      expandedGroups[g.key] = true
-    }
-  })
 })
 
 function handleCommand(command) {
@@ -216,10 +161,8 @@ function handleCommand(command) {
     userStore.logout()
     router.push('/login')
   } else if (command === 'profile') {
-    expandedGroups.profile = true
     router.push('/profile')
   } else if (command === 'settings') {
-    expandedGroups.settings = true
     router.push('/settings')
   } else if (command === 'admin') {
     router.push('/admin')
@@ -247,19 +190,9 @@ aside { width: 200px; min-height: calc(100vh - 70px); background: #fff; padding:
 .side-item { height: 42px; border-radius: 8px; padding: 0 15px; display: flex; align-items: center; color: #55738d; cursor: pointer; margin-bottom: 4px; font-size: 13px; transition: all 0.2s; white-space: nowrap; }
 .side-item:hover { background: #edf7ff; color: #2789ed; }
 .side-item.selected { background: #e6f3ff; color: #2589ee; font-weight: 600; }
-.side-item.sub { height: 36px; font-size: 12px; padding-left: 22px; }
 
 .side-aux { margin-top: auto; padding-top: 12px; border-top: 1px solid #eef2f6; }
-.aux-group { margin-bottom: 2px; }
-.aux-title { display: flex; align-items: center; justify-content: space-between; padding: 8px 15px; font-size: 13px; color: #55738d; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
-.aux-title:hover { background: #f5f9fc; color: #2789ed; }
-.aux-arrow { font-size: 16px; transition: transform 0.2s; display: inline-block; }
-.aux-arrow.open { transform: rotate(90deg); }
-.aux-items { overflow: hidden; }
-
-.slide-enter-active, .slide-leave-active { transition: all 0.2s ease; }
-.slide-enter-from, .slide-leave-to { opacity: 0; max-height: 0; }
-.slide-enter-to, .slide-leave-from { opacity: 1; max-height: 500px; }
+.aux-item { height: 38px; font-size: 13px; }
 
 .side-bottom { padding: 16px 15px 8px; color: #69beb6; line-height: 1.8; font-size: 12px; }
 .main-content { flex: 1; overflow-y: auto; }
@@ -267,9 +200,7 @@ aside { width: 200px; min-height: calc(100vh - 70px); background: #fff; padding:
 @media (max-width: 800px) {
   aside { width: 65px; padding: 10px 6px; }
   .side-item { justify-content: center; padding: 0; font-size: 0; }
-  .side-item.sub { padding-left: 0; }
-  .section-title, .aux-title, .side-bottom, .aux-arrow { display: none; }
-  .aux-items { display: flex; flex-direction: column; }
+  .section-title, .side-bottom { display: none; }
   .logo { width: 100px; }
   nav span { min-width: 75px; font-size: 12px; }
 }
