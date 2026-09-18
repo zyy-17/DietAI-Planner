@@ -130,6 +130,90 @@ function formatDuration(seconds) {
   }
 }
 
+// ==================== LocalStorage 持久化存储（方案B）====================
+
+// LocalStorage 键名前缀
+const DURATION_STORAGE_PREFIX = 'ai_chat_duration_'
+
+/**
+ * 保存单条消息的耗时到 LocalStorage
+ * @param {number} sessionId - 会话ID
+ * @param {number} messageId - 消息ID
+ * @param {number} duration - 耗时（秒）
+ */
+function saveDurationToStorage(sessionId, messageId, duration) {
+  try {
+    const key = `${DURATION_STORAGE_PREFIX}${sessionId}`
+    // 读取现有数据
+    let durationMap = JSON.parse(localStorage.getItem(key) || '{}')
+    // 更新或添加该消息的耗时
+    durationMap[messageId] = duration
+    // 保存回 LocalStorage
+    localStorage.setItem(key, JSON.stringify(durationMap))
+    console.log(`[Duration] 已保存: 会话${sessionId} - 消息${messageId} - ${duration}秒`)
+  } catch (e) {
+    console.error('[Duration] 保存失败:', e)
+  }
+}
+
+/**
+ * 从 LocalStorage 读取单条消息的耗时
+ * @param {number} sessionId - 会话ID
+ * @param {number} messageId - 消息ID
+ * @returns {number|undefined} 耗时（秒），未找到返回 undefined
+ */
+function getDurationFromStorage(sessionId, messageId) {
+  try {
+    const key = `${DURATION_STORAGE_PREFIX}${sessionId}`
+    const durationMap = JSON.parse(localStorage.getItem(key) || '{}')
+    return durationMap[messageId]
+  } catch (e) {
+    console.error('[Duration] 读取失败:', e)
+    return undefined
+  }
+}
+
+/**
+ * 从 LocalStorage 批量合并耗时数据到消息列表
+ * @param {Array} messages - 消息列表
+ * @param {number} sessionId - 会话ID
+ * @returns {Array} 合并后的消息列表
+ */
+function mergeDurationsFromStorage(messages, sessionId) {
+  try {
+    const key = `${DURATION_STORAGE_PREFIX}${sessionId}`
+    const durationMap = JSON.parse(localStorage.getItem(key) || '{}')
+
+    // 遍历消息列表，合并耗时数据
+    return messages.map(msg => {
+      if (msg.role === 'assistant' && durationMap[msg.id] !== undefined) {
+        return {
+          ...msg,
+          duration: durationMap[msg.id]  // 从 LocalStorage 恢复耗时
+        }
+      }
+      return msg
+    })
+  } catch (e) {
+    console.error('[Duration] 批量合并失败:', e)
+    return messages
+  }
+}
+
+/**
+ * 删除指定会话的所有耗时数据
+ * @param {number} sessionId - 会话ID
+ */
+function clearDurationsForSession(sessionId) {
+  try {
+    const key = `${DURATION_STORAGE_PREFIX}${sessionId}`
+    localStorage.removeItem(key)
+    console.log(`[Duration] 已清理: 会话${sessionId} 的所有耗时数据`)
+  } catch (e) {
+    console.error('[Duration] 清理失败:', e)
+  }
+}
+
 // 打字机效果函数
 function startTypewriter() {
   charIndex = 0
@@ -200,7 +284,10 @@ async function createSession() {
 
 async function loadSession(sessionId) {
   currentSessionId.value = sessionId
-  messages.value = await api.get(`/chat/sessions/${sessionId}/messages`)
+  // 从后端加载消息
+  const loadedMessages = await api.get(`/chat/sessions/${sessionId}/messages`)
+  // 从 LocalStorage 合并持久化的耗时数据
+  messages.value = mergeDurationsFromStorage(loadedMessages, sessionId)
   await nextTick()
   scrollToBottom()
 }
@@ -217,6 +304,8 @@ async function deleteSession(sessionId) {
   try {
     await api.delete(`/chat/sessions/${sessionId}`)
     ElMessage.success('会话已删除')
+    // 清理该会话的 LocalStorage 耗时数据
+    clearDurationsForSession(sessionId)
     if (currentSessionId.value === sessionId) {
       currentSessionId.value = null
       messages.value = []
@@ -263,10 +352,16 @@ async function sendMessage() {
     }
 
     // 将耗时信息添加到AI回复消息中
-    messages.value.push({
+    const aiMessage = {
       ...res,
       duration: duration  // 添加耗时字段
-    })
+    }
+    messages.value.push(aiMessage)
+
+    // 持久化：将耗时保存到 LocalStorage（方案B）
+    if (currentSessionId.value && res.id) {
+      saveDurationToStorage(currentSessionId.value, res.id, duration)
+    }
 
     await nextTick()
     scrollToBottom()
