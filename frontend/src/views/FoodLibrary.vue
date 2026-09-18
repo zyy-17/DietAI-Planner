@@ -86,7 +86,6 @@ const tabs = [
   { name: '全部食物', path: '/foods', icon: '🍎' },
   { name: '食物搜索', path: '/foods/search', icon: '🔍' },
   { name: '食物分类', path: '/foods/categories', icon: '🥩' },
-  { name: '我的收藏', path: '/foods/favorites', icon: '⭐' },
   { name: '添加食物', path: '/foods/add', icon: '➕' }
 ]
 
