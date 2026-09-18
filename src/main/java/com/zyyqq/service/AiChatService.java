@@ -180,10 +180,10 @@ public class AiChatService {
     /** 调用外部AI服务获取回复，失败时降级为本地生成 */
     private String callAiService(Long userId, String message, String context, Long sessionId) {
         try {
-            // 配置RestTemplate超时：连接10秒，读取120秒（适配AI模型生成时间）
+            // 配置RestTemplate超时：连接10秒，读取300秒/5分钟（适配复杂问题的长时间生成）
             SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
             factory.setConnectTimeout(10000);
-            factory.setReadTimeout(120000);
+            factory.setReadTimeout(300000);
             RestTemplate restTemplate = new RestTemplate(factory);
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("message", message);

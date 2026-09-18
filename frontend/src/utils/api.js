@@ -4,7 +4,7 @@ import router from '../router'
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 120000,
+  timeout: 300000,  // 300秒/5分钟（适配AI模型长时间生成复杂回复）
   headers: {
     'Content-Type': 'application/json'
   }
