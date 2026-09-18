@@ -1,8 +1,11 @@
 package com.zyyqq.controller;
 
+import com.zyyqq.dto.request.ChangePasswordRequest;
 import com.zyyqq.dto.request.UpdateProfileRequest;
+import com.zyyqq.dto.request.UpdateSettingsRequest;
 import com.zyyqq.dto.response.ApiResponse;
 import com.zyyqq.dto.response.UserProfileVO;
+import com.zyyqq.dto.response.UserSettingsVO;
 import com.zyyqq.entity.User;
 import com.zyyqq.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -119,6 +122,38 @@ public class UserController {
         } catch (IOException e) {
             return ApiResponse.error("头像上传失败: " + e.getMessage());
         }
+    }
+
+    @GetMapping("/settings")
+    public ApiResponse<UserSettingsVO> getSettings(Authentication authentication) {
+        Long userId = getUserId(authentication);
+        UserSettingsVO vo = userService.getSettings(userId);
+        return ApiResponse.success(vo);
+    }
+
+    @PutMapping("/settings")
+    public ApiResponse<Void> updateSettings(Authentication authentication,
+                                            @RequestBody UpdateSettingsRequest request) {
+        Long userId = getUserId(authentication);
+        userService.updateSettings(userId, request);
+        return ApiResponse.success("设置已保存", null);
+    }
+
+    @PutMapping("/password")
+    public ApiResponse<Void> changePassword(Authentication authentication,
+                                            @RequestBody ChangePasswordRequest request) {
+        Long userId = getUserId(authentication);
+        if (request.getOldPassword() == null || request.getNewPassword() == null) {
+            return ApiResponse.error("请填写完整密码信息");
+        }
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            return ApiResponse.error("两次密码输入不一致");
+        }
+        if (request.getNewPassword().length() < 6) {
+            return ApiResponse.error("新密码长度不能少于6位");
+        }
+        userService.changePassword(userId, request.getOldPassword(), request.getNewPassword());
+        return ApiResponse.success("密码修改成功", null);
     }
 
     private Long getUserId(Authentication authentication) {

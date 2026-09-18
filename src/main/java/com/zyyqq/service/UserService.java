@@ -158,4 +158,44 @@ public class UserService {
         if (targetMap.containsKey("fat")) user.setTargetFat(targetMap.get("fat"));
         userRepository.save(user);
     }
+
+    @Transactional
+    public void updateSettings(Long userId, com.zyyqq.dto.request.UpdateSettingsRequest request) {
+        User user = getUserById(userId);
+        if (request.getDietReminder() != null) user.setDietReminder(request.getDietReminder());
+        if (request.getReminderTime() != null) user.setReminderTime(request.getReminderTime());
+        if (request.getGoalReminder() != null) user.setGoalReminder(request.getGoalReminder());
+        if (request.getAiSuggestion() != null) user.setAiSuggestion(request.getAiSuggestion());
+        if (request.getTheme() != null) user.setTheme(request.getTheme());
+        if (request.getLanguage() != null) user.setLanguage(request.getLanguage());
+        if (request.getCollapsedSidebar() != null) user.setCollapsedSidebar(request.getCollapsedSidebar());
+        if (request.getDataSharing() != null) user.setDataSharing(request.getDataSharing());
+        if (request.getPublicRecords() != null) user.setPublicRecords(request.getPublicRecords());
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        User user = getUserById(userId);
+        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            throw new BusinessException("当前密码错误");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+
+    public com.zyyqq.dto.response.UserSettingsVO getSettings(Long userId) {
+        User user = getUserById(userId);
+        return com.zyyqq.dto.response.UserSettingsVO.builder()
+                .dietReminder(user.getDietReminder())
+                .reminderTime(user.getReminderTime())
+                .goalReminder(user.getGoalReminder())
+                .aiSuggestion(user.getAiSuggestion())
+                .theme(user.getTheme())
+                .language(user.getLanguage())
+                .collapsedSidebar(user.getCollapsedSidebar())
+                .dataSharing(user.getDataSharing())
+                .publicRecords(user.getPublicRecords())
+                .build();
+    }
 }

@@ -8,7 +8,7 @@
       </div>
     </div>
 
-    <el-card style="max-width:650px;margin:0 auto">
+    <el-card style="max-width:650px;margin:0 auto" v-loading="loading">
       <template #header>
         <span>⚙️ {{ sectionTitle }}</span>
       </template>
@@ -82,14 +82,14 @@
       </div>
 
       <div style="text-align:right;margin-top:20px">
-        <el-button type="primary" @click="saveSettings">保存设置</el-button>
+        <el-button type="primary" @click="saveSettings" :loading="saving">保存设置</el-button>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
@@ -117,9 +117,12 @@ const sectionTitles = {
 }
 const sectionTitle = computed(() => sectionTitles[section.value] || '系统设置')
 
+const loading = ref(false)
+const saving = ref(false)
+
 const form = reactive({
   dietReminder: true,
-  reminderTime: new Date(2026, 0, 1, 8, 0),
+  reminderTime: null,
   goalReminder: true,
   aiSuggestion: true,
   theme: 'light',
@@ -135,25 +138,86 @@ const passwordForm = reactive({
   confirmPassword: ''
 })
 
+function parseReminderTime(timeStr) {
+  if (!timeStr) return null
+  const [h, m] = timeStr.split(':').map(Number)
+  const d = new Date()
+  d.setHours(h, m, 0, 0)
+  return d
+}
+
+function formatReminderTime(date) {
+  if (!date) return null
+  const h = String(date.getHours()).padStart(2, '0')
+  const m = String(date.getMinutes()).padStart(2, '0')
+  return `${h}:${m}`
+}
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const { data } = await api.get('/user/settings')
+    if (data && data.data) {
+      const s = data.data
+      form.dietReminder = s.dietReminder ?? true
+      form.reminderTime = parseReminderTime(s.reminderTime)
+      form.goalReminder = s.goalReminder ?? true
+      form.aiSuggestion = s.aiSuggestion ?? true
+      form.theme = s.theme || 'light'
+      form.language = s.language || 'zh-CN'
+      form.collapsedSidebar = s.collapsedSidebar ?? false
+      form.dataSharing = s.dataSharing ?? false
+      form.publicRecords = s.publicRecords ?? false
+    }
+  } catch (e) {
+    console.warn('加载设置失败，使用默认值')
+  } finally {
+    loading.value = false
+  }
+}
+
 async function saveSettings() {
-  if (section.value === 'password') {
-    if (!passwordForm.oldPassword || !passwordForm.newPassword) {
-      return ElMessage.warning('请填写完整密码信息')
-    }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      return ElMessage.warning('两次密码输入不一致')
-    }
-    try {
+  saving.value = true
+  try {
+    if (section.value === 'password') {
+      if (!passwordForm.oldPassword || !passwordForm.newPassword) {
+        return ElMessage.warning('请填写完整密码信息')
+      }
+      if (passwordForm.newPassword.length < 6) {
+        return ElMessage.warning('新密码长度不能少于6位')
+      }
+      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+        return ElMessage.warning('两次密码输入不一致')
+      }
       await api.put('/user/password', passwordForm)
       ElMessage.success('密码修改成功')
       passwordForm.oldPassword = ''
       passwordForm.newPassword = ''
       passwordForm.confirmPassword = ''
-    } catch (e) {}
-    return
+      return
+    }
+
+    const payload = {
+      dietReminder: form.dietReminder,
+      reminderTime: formatReminderTime(form.reminderTime),
+      goalReminder: form.goalReminder,
+      aiSuggestion: form.aiSuggestion,
+      theme: form.theme,
+      language: form.language,
+      collapsedSidebar: form.collapsedSidebar,
+      dataSharing: form.dataSharing,
+      publicRecords: form.publicRecords
+    }
+    await api.put('/user/settings', payload)
+    ElMessage.success('设置已保存')
+  } catch (e) {
+    ElMessage.error('保存失败，请重试')
+  } finally {
+    saving.value = false
   }
-  ElMessage.success('设置已保存')
 }
+
+onMounted(loadSettings)
 </script>
 
 <style scoped>

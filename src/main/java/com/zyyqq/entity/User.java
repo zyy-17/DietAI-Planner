@@ -67,6 +67,42 @@ public class User {
     @Column(name = "target_fat", precision = 7, scale = 2)
     private BigDecimal targetFat;
 
+    @Column(name = "diet_reminder")
+    @Builder.Default
+    private Boolean dietReminder = true;
+
+    @Column(name = "reminder_time", length = 5)
+    @Builder.Default
+    private String reminderTime = "08:00";
+
+    @Column(name = "goal_reminder")
+    @Builder.Default
+    private Boolean goalReminder = true;
+
+    @Column(name = "ai_suggestion")
+    @Builder.Default
+    private Boolean aiSuggestion = true;
+
+    @Column(name = "theme", length = 10)
+    @Builder.Default
+    private String theme = "light";
+
+    @Column(name = "language", length = 10)
+    @Builder.Default
+    private String language = "zh-CN";
+
+    @Column(name = "collapsed_sidebar")
+    @Builder.Default
+    private Boolean collapsedSidebar = false;
+
+    @Column(name = "data_sharing")
+    @Builder.Default
+    private Boolean dataSharing = false;
+
+    @Column(name = "public_records")
+    @Builder.Default
+    private Boolean publicRecords = false;
+
     @Column(name = "avatar_url", length = 255)
     private String avatarUrl;
 
