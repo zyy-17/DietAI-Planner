@@ -13,7 +13,7 @@
         <div class="target-card">
           🎯 <small>今日目标</small>
           <b>{{ overview.targetCalories || 0 }} <i>kcal</i></b>
-          <button @click="showTargetDialog = true">修改目标</button>
+          <button @click="openTargetDialog">修改目标</button>
         </div>
       </div>
     </section>
@@ -176,23 +176,106 @@
       </div>
     </section>
 
-    <el-dialog v-model="addDialogVisible" :title="`添加食物 - ${currentMealName}`" width="480px">
-      <el-form :model="addForm" label-width="80px">
-        <el-form-item label="搜索食物">
-          <el-input v-model="dialogSearchKeyword" placeholder="输入食物名称搜索" @input="dialogSearchFood" />
-        </el-form-item>
-        <el-form-item label="选择食物">
-          <el-select v-model="addForm.foodId" filterable placeholder="请选择食物" style="width:100%">
-            <el-option v-for="f in dialogSearchResults" :key="f.id" :label="`${f.name} (${f.calories}kcal/100g)`" :value="f.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="份量(g)">
-          <el-input-number v-model="addForm.amount" :min="1" :max="5000" />
-        </el-form-item>
-      </el-form>
+    <el-dialog v-model="addDialogVisible" :title="`添加食物 - ${currentMealName}`" width="620px" top="6vh">
+      <div class="multi-add-header">
+        🔍 搜索并选择多种食物，一次性添加到{{ currentMealName }}
+      </div>
+      <el-input v-model="dialogSearchKeyword" placeholder="输入食物名称搜索，如：鸡蛋、牛奶、米饭..." @input="dialogSearchFood" clearable style="margin-bottom:12px" />
+
+      <div class="food-select-list" v-if="dialogSearchResults.length">
+        <div v-for="f in dialogSearchResults" :key="f.id" class="food-select-item" :class="{ chosen: isChosen(f.id) }" @click="toggleFood(f)">
+          <div class="food-select-left">
+            <span class="check-box">{{ isChosen(f.id) ? '✅' : '⬜' }}</span>
+            <span class="food-select-name">{{ f.name }}</span>
+            <small class="food-select-cal">{{ f.calories }} kcal/100g</small>
+          </div>
+          <div v-if="isChosen(f.id)" class="food-select-amount" @click.stop>
+            <el-input-number v-model="getChosenItem(f.id).amount" :min="1" :max="5000" :step="10" size="small" style="width:120px" />
+            <small>g</small>
+          </div>
+        </div>
+      </div>
+      <el-empty v-else description="未找到食物，试试其他关键词" :image-size="50" />
+
+      <div v-if="chosenFoods.length" class="chosen-summary">
+        <div class="chosen-title">已选择 {{ chosenFoods.length }} 种食物</div>
+        <div class="chosen-preview">
+          <div v-for="c in chosenFoods" :key="c.foodId" class="chosen-item">
+            <span>{{ c.foodName }}</span>
+            <small>{{ c.amount }}g</small>
+            <em>{{ ((c.calories || 0) * c.amount / 100).toFixed(0) }} kcal</em>
+            <i @click="removeChosen(c.foodId)">✕</i>
+          </div>
+        </div>
+        <div class="chosen-total">
+          合计 🔥 <b>{{ chosenTotalCal }}</b> kcal　
+          🥩 <b>{{ chosenTotalProtein }}</b> g　
+          🌾 <b>{{ chosenTotalCarb }}</b> g　
+          🫒 <b>{{ chosenTotalFat }}</b> g
+        </div>
+      </div>
+
       <template #footer>
         <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="addDietRecord">确认添加</el-button>
+        <el-button type="primary" @click="addDietRecords" :disabled="chosenFoods.length === 0">
+          确认添加（{{ chosenFoods.length }} 种）
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showTargetDialog" width="480px" top="10vh">
+      <template #header>
+        <div class="target-dialog-header">
+          <div class="target-dialog-title">🎯 修改今日饮食目标</div>
+          <div class="target-dialog-slogan">科学设定目标，让每一餐都更有方向 ✨</div>
+        </div>
+      </template>
+
+      <div class="target-dialog-body">
+        <div class="target-field">
+          <div class="target-label">🔥 每日热量目标 <small>kcal</small></div>
+          <div class="target-input-row">
+            <el-button circle size="small" @click="targetForm.calories = Math.max(800, targetForm.calories - 100)">－</el-button>
+            <el-input-number v-model="targetForm.calories" :min="800" :max="5000" :step="50" controls-position="right" style="flex:1" />
+            <el-button circle size="small" @click="targetForm.calories = Math.min(5000, targetForm.calories + 100)">＋</el-button>
+          </div>
+        </div>
+
+        <div class="target-field">
+          <div class="target-label">🥩 蛋白质目标 <small>g</small></div>
+          <div class="target-input-row">
+            <el-button circle size="small" @click="targetForm.protein = Math.max(20, targetForm.protein - 5)">－</el-button>
+            <el-input-number v-model="targetForm.protein" :min="20" :max="300" :step="5" controls-position="right" style="flex:1" />
+            <el-button circle size="small" @click="targetForm.protein = Math.min(300, targetForm.protein + 5)">＋</el-button>
+          </div>
+        </div>
+
+        <div class="target-field">
+          <div class="target-label">🌾 碳水化合物目标 <small>g</small></div>
+          <div class="target-input-row">
+            <el-button circle size="small" @click="targetForm.carbohydrate = Math.max(50, targetForm.carbohydrate - 10)">－</el-button>
+            <el-input-number v-model="targetForm.carbohydrate" :min="50" :max="500" :step="10" controls-position="right" style="flex:1" />
+            <el-button circle size="small" @click="targetForm.carbohydrate = Math.min(500, targetForm.carbohydrate + 10)">＋</el-button>
+          </div>
+        </div>
+
+        <div class="target-field">
+          <div class="target-label">🫒 脂肪目标 <small>g</small></div>
+          <div class="target-input-row">
+            <el-button circle size="small" @click="targetForm.fat = Math.max(15, targetForm.fat - 5)">－</el-button>
+            <el-input-number v-model="targetForm.fat" :min="15" :max="150" :step="5" controls-position="right" style="flex:1" />
+            <el-button circle size="small" @click="targetForm.fat = Math.min(150, targetForm.fat + 5)">＋</el-button>
+          </div>
+        </div>
+
+        <div class="target-tips">
+          💡 常见参考：减脂期 1200-1600 kcal · 维持期 1800-2200 kcal · 增肌期 2500-3000 kcal
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="showTargetDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveTarget">保存目标</el-button>
       </template>
     </el-dialog>
   </div>
@@ -212,6 +295,9 @@ const dialogSearchKeyword = ref('')
 const dialogSearchResults = ref([])
 const allFoods = ref([])
 const addForm = reactive({ foodId: null, amount: 100, mealType: 'breakfast' })
+const chosenFoods = ref([])
+const showTargetDialog = ref(false)
+const targetForm = reactive({ calories: 2000, protein: 65, carbohydrate: 250, fat: 55 })
 
 const meals = [
   { type: 'breakfast', name: '早餐', icon: '🍳', time: '07:00 - 09:00' },
@@ -346,10 +432,9 @@ function computeFrequentFoods() {
 
 function openAddDialog(mealType) {
   addForm.mealType = mealType
-  addForm.foodId = null
-  addForm.amount = 100
   dialogSearchKeyword.value = ''
   dialogSearchResults.value = allFoods.value
+  chosenFoods.value = []
   addDialogVisible.value = true
 }
 
@@ -368,21 +453,82 @@ async function dialogSearchFood() {
 }
 
 function selectFood(food) {
-  addForm.foodId = food.id
   addForm.mealType = 'breakfast'
-  addForm.amount = 100
+  dialogSearchKeyword.value = ''
+  dialogSearchResults.value = allFoods.value
+  chosenFoods.value = []
+  toggleFood(food)
   addDialogVisible.value = true
 }
 
-async function addDietRecord() {
-  if (!addForm.foodId) return ElMessage.warning('请选择食物')
+function isChosen(foodId) {
+  return chosenFoods.value.some(c => c.foodId === foodId)
+}
+
+function getChosenItem(foodId) {
+  return chosenFoods.value.find(c => c.foodId === foodId)
+}
+
+function toggleFood(food) {
+  const idx = chosenFoods.value.findIndex(c => c.foodId === food.id)
+  if (idx >= 0) {
+    chosenFoods.value.splice(idx, 1)
+  } else {
+    chosenFoods.value.push({
+      foodId: food.id,
+      foodName: food.name,
+      amount: 100,
+      calories: food.calories || 0,
+      protein: food.protein || 0,
+      carbohydrate: food.carbohydrate || 0,
+      fat: food.fat || 0
+    })
+  }
+}
+
+function removeChosen(foodId) {
+  const idx = chosenFoods.value.findIndex(c => c.foodId === foodId)
+  if (idx >= 0) chosenFoods.value.splice(idx, 1)
+}
+
+const chosenTotalCal = computed(() => chosenFoods.value.reduce((s, c) => s + (c.calories || 0) * c.amount / 100, 0).toFixed(0))
+const chosenTotalProtein = computed(() => chosenFoods.value.reduce((s, c) => s + (c.protein || 0) * c.amount / 100, 0).toFixed(1))
+const chosenTotalCarb = computed(() => chosenFoods.value.reduce((s, c) => s + (c.carbohydrate || 0) * c.amount / 100, 0).toFixed(1))
+const chosenTotalFat = computed(() => chosenFoods.value.reduce((s, c) => s + (c.fat || 0) * c.amount / 100, 0).toFixed(1))
+
+async function addDietRecords() {
+  if (chosenFoods.value.length === 0) return ElMessage.warning('请至少选择一种食物')
   try {
-    await api.post('/diet/today/add', addForm)
-    ElMessage.success('添加成功')
+    const payload = chosenFoods.value.map(c => ({
+      foodId: c.foodId,
+      amount: c.amount,
+      mealType: addForm.mealType
+    }))
+    await api.post('/diet/today/add-batch', payload)
+    ElMessage.success(`成功添加 ${chosenFoods.value.length} 种食物`)
     addDialogVisible.value = false
     loadData()
   } catch (e) {
     ElMessage.error('添加失败')
+  }
+}
+
+function openTargetDialog() {
+  targetForm.calories = overview.value.targetCalories || 2000
+  targetForm.protein = overview.value.targetProtein || 65
+  targetForm.carbohydrate = overview.value.targetCarbohydrate || 250
+  targetForm.fat = overview.value.targetFat || 55
+  showTargetDialog.value = true
+}
+
+async function saveTarget() {
+  try {
+    await api.put('/diet/today/target', targetForm)
+    ElMessage.success('目标已更新')
+    showTargetDialog.value = false
+    loadData()
+  } catch (e) {
+    ElMessage.error('保存失败')
   }
 }
 
@@ -523,4 +669,37 @@ h1 { font-size: 26px; line-height: 1.25; margin: 0; color: #153d67; }
   .stats { grid-template-columns: 1fr 1fr; }
   .quick-card { grid-column: span 2; }
 }
+
+.multi-add-header { font-size: 13px; color: #55738d; margin-bottom: 12px; padding: 8px 12px; background: #f0f7ff; border-radius: 8px; }
+.food-select-list { max-height: 280px; overflow-y: auto; border: 1px solid #eef2f6; border-radius: 8px; }
+.food-select-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f5f7fa; transition: background 0.15s; }
+.food-select-item:hover { background: #f5f9ff; }
+.food-select-item.chosen { background: #eef7ff; }
+.food-select-left { display: flex; align-items: center; gap: 8px; }
+.check-box { font-size: 16px; }
+.food-select-name { font-size: 14px; color: #244b6b; }
+.food-select-cal { font-size: 12px; color: #8ea1af; margin-left: 6px; }
+.food-select-amount { display: flex; align-items: center; gap: 4px; }
+.food-select-amount small { color: #8ea1af; }
+.chosen-summary { margin-top: 14px; border: 1px solid #d9eafa; border-radius: 10px; padding: 12px; background: #f8fbff; }
+.chosen-title { font-size: 13px; font-weight: 600; color: #2589ee; margin-bottom: 8px; }
+.chosen-preview { max-height: 140px; overflow-y: auto; }
+.chosen-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid #eef2f6; }
+.chosen-item span { flex: 1; color: #244b6b; }
+.chosen-item small { color: #8499a8; }
+.chosen-item em { color: #e6a23c; font-style: normal; }
+.chosen-item i { color: #c0c4cc; cursor: pointer; font-style: normal; }
+.chosen-item i:hover { color: #f56c6c; }
+.chosen-total { margin-top: 8px; font-size: 12px; color: #55738d; padding-top: 8px; border-top: 1px solid #eef2f6; }
+.chosen-total b { color: #244b6b; }
+
+.target-dialog-header { text-align: center; }
+.target-dialog-title { font-size: 18px; font-weight: 700; color: #153d67; margin-bottom: 6px; }
+.target-dialog-slogan { font-size: 13px; color: #55738d; }
+.target-dialog-body { padding: 8px 0; }
+.target-field { margin-bottom: 18px; }
+.target-label { font-size: 14px; color: #244b6b; margin-bottom: 8px; font-weight: 600; }
+.target-label small { color: #8ea1af; font-weight: normal; }
+.target-input-row { display: flex; align-items: center; gap: 8px; }
+.target-tips { font-size: 12px; color: #8ea1af; padding: 10px 12px; background: #f8fbff; border-radius: 8px; margin-top: 4px; line-height: 1.6; }
 </style>

@@ -148,4 +148,14 @@ public class UserService {
         }
         return tdee.multiply(goalFactor).setScale(0, java.math.RoundingMode.HALF_UP);
     }
+
+    @org.springframework.transaction.annotation.Transactional
+    public void updateTarget(Long userId, java.util.Map<String, java.math.BigDecimal> targetMap) {
+        User user = getUserById(userId);
+        if (targetMap.containsKey("calories")) user.setTargetCalories(targetMap.get("calories"));
+        if (targetMap.containsKey("protein")) user.setTargetProtein(targetMap.get("protein"));
+        if (targetMap.containsKey("carbohydrate")) user.setTargetCarbohydrate(targetMap.get("carbohydrate"));
+        if (targetMap.containsKey("fat")) user.setTargetFat(targetMap.get("fat"));
+        userRepository.save(user);
+    }
 }

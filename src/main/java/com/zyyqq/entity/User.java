@@ -55,6 +55,18 @@ public class User {
     @Column(name = "diet_preference", length = 200)
     private String dietPreference;
 
+    @Column(name = "target_calories", precision = 7, scale = 2)
+    private BigDecimal targetCalories;
+
+    @Column(name = "target_protein", precision = 7, scale = 2)
+    private BigDecimal targetProtein;
+
+    @Column(name = "target_carbohydrate", precision = 7, scale = 2)
+    private BigDecimal targetCarbohydrate;
+
+    @Column(name = "target_fat", precision = 7, scale = 2)
+    private BigDecimal targetFat;
+
     @Column(name = "avatar_url", length = 255)
     private String avatarUrl;
 

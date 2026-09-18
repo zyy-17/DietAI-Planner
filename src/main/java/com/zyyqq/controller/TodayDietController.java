@@ -5,13 +5,16 @@ import com.zyyqq.dto.response.ApiResponse;
 import com.zyyqq.dto.response.TodayDietOverviewResponse;
 import com.zyyqq.entity.DietRecord;
 import com.zyyqq.service.DietRecordService;
+import com.zyyqq.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/diet")
@@ -19,6 +22,7 @@ import java.util.List;
 public class TodayDietController {
 
     private final DietRecordService dietRecordService;
+    private final UserService userService;
 
     @GetMapping("/today")
     public ApiResponse<TodayDietOverviewResponse> getTodayOverview(Authentication authentication) {
@@ -37,6 +41,25 @@ public class TodayDietController {
                                                  @RequestBody AddDietRecordRequest request) {
         Long userId = getUserId(authentication);
         return ApiResponse.success(dietRecordService.addDietRecord(userId, request));
+    }
+
+    @PostMapping("/today/add-batch")
+    public ApiResponse<List<DietRecord>> addDietRecordBatch(Authentication authentication,
+                                                            @RequestBody List<AddDietRecordRequest> requests) {
+        Long userId = getUserId(authentication);
+        List<DietRecord> results = new java.util.ArrayList<>();
+        for (AddDietRecordRequest request : requests) {
+            results.add(dietRecordService.addDietRecord(userId, request));
+        }
+        return ApiResponse.success(results);
+    }
+
+    @PutMapping("/today/target")
+    public ApiResponse<Void> updateTodayTarget(Authentication authentication,
+                                               @RequestBody Map<String, BigDecimal> targetMap) {
+        Long userId = getUserId(authentication);
+        userService.updateTarget(userId, targetMap);
+        return ApiResponse.success("目标已更新", null);
     }
 
     @DeleteMapping("/record/{id}")

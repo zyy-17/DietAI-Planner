@@ -94,12 +94,13 @@ public class DietRecordService {
         }
 
         User user = userService.getUserById(userId);
-        BigDecimal targetCalories = userService.calculateTargetCalories(user);
+
+        BigDecimal targetCalories = user.getTargetCalories() != null ? user.getTargetCalories() : userService.calculateTargetCalories(user);
         BigDecimal remainingCalories = targetCalories.subtract(totalCalories);
 
-        BigDecimal targetProtein = targetCalories.multiply(new BigDecimal("0.20")).divide(new BigDecimal("4"), 0, RoundingMode.HALF_UP);
-        BigDecimal targetCarbohydrate = targetCalories.multiply(new BigDecimal("0.50")).divide(new BigDecimal("4"), 0, RoundingMode.HALF_UP);
-        BigDecimal targetFat = targetCalories.multiply(new BigDecimal("0.30")).divide(new BigDecimal("9"), 0, RoundingMode.HALF_UP);
+        BigDecimal targetProtein = user.getTargetProtein() != null ? user.getTargetProtein() : targetCalories.multiply(new BigDecimal("0.20")).divide(new BigDecimal("4"), 0, RoundingMode.HALF_UP);
+        BigDecimal targetCarbohydrate = user.getTargetCarbohydrate() != null ? user.getTargetCarbohydrate() : targetCalories.multiply(new BigDecimal("0.50")).divide(new BigDecimal("4"), 0, RoundingMode.HALF_UP);
+        BigDecimal targetFat = user.getTargetFat() != null ? user.getTargetFat() : targetCalories.multiply(new BigDecimal("0.30")).divide(new BigDecimal("9"), 0, RoundingMode.HALF_UP);
 
         return TodayDietOverviewResponse.builder()
                 .totalCalories(totalCalories)
