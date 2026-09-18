@@ -20,6 +20,16 @@
               <div class="msg-text">{{ msg.content }}</div>
             </div>
           </div>
+          <!-- AI正在思考中的提示 -->
+          <div v-if="sending" class="message assistant thinking">
+            <div class="msg-avatar-ai">🤖</div>
+            <div class="msg-content">
+              <div class="msg-text thinking-text">
+                <span class="thinking-dots">正在思考中</span>
+                <span class="dots-animation">...</span>
+              </div>
+            </div>
+          </div>
           <div v-if="messages.length === 0" class="empty-chat">
             <p>{{ emptyChatText }}</p>
           </div>
@@ -168,4 +178,15 @@ onMounted(() => {
 .message.assistant .msg-text { background: #f4f4f5; color: #333; }
 .empty-chat { text-align: center; padding: 60px 0; color: #909399; font-size: 16px; }
 .chat-input { padding: 12px 16px; border-top: 1px solid #e4e7ed; background: #fff; }
+
+/* AI思考中提示样式 */
+.message.thinking { opacity: 0.8; }
+.thinking-text { color: #909399 !important; font-style: italic; }
+.dots-animation { display: inline-block; animation: blink 1.4s infinite both; }
+.dots-animation::after { content: '...'; }
+
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0; }
+  40% { opacity: 1; }
+}
 </style>

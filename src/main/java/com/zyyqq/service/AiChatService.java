@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -179,7 +180,11 @@ public class AiChatService {
     /** 调用外部AI服务获取回复，失败时降级为本地生成 */
     private String callAiService(Long userId, String message, String context, Long sessionId) {
         try {
-            RestTemplate restTemplate = new RestTemplate();
+            // 配置RestTemplate超时：连接10秒，读取120秒（适配AI模型生成时间）
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(10000);
+            factory.setReadTimeout(120000);
+            RestTemplate restTemplate = new RestTemplate(factory);
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("message", message);
             requestBody.put("context", context);
