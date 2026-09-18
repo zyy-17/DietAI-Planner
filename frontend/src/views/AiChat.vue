@@ -20,13 +20,21 @@
               <div class="msg-text">{{ msg.content }}</div>
             </div>
           </div>
-          <!-- AI正在思考中的提示 -->
+          <!-- AI正在思考中的提示（增强版） -->
           <div v-if="sending" class="message assistant thinking">
             <div class="msg-avatar-ai">🤖</div>
             <div class="msg-content">
               <div class="msg-text thinking-text">
-                <span class="thinking-dots">正在思考中</span>
-                <span class="dots-animation">...</span>
+                <div class="thinking-header">
+                  <span class="typewriter-text">{{ typewriterDisplay }}</span>
+                  <span class="cursor-blink">|</span>
+                </div>
+                <div class="thinking-meta">
+                  <span class="waiting-time">⏱️ 已等待 {{ waitingTime }}秒</span>
+                  <el-button type="danger" size="small" @click="cancelRequest" class="cancel-btn">
+                    取消请求
+                  </el-button>
+                </div>
               </div>
             </div>
           </div>
@@ -47,7 +55,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, UserFilled } from '@element-plus/icons-vue'
@@ -76,6 +84,71 @@ const currentSessionId = ref(null)
 const inputText = ref('')
 const sending = ref(false)
 const messagesRef = ref(null)
+
+// 新增：打字机效果、等待时间、取消请求相关状态
+const typewriterDisplay = ref('')
+const waitingTime = ref(0)
+let abortController = null
+let timer = null
+let typewriterTimer = null
+const fullText = '正在思考中，请稍候...'
+let charIndex = 0
+
+// 打字机效果函数
+function startTypewriter() {
+  charIndex = 0
+  typewriterDisplay.value = ''
+  if (typewriterTimer) clearInterval(typewriterTimer)
+
+  typewriterTimer = setInterval(() => {
+    if (charIndex < fullText.length) {
+      typewriterDisplay.value += fullText[charIndex]
+      charIndex++
+    } else {
+      // 循环播放：完成后重新开始
+      setTimeout(() => {
+        charIndex = 0
+        typewriterDisplay.value = ''
+      }, 2000)
+    }
+  }, 100)
+}
+
+// 停止打字机效果
+function stopTypewriter() {
+  if (typewriterTimer) {
+    clearInterval(typewriterTimer)
+    typewriterTimer = null
+  }
+  typewriterDisplay.value = ''
+}
+
+// 开始计时
+function startTimer() {
+  waitingTime.value = 0
+  if (timer) clearInterval(timer)
+
+  timer = setInterval(() => {
+    waitingTime.value++
+  }, 1000)
+}
+
+// 停止计时
+function stopTimer() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+  waitingTime.value = 0
+}
+
+// 取消请求
+function cancelRequest() {
+  if (abortController) {
+    abortController.abort()
+    ElMessage.info('已取消请求')
+  }
+}
 
 async function loadSessions() {
   try { sessions.value = await api.get('/chat/sessions') } catch (e) {}
@@ -117,7 +190,11 @@ async function deleteSession(sessionId) {
 }
 
 async function sendMessage() {
-  if (!inputText.value.trim()) return
+  if (!inputText.value.trim() || sending.value) return
+
+  // 创建AbortController用于取消请求
+  abortController = new AbortController()
+
   sending.value = true
   const text = inputText.value
   inputText.value = ''
@@ -126,8 +203,19 @@ async function sendMessage() {
   await nextTick()
   scrollToBottom()
 
+  // 启动打字机效果和计时器
+  startTypewriter()
+  startTimer()
+
   try {
-    const res = await api.post('/chat/send', { sessionId: currentSessionId.value, content: text, preset: preset.value })
+    const res = await api.post('/chat/send', {
+      sessionId: currentSessionId.value,
+      content: text,
+      preset: preset.value
+    }, {
+      signal: abortController.signal  // 传递取消信号
+    })
+
     if (!currentSessionId.value) {
       currentSessionId.value = res.sessionId
     }
@@ -135,8 +223,21 @@ async function sendMessage() {
     await nextTick()
     scrollToBottom()
     loadSessions()
+  } catch (error) {
+    // 如果是用户主动取消，不显示错误信息
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+      console.log('请求已取消')
+      // 可选：添加一条系统消息提示用户
+      // messages.value.push({ id: Date.now(), role: 'assistant', content: '❌ 请求已取消' })
+    } else {
+      console.error('发送消息失败:', error)
+    }
   } finally {
     sending.value = false
+    abortController = null
+    // 停止打字机效果和计时器
+    stopTypewriter()
+    stopTimer()
   }
 }
 
@@ -151,6 +252,16 @@ onMounted(() => {
   const sessionId = route.query.sessionId
   if (sessionId) {
     loadSession(sessionId)
+  }
+})
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  stopTypewriter()
+  stopTimer()
+  if (abortController) {
+    abortController.abort()
+    abortController = null
   }
 })
 </script>
@@ -179,14 +290,60 @@ onMounted(() => {
 .empty-chat { text-align: center; padding: 60px 0; color: #909399; font-size: 16px; }
 .chat-input { padding: 12px 16px; border-top: 1px solid #e4e7ed; background: #fff; }
 
-/* AI思考中提示样式 */
-.message.thinking { opacity: 0.8; }
-.thinking-text { color: #909399 !important; font-style: italic; }
-.dots-animation { display: inline-block; animation: blink 1.4s infinite both; }
-.dots-animation::after { content: '...'; }
+/* AI思考中提示样式（增强版） */
+.message.thinking { opacity: 0.9; }
+.thinking-text {
+  color: #606266 !important;
+  font-style: normal;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+  border: 1px solid #e4e7ed;
+}
 
-@keyframes blink {
-  0%, 80%, 100% { opacity: 0; }
-  40% { opacity: 1; }
+.thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #409eff;
+  font-weight: 500;
+}
+
+.typewriter-text {
+  display: inline;
+}
+
+.cursor-blink {
+  display: inline-block;
+  animation: cursorBlink 1s infinite;
+  color: #409eff;
+  font-weight: bold;
+}
+
+@keyframes cursorBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.thinking-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #dcdfe6;
+}
+
+.waiting-time {
+  font-size: 12px;
+  color: #909399;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cancel-btn {
+  font-size: 12px;
+  padding: 4px 12px;
 }
 </style>
