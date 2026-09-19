@@ -49,6 +49,16 @@
         <el-descriptions-item label="脂肪">{{ currentFood.fat }} g/100g</el-descriptions-item>
         <el-descriptions-item label="膳食纤维">{{ currentFood.fiber }} g/100g</el-descriptions-item>
       </el-descriptions>
+      <div style="margin-top:16px">
+        <el-row :gutter="8" align="middle">
+          <el-col :span="8"><span style="line-height:32px">食用量(g)：</span></el-col>
+          <el-col :span="16"><el-input-number v-model="addAmount" :min="1" :max="2000" :step="50" style="width:100%" /></el-col>
+        </el-row>
+      </div>
+      <template #footer>
+        <el-button @click="foodDetailVisible = false">关闭</el-button>
+        <el-button type="primary" @click="addToDiet">添加到今日饮食</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="addFoodDialogVisible" title="添加新食物" width="500px">
@@ -105,6 +115,7 @@ const total = ref(0)
 const foodDetailVisible = ref(false)
 const addFoodDialogVisible = ref(false)
 const currentFood = ref(null)
+const addAmount = ref(100)
 const newFood = reactive({ name: '', categoryId: null, calories: 0, protein: 0, carbohydrate: 0, fat: 0 })
 
 async function loadCategories() {
@@ -124,12 +135,28 @@ async function loadFoods() {
 
 function showFoodDetail(food) {
   currentFood.value = food
+  addAmount.value = 100
   foodDetailVisible.value = true
+}
+
+async function addToDiet() {
+  if (!currentFood.value) return
+  try {
+    await api.post('/diet/record', {
+      foodId: currentFood.value.id,
+      amount: addAmount.value,
+      mealType: 'snack'
+    })
+    ElMessage.success(`已添加 ${addAmount.value}g ${currentFood.value.name} 到今日饮食`)
+    foodDetailVisible.value = false
+  } catch (e) {
+    ElMessage.error('添加失败，请重试')
+  }
 }
 
 async function addFood() {
   await api.post('/foods', newFood)
-  ElMessage.success('食物已提交，等待审核')
+  ElMessage.success('食物添加成功')
   addFoodDialogVisible.value = false
   loadFoods()
 }

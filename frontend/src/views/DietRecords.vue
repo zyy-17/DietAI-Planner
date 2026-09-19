@@ -4,8 +4,8 @@
       <template #header>
         <div class="card-header">
           <span>{{ titleText }}</span>
-          <div>
-            <el-date-picker v-model="dateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束-date" @change="loadRecords" />
+          <div v-if="mode === 'default' || mode === 'search'">
+            <el-date-picker v-model="dateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" @change="loadRecords" />
           </div>
         </div>
       </template>
@@ -35,6 +35,13 @@
         </el-row>
       </div>
 
+      <el-row :gutter="20" style="margin-bottom:16px" v-if="mode === 'week' || mode === 'month'">
+        <el-col :span="6"><el-statistic title="记录天数" :value="summaryDays" suffix="天" /></el-col>
+        <el-col :span="6"><el-statistic title="总热量" :value="summaryCal" suffix="kcal" /></el-col>
+        <el-col :span="6"><el-statistic title="总蛋白质" :value="summaryProtein" suffix="g" /></el-col>
+        <el-col :span="6"><el-statistic title="记录条数" :value="records.length" suffix="条" /></el-col>
+      </el-row>
+
       <el-table :data="filteredRecords" stripe style="width:100%">
         <el-table-column prop="recordDate" label="日期" width="120" />
         <el-table-column prop="mealType" label="餐次" width="80">
@@ -57,7 +64,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
@@ -78,6 +85,13 @@ function mealName(type) {
   return map[type] || type
 }
 
+const summaryDays = computed(() => {
+  const dates = new Set(records.value.map(r => r.recordDate))
+  return dates.size
+})
+const summaryCal = computed(() => records.value.reduce((s, r) => s + (r.calories || 0), 0).toFixed(0))
+const summaryProtein = computed(() => records.value.reduce((s, r) => s + (r.protein || 0), 0).toFixed(1))
+
 const filteredRecords = computed(() => {
   let list = [...records.value]
   if (mode.value === 'search') {
@@ -90,20 +104,22 @@ const filteredRecords = computed(() => {
 
 async function loadRecords() {
   try {
-    let params = {}
+    let data
     if (mode.value === 'week') {
-      const end = dayjs()
-      const start = end.subtract(7, 'day')
-      params = { startDate: start.format('YYYY-MM-DD'), endDate: end.format('YYYY-MM-DD') }
+      data = await api.get('/diet/records/week')
     } else if (mode.value === 'month') {
+      data = await api.get('/diet/records/month')
+    } else if (mode.value === 'search') {
       const end = dayjs()
       const start = end.subtract(30, 'day')
-      params = { startDate: start.format('YYYY-MM-DD'), endDate: end.format('YYYY-MM-DD') }
+      data = await api.get('/diet/records', { params: { startDate: start.format('YYYY-MM-DD'), endDate: end.format('YYYY-MM-DD') } })
     } else if (dateRange.value && dateRange.value.length === 2) {
       const [start, end] = dateRange.value
-      params = { startDate: dayjs(start).format('YYYY-MM-DD'), endDate: dayjs(end).format('YYYY-MM-DD') }
+      data = await api.get('/diet/records', { params: { startDate: dayjs(start).format('YYYY-MM-DD'), endDate: dayjs(end).format('YYYY-MM-DD') } })
+    } else {
+      data = await api.get('/diet/records')
     }
-    records.value = await api.get('/diet/records', { params })
+    records.value = data || []
   } catch (e) {}
 }
 
@@ -115,6 +131,7 @@ async function deleteRecord(id) {
 }
 
 onMounted(loadRecords)
+watch(() => route.fullPath, loadRecords)
 </script>
 
 <style scoped>

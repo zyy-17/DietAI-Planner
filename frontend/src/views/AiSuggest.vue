@@ -212,6 +212,16 @@ const allSuggestions = [
     { type: 'breakfast', icon: '🥞', label: '推荐早餐', title: '全麦吐司 + 牛油果 + 煎蛋', desc: '健康脂肪与优质蛋白组合，提供上午所需能量。', calories: 380, protein: 18, carb: 35, fat: 18 },
     { type: 'lunch', icon: '🍱', label: '推荐午餐', title: '牛肉西兰花 + 紫薯 + 豆腐汤', desc: '补铁增肌，粗粮替代精米，膳食纤维丰富。', calories: 550, protein: 32, carb: 60, fat: 16 },
     { type: 'dinner', icon: '🥘', label: '推荐晚餐', title: '番茄鸡蛋面 + 凉拌黄瓜', desc: '清淡易消化，番茄红素抗氧化，适合晚间。', calories: 400, protein: 15, carb: 55, fat: 10 }
+  ],
+  [
+    { type: 'breakfast', icon: '🥛', label: '推荐早餐', title: '豆浆 + 杂粮馒头 + 水煮蛋', desc: '植物蛋白与粗粮搭配，低脂高纤维，稳定血糖。', calories: 360, protein: 20, carb: 42, fat: 8 },
+    { type: 'lunch', icon: '🍛', label: '推荐午餐', title: '虾仁炒饭 + 海带汤 + 橙子', desc: '海鲜优质蛋白，海带补碘，橙子补充维C。', calories: 580, protein: 28, carb: 65, fat: 18 },
+    { type: 'dinner', icon: '🥬', label: '推荐晚餐', title: '白灼虾 + 蒸南瓜 + 小米粥', desc: '低脂高蛋白，南瓜富含β胡萝卜素，小米养胃。', calories: 350, protein: 22, carb: 40, fat: 6 }
+  ],
+  [
+    { type: 'breakfast', icon: '🫐', label: '推荐早餐', title: '希腊酸奶 + 坚果麦片 + 香蕉', desc: '高蛋白酸奶搭配坚果，提供持久饱腹感和优质脂肪。', calories: 410, protein: 22, carb: 48, fat: 14 },
+    { type: 'lunch', icon: '🥙', label: '推荐午餐', title: '三文鱼饭团 + 味噌汤 + 毛豆', desc: 'Omega-3丰富，味噌发酵食品益肠道，毛豆补植物蛋白。', calories: 530, protein: 30, carb: 58, fat: 16 },
+    { type: 'dinner', icon: '🍜', label: '推荐晚餐', title: '鸡丝凉面 + 蒜蓉菠菜 + 蘑菇汤', desc: '清淡爽口，菠菜补铁，蘑菇增强免疫力。', calories: 420, protein: 20, carb: 52, fat: 12 }
   ]
 ]
 

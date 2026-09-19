@@ -423,7 +423,17 @@ function renderCalorieCharts() {
   }
 }
 
+function disposeAllCharts() {
+  lineChart?.dispose(); lineChart = null
+  pieChart?.dispose(); pieChart = null
+  nutrientLineChart?.dispose(); nutrientLineChart = null
+  nutrientPieChart?.dispose(); nutrientPieChart = null
+  calorieLineChart?.dispose(); calorieLineChart = null
+  calorieMealChart?.dispose(); calorieMealChart = null
+}
+
 function initPage() {
+  disposeAllCharts()
   const m = mode.value
   if (m === 'default' || m === 'trend') {
     loadEvaluation()
@@ -437,9 +447,7 @@ onMounted(initPage)
 watch(() => route.fullPath, initPage)
 
 onBeforeUnmount(() => {
-  lineChart?.dispose(); pieChart?.dispose()
-  nutrientLineChart?.dispose(); nutrientPieChart?.dispose()
-  calorieLineChart?.dispose(); calorieMealChart?.dispose()
+  disposeAllCharts()
 })
 </script>
 

@@ -13,18 +13,10 @@
       </template>
 
       <el-row :gutter="20">
-        <el-col :span="6">
-          <el-statistic title="总记录天数" :value="stats.totalDays" suffix="天" />
-        </el-col>
-        <el-col :span="6">
-          <el-statistic title="日均热量" :value="stats.avgCalories" suffix="kcal" />
-        </el-col>
-        <el-col :span="6">
-          <el-statistic title="日均蛋白质" :value="stats.avgProtein" suffix="g" />
-        </el-col>
-        <el-col :span="6">
-          <el-statistic title="达标天数" :value="stats.onTargetDays" suffix="天" />
-        </el-col>
+        <el-col :span="6"><el-statistic title="总记录天数" :value="stats.totalDays" suffix="天" /></el-col>
+        <el-col :span="6"><el-statistic title="日均热量" :value="stats.avgCalories" suffix="kcal" /></el-col>
+        <el-col :span="6"><el-statistic title="日均蛋白质" :value="stats.avgProtein" suffix="g" /></el-col>
+        <el-col :span="6"><el-statistic title="达标天数" :value="stats.onTargetDays" suffix="天" /></el-col>
       </el-row>
 
       <div class="chart-section">
@@ -41,23 +33,32 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import api from '../utils/api'
 
 const period = ref('week')
-const stats = ref({ totalDays: 0, avgCalories: 0, avgProtein: 0, onTargetDays: 0 })
+const stats = ref({ totalDays: 0, avgCalories: 0, avgProtein: 0, avgCarbohydrate: 0, avgFat: 0, onTargetDays: 0 })
 const chartRef = ref(null)
 const pieRef = ref(null)
 let lineChart = null
 let pieChart = null
 
+function initCharts() {
+  if (chartRef.value && !lineChart) lineChart = echarts.init(chartRef.value)
+  if (pieRef.value && !pieChart) pieChart = echarts.init(pieRef.value)
+}
+
 async function loadStats() {
   try {
     const data = await api.get('/diet/stats', { params: { period: period.value } })
     stats.value = data || stats.value
+    await nextTick()
+    initCharts()
     renderCharts(data)
   } catch (e) {
+    await nextTick()
+    initCharts()
     renderCharts(null)
   }
 }
@@ -93,16 +94,7 @@ function renderCharts(data) {
   }
 }
 
-onMounted(async () => {
-  await loadStats()
-  if (chartRef.value) {
-    lineChart = echarts.init(chartRef.value)
-  }
-  if (pieRef.value) {
-    pieChart = echarts.init(pieRef.value)
-  }
-  loadStats()
-})
+onMounted(loadStats)
 
 onBeforeUnmount(() => {
   lineChart?.dispose()

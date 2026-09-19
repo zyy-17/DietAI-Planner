@@ -48,7 +48,7 @@ public class FoodService {
         return foodRepository.findByStatus("approved");
     }
 
-    /** 用户添加自定义食物，状态为pending待审核 */
+    /** 用户添加自定义食物，直接可用 */
     @Transactional
     public Food addFoodByUser(AddFoodRequest request, Long userId) {
         Food food = Food.builder()
@@ -61,7 +61,7 @@ public class FoodService {
                 .fiber(request.getFiber())
                 .imageUrl(request.getImageUrl())
                 .source("user")
-                .status("pending")
+                .status("approved")
                 .createdBy(userId)
                 .build();
         return foodRepository.save(food);
