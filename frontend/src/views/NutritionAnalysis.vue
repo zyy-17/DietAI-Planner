@@ -1,6 +1,86 @@
 <template>
   <div class="nutrition-analysis">
-    <el-card>
+    <!-- 智能营养评估卡片（优化一） -->
+    <el-card v-if="evaluation" class="eval-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <span>🧬 智能营养评估</span>
+          <el-tag :type="evaluation.nutritionScore >= 80 ? 'success' : evaluation.nutritionScore >= 60 ? 'warning' : 'danger'" size="large" effect="dark">
+            {{ evaluation.nutritionScore }} 分
+          </el-tag>
+        </div>
+      </template>
+
+      <el-row :gutter="16">
+        <el-col :span="6">
+          <div class="eval-metric">
+            <div class="metric-label">BMI</div>
+            <div class="metric-value">{{ evaluation.bmi || '-' }}</div>
+            <div class="metric-tag" :class="bmiClass">{{ bmiDesc }}</div>
+          </div>
+        </el-col>
+        <el-col :span="6">
+          <div class="eval-metric">
+            <div class="metric-label">基础代谢 BMR</div>
+            <div class="metric-value">{{ evaluation.bmr || '-' }}</div>
+            <div class="metric-unit">kcal/天</div>
+          </div>
+        </el-col>
+        <el-col :span="6">
+          <div class="eval-metric">
+            <div class="metric-label">总消耗 TDEE</div>
+            <div class="metric-value">{{ evaluation.tdee || '-' }}</div>
+            <div class="metric-unit">kcal/天</div>
+          </div>
+        </el-col>
+        <el-col :span="6">
+          <div class="eval-metric">
+            <div class="metric-label">目标热量</div>
+            <div class="metric-value">{{ evaluation.targetCalories || '-' }}</div>
+            <div class="metric-unit">kcal/天</div>
+          </div>
+        </el-col>
+      </el-row>
+
+      <el-divider />
+
+      <div class="eval-status-row">
+        <div class="status-item">
+          <span class="status-label">🔥 热量</span>
+          <el-tag :type="statusType(evaluation.calorieStatus)" size="small">{{ evaluation.calorieStatus }}</el-tag>
+          <span class="status-gap">{{ formatGap(evaluation.calorieGap) }} kcal</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">🥩 蛋白质</span>
+          <el-tag :type="statusType(evaluation.proteinStatus)" size="small">{{ evaluation.proteinStatus }}</el-tag>
+          <span class="status-gap">{{ formatGap(evaluation.proteinGap) }} g</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">🌾 碳水</span>
+          <el-tag :type="statusType(evaluation.carbStatus)" size="small">{{ evaluation.carbStatus }}</el-tag>
+          <span class="status-gap">{{ formatGap(evaluation.carbGap) }} g</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">🫒 脂肪</span>
+          <el-tag :type="statusType(evaluation.fatStatus)" size="small">{{ evaluation.fatStatus }}</el-tag>
+          <span class="status-gap">{{ formatGap(evaluation.fatGap) }} g</span>
+        </div>
+      </div>
+
+      <el-divider />
+
+      <div class="eval-score-bar">
+        <span class="score-label">营养评分</span>
+        <el-progress :percentage="evaluation.nutritionScore" :stroke-width="20" :color="scoreColor" :format="() => evaluation.nutritionScore + '分'" />
+      </div>
+
+      <div class="eval-problem" v-if="evaluation.mainProblem">
+        <el-alert :title="'⚠️ 主要问题：' + evaluation.mainProblem" :type="evaluation.nutritionScore >= 80 ? 'success' : 'warning'" :closable="false" show-icon />
+      </div>
+    </el-card>
+
+    <!-- 原有营养分析卡片 -->
+    <el-card style="margin-top:16px">
       <template #header>
         <div class="card-header">
           <span>{{ titleText }}</span>
@@ -103,6 +183,7 @@ const pieChartTitle = computed(() => {
 
 const days = ref(7)
 const analysis = ref({})
+const evaluation = ref(null)
 const lineChartRef = ref(null)
 const pieChartRef = ref(null)
 let lineChart = null
@@ -111,6 +192,54 @@ let pieChart = null
 const goalCalorie = computed(() => Math.min(Math.round(((analysis.value.avgCalories || 0) / (analysis.value.targetCalories || 2000)) * 100), 100))
 const goalProtein = computed(() => Math.min(Math.round(((analysis.value.avgProtein || 0) / (analysis.value.targetProtein || 100)) * 100), 100))
 const goalCarb = computed(() => Math.min(Math.round(((analysis.value.avgCarbohydrate || 0) / (analysis.value.targetCarbohydrate || 250)) * 100), 100))
+
+const bmiDesc = computed(() => {
+  if (!evaluation.value || !evaluation.value.bmi) return ''
+  const bmi = evaluation.value.bmi
+  if (bmi < 18.5) return '偏瘦'
+  if (bmi < 24) return '正常'
+  if (bmi < 28) return '偏胖'
+  return '肥胖'
+})
+
+const bmiClass = computed(() => {
+  if (!evaluation.value || !evaluation.value.bmi) return ''
+  const bmi = evaluation.value.bmi
+  if (bmi < 18.5) return 'underweight'
+  if (bmi < 24) return 'normal'
+  if (bmi < 28) return 'overweight'
+  return 'obese'
+})
+
+const scoreColor = computed(() => {
+  if (!evaluation.value) return '#409eff'
+  const s = evaluation.value.nutritionScore
+  if (s >= 80) return '#67c23a'
+  if (s >= 60) return '#e6a23c'
+  return '#f56c6c'
+})
+
+function statusType(status) {
+  if (status === '正常') return 'success'
+  if (status === '不足') return 'warning'
+  if (status === '偏高') return 'danger'
+  return 'info'
+}
+
+function formatGap(gap) {
+  if (gap === null || gap === undefined) return '-'
+  const num = Number(gap)
+  if (num > 0) return `+${num.toFixed(0)}`
+  return num.toFixed(0)
+}
+
+async function loadEvaluation() {
+  try {
+    evaluation.value = await api.get('/nutrition/evaluate')
+  } catch (e) {
+    console.warn('加载营养评估失败', e)
+  }
+}
 
 async function loadAnalysis() {
   try {
@@ -162,7 +291,10 @@ function renderCharts() {
   }
 }
 
-onMounted(loadAnalysis)
+onMounted(() => {
+  loadEvaluation()
+  loadAnalysis()
+})
 
 onBeforeUnmount(() => {
   lineChart?.dispose()
@@ -175,4 +307,24 @@ onBeforeUnmount(() => {
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .chart-title { text-align: center; font-weight: bold; margin-bottom: 8px; font-size: 14px; }
 .chart-container { height: 300px; }
+
+.eval-card { border-left: 4px solid #409eff; }
+.eval-metric { text-align: center; padding: 12px 0; }
+.metric-label { font-size: 12px; color: #909399; margin-bottom: 6px; }
+.metric-value { font-size: 24px; font-weight: bold; color: #303133; }
+.metric-unit { font-size: 11px; color: #b0b5b9; margin-top: 4px; }
+.metric-tag { font-size: 11px; margin-top: 4px; padding: 2px 8px; border-radius: 10px; display: inline-block; }
+.metric-tag.normal { background: #f0f9eb; color: #67c23a; }
+.metric-tag.underweight { background: #fdf6ec; color: #e6a23c; }
+.metric-tag.overweight { background: #fef0f0; color: #f56c6c; }
+.metric-tag.obese { background: #fef0f0; color: #f56c6c; }
+
+.eval-status-row { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 12px; }
+.status-item { display: flex; align-items: center; gap: 8px; }
+.status-label { font-size: 13px; color: #606266; }
+.status-gap { font-size: 12px; color: #909399; font-family: monospace; }
+
+.eval-score-bar { margin-bottom: 12px; }
+.score-label { font-size: 13px; color: #606266; margin-bottom: 6px; display: block; }
+.eval-problem { margin-top: 8px; }
 </style>

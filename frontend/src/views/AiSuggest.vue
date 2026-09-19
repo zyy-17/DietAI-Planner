@@ -6,7 +6,110 @@
       <el-button type="primary" @click="refreshSuggestion" :loading="loading">⟳ 换一换</el-button>
     </div>
 
-    <div class="suggest-cards">
+    <!-- 优化二：算法推荐食物卡片 -->
+    <el-card v-if="recommendation" class="rec-card" shadow="hover">
+      <template #header>
+        <div class="rec-header">
+          <span>🎯 智能推荐食物（算法评分 Top5）</span>
+          <el-tag type="info" size="small">剩余 {{ recommendation.remainingCalories }} kcal · 蛋白质缺口 {{ recommendation.proteinGap }}g</el-tag>
+        </div>
+      </template>
+
+      <div class="rec-foods">
+        <div v-for="food in recommendation.recommendations" :key="food.foodId" class="rec-food-item">
+          <div class="food-rank" :class="getRankClass(food.score)">{{ food.foodName }}</div>
+          <div class="food-score">
+            <el-progress :percentage="food.score" :stroke-width="8" :color="getScoreColor(food.score)" :format="() => food.score + '分'" :show-text="true" />
+          </div>
+          <div class="food-nutrients">
+            <span>🔥 {{ food.calories }} kcal</span>
+            <span>🥩 {{ food.protein }}g</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rec-context" v-if="recommendation.candidateFoods && recommendation.candidateFoods.length">
+        <el-divider content-position="left">算法筛选过程</el-divider>
+        <p class="rec-desc">
+          系统根据您的<strong>饮食目标（{{ goalLabel }}）</strong>、
+          <strong>营养缺口</strong>和<strong>用户偏好</strong>，
+          对数据库中候选食物进行多因素评分排序：
+        </p>
+        <div class="rec-weights">
+          <el-tag size="small" type="primary">热量匹配 40%</el-tag>
+          <el-tag size="small" type="success">蛋白质匹配 30%</el-tag>
+          <el-tag size="small" type="warning">用户偏好 15%</el-tag>
+          <el-tag size="small" type="info">饮食目标 15%</el-tag>
+        </div>
+        <p class="rec-candidates">候选食物：{{ recommendation.candidateFoods.join('、') }}</p>
+      </div>
+    </el-card>
+
+    <!-- 优化三：结构化AI膳食规划 -->
+    <el-card v-if="structuredPlan" class="plan-card" shadow="hover" style="margin-top:16px">
+      <template #header>
+        <div class="plan-header">
+          <span>📋 AI 结构化膳食方案</span>
+          <el-button size="small" @click="loadStructuredPlan" :loading="planLoading">重新生成</el-button>
+        </div>
+      </template>
+
+      <el-alert v-if="structuredPlan.summary" :title="structuredPlan.summary" type="info" :closable="false" show-icon style="margin-bottom:12px" />
+
+      <div v-if="structuredPlan.nutritionAnalysis" class="plan-nutrition">
+        <el-descriptions title="营养缺口分析" :column="3" size="small" border>
+          <el-descriptions-item label="剩余热量">{{ structuredPlan.nutritionAnalysis.caloriesRemaining }} kcal</el-descriptions-item>
+          <el-descriptions-item label="剩余蛋白质">{{ structuredPlan.nutritionAnalysis.proteinRemaining }}g</el-descriptions-item>
+          <el-descriptions-item label="剩余脂肪">{{ structuredPlan.nutritionAnalysis.fatRemaining }}g</el-descriptions-item>
+        </el-descriptions>
+      </div>
+
+      <div v-if="structuredPlan.mealPlan" class="plan-meals">
+        <el-divider content-position="left">膳食方案</el-divider>
+        <el-row :gutter="16">
+          <el-col :span="8" v-if="structuredPlan.mealPlan.breakfast && structuredPlan.mealPlan.breakfast.length">
+            <div class="meal-section">
+              <h4>🥣 早餐</h4>
+              <div v-for="item in structuredPlan.mealPlan.breakfast" :key="item.food" class="meal-item">
+                <span class="meal-food">{{ item.food }}</span>
+                <span class="meal-amount">{{ item.amount }}g</span>
+                <span class="meal-cal">{{ item.calories }}kcal</span>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8" v-if="structuredPlan.mealPlan.lunch && structuredPlan.mealPlan.lunch.length">
+            <div class="meal-section">
+              <h4>🥗 午餐</h4>
+              <div v-for="item in structuredPlan.mealPlan.lunch" :key="item.food" class="meal-item">
+                <span class="meal-food">{{ item.food }}</span>
+                <span class="meal-amount">{{ item.amount }}g</span>
+                <span class="meal-cal">{{ item.calories }}kcal</span>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8" v-if="structuredPlan.mealPlan.dinner && structuredPlan.mealPlan.dinner.length">
+            <div class="meal-section">
+              <h4>🍲 晚餐</h4>
+              <div v-for="item in structuredPlan.mealPlan.dinner" :key="item.food" class="meal-item">
+                <span class="meal-food">{{ item.food }}</span>
+                <span class="meal-amount">{{ item.amount }}g</span>
+                <span class="meal-cal">{{ item.calories }}kcal</span>
+              </div>
+            </div>
+          </el-col>
+        </el-row>
+      </div>
+
+      <div v-if="structuredPlan.suggestions && structuredPlan.suggestions.length" class="plan-suggestions">
+        <el-divider content-position="left">💡 建议</el-divider>
+        <ul>
+          <li v-for="s in structuredPlan.suggestions" :key="s">{{ s }}</li>
+        </ul>
+      </div>
+    </el-card>
+
+    <!-- 原有静态建议卡片 -->
+    <div class="suggest-cards" style="margin-top:16px">
       <div v-for="s in suggestions" :key="s.label" class="suggest-card" :class="s.type">
         <div class="card-icon">{{ s.icon }}</div>
         <div class="card-body">
@@ -37,12 +140,70 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import api from '../utils/api'
+import axios from 'axios'
 
 const router = useRouter()
 const loading = ref(false)
+const planLoading = ref(false)
+const recommendation = ref(null)
+const structuredPlan = ref(null)
+
+const goalLabel = computed(() => {
+  if (!recommendation.value) return ''
+  const goal = recommendation.value.dietGoal
+  if (goal === 'lose') return '减脂'
+  if (goal === 'gain') return '增肌'
+  return '维持'
+})
+
+function getRankClass(score) {
+  if (score >= 90) return 'rank-gold'
+  if (score >= 80) return 'rank-silver'
+  return 'rank-bronze'
+}
+
+function getScoreColor(score) {
+  if (score >= 90) return '#67c23a'
+  if (score >= 80) return '#409eff'
+  if (score >= 70) return '#e6a23c'
+  return '#f56c6c'
+}
+
+async function loadRecommendation() {
+  try {
+    recommendation.value = await api.get('/recommendation/foods', { params: { topN: 5 } })
+  } catch (e) {
+    console.warn('加载推荐食物失败', e)
+  }
+}
+
+async function loadStructuredPlan() {
+  if (!recommendation.value) return
+  planLoading.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const res = await axios.post('http://localhost:8000/api/diet-plan/structured', {
+      remaining_calories: recommendation.value.remainingCalories || 0,
+      target_calories: 2000,
+      protein_gap: recommendation.value.proteinGap || 0,
+      diet_goal: recommendation.value.dietGoal || 'maintain',
+      candidate_foods: recommendation.value.candidateFoods || []
+    }, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      timeout: 120000
+    })
+    structuredPlan.value = res.data
+  } catch (e) {
+    console.warn('加载结构化膳食方案失败', e)
+    ElMessage.warning('AI服务暂不可用，请确保Python服务已启动')
+  } finally {
+    planLoading.value = false
+  }
+}
 
 const allSuggestions = [
   [
@@ -73,6 +234,13 @@ function applySuggestion(s) {
   ElMessage.success(`已将「${s.title}」方案记录，快去添加食物吧！`)
   router.push(`/today/${s.type}`)
 }
+
+onMounted(async () => {
+  await loadRecommendation()
+  if (recommendation.value) {
+    loadStructuredPlan()
+  }
+})
 </script>
 
 <style scoped>
@@ -91,5 +259,34 @@ function applySuggestion(s) {
 .card-body p { font-size: 12px; color: #8195a1; line-height: 1.6; margin: 0 0 10px; }
 .card-nutrients { display: flex; gap: 12px; font-size: 11px; color: #55738d; }
 .tips-card ul { padding-left: 18px; line-height: 2; color: #606266; font-size: 13px; }
+
+.rec-card { border-left: 4px solid #67c23a; margin-bottom: 16px; }
+.rec-header { display: flex; justify-content: space-between; align-items: center; }
+.rec-foods { display: flex; flex-direction: column; gap: 12px; }
+.rec-food-item { display: flex; align-items: center; gap: 16px; }
+.food-rank { min-width: 80px; font-size: 15px; font-weight: bold; padding: 4px 12px; border-radius: 8px; text-align: center; }
+.rank-gold { background: linear-gradient(135deg, #fff7e6, #ffe7ba); color: #d48806; }
+.rank-silver { background: linear-gradient(135deg, #e6f7ff, #bae7ff); color: #096dd9; }
+.rank-bronze { background: linear-gradient(135deg, #f6ffed, #d9f7be); color: #389e0d; }
+.food-score { flex: 1; }
+.food-nutrients { display: flex; gap: 12px; font-size: 12px; color: #8c8c8c; min-width: 140px; justify-content: flex-end; }
+.rec-context { margin-top: 8px; }
+.rec-desc { font-size: 13px; color: #606266; line-height: 1.8; }
+.rec-weights { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+.rec-candidates { font-size: 12px; color: #909399; margin-top: 8px; }
+
+.plan-card { border-left: 4px solid #409eff; }
+.plan-header { display: flex; justify-content: space-between; align-items: center; }
+.plan-nutrition { margin-bottom: 12px; }
+.plan-meals { margin-top: 8px; }
+.meal-section { background: #fafafa; border-radius: 8px; padding: 12px; }
+.meal-section h4 { margin: 0 0 8px; font-size: 14px; color: #303133; }
+.meal-item { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; border-bottom: 1px dashed #eee; }
+.meal-item:last-child { border-bottom: none; }
+.meal-food { color: #303133; flex: 1; }
+.meal-amount { color: #909399; margin: 0 8px; }
+.meal-cal { color: #67c23a; font-weight: 500; }
+.plan-suggestions ul { padding-left: 18px; line-height: 2; color: #606266; font-size: 13px; }
+
 @media (max-width: 900px) { .suggest-cards { grid-template-columns: 1fr; } }
 </style>
