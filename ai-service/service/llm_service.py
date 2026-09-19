@@ -47,20 +47,23 @@ def get_model() -> str:
     return _OLLAMA_MODEL
 
 
-def call_ollama(messages: list, stream: bool = False):
+def call_ollama(messages: list, stream: bool = False, fmt: str = None):
     model = get_model()
     if model == "none":
         raise RuntimeError("no_model")
-    return ollama_chat(
+    kwargs = dict(
         model=model,
         messages=messages,
         stream=stream,
         options=MODEL_OPTIONS,
     )
+    if fmt:
+        kwargs["format"] = fmt
+    return ollama_chat(**kwargs)
 
 
-def call_ollama_text(messages: list) -> str:
-    response: OllamaChatResponse = call_ollama(messages, stream=False)
+def call_ollama_text(messages: list, fmt: str = None) -> str:
+    response: OllamaChatResponse = call_ollama(messages, stream=False, fmt=fmt)
     return response.message.content
 
 

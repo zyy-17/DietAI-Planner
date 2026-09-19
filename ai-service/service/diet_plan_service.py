@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Optional, List
 from service.llm_service import call_ollama_text, get_model
 from prompt.system_prompt import DIET_PLAN_PROMPT_TEMPLATE, STRUCTURED_DIET_PLAN_PROMPT
@@ -87,26 +88,45 @@ def generate_structured_suggestion(remaining_calories: float, protein_gap: float
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            raw = call_ollama_text([{"role": "user", "content": prompt}])
+            use_json_mode = attempt < 3
+            raw = call_ollama_text(
+                [{"role": "user", "content": prompt}],
+                fmt="json" if use_json_mode else None,
+            )
             cleaned = raw.strip()
+            if not cleaned:
+                raise json.JSONDecodeError("Empty response", cleaned, 0)
             if cleaned.startswith("```"):
                 lines = cleaned.split("\n")
                 lines = [l for l in lines if not l.strip().startswith("```")]
-                cleaned = "\n".join(lines)
+                cleaned = "\n".join(lines).strip()
+            if not cleaned.startswith("{"):
+                json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", cleaned, re.DOTALL)
+                if json_match:
+                    cleaned = json_match.group()
+                    logger.info(f"正则提取JSON成功(尝试{attempt + 1})")
+                else:
+                    raise json.JSONDecodeError("No JSON object found in response", cleaned, 0)
             parsed = json.loads(cleaned)
             validated = StructuredDietPlan(**parsed)
             result["summary"] = validated.summary
             result["suggestions"] = validated.suggestions or []
+            logger.info(f"结构化输出解析成功(尝试{attempt + 1}, json_mode={use_json_mode})")
             return result
-        except (json.JSONDecodeError, Exception) as e:
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON解析失败(尝试{attempt + 1}, json_mode={use_json_mode}): {e}")
+            if attempt == MAX_RETRIES:
+                break
+        except Exception as e:
             logger.warning(f"结构化输出解析失败(尝试{attempt + 1}): {e}")
             if attempt == MAX_RETRIES:
-                result["summary"] = "营养分析完成（AI输出格式异常，已降级）"
-                result["suggestions"] = [
-                    f"剩余热量{round(remaining_calories)}kcal，蛋白质缺口{round(protein_gap, 1)}g",
-                    "建议增加优质蛋白质摄入",
-                    "控制高脂食物摄入",
-                ]
-                return result
+                break
+
+    result["summary"] = "营养分析完成（AI输出格式异常，已降级）"
+    result["suggestions"] = [
+        f"剩余热量{round(remaining_calories)}kcal，蛋白质缺口{round(protein_gap, 1)}g",
+        "建议增加优质蛋白质摄入",
+        "控制高脂食物摄入",
+    ]
 
     return result

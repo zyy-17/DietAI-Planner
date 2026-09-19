@@ -13,6 +13,7 @@
 - [项目背景](#-项目背景)
 - [技术栈](#-技术栈)
 - [功能模块](#-功能模块)
+- [新功能亮点](#-新功能亮点)
 - [项目结构](#-项目结构)
 - [数据库设计](#-数据库设计)
 - [前端设计](#-前端设计)
@@ -162,6 +163,91 @@ DietAI-Planner 是一个面向个人用户的 **AI 驱动饮食健康管理平�
    ├─ 📂 分类管理        增删改分类
    └─ 🤖 AI日志          生成记录/异常标记
 ```
+
+---
+
+## ✨ 新功能亮点
+
+### 1. 🔥 流式输出（SSE Streaming）
+
+AI对话支持**实时流式响应**，用户无需等待完整回复生成，即可看到逐字输出效果：
+
+| 组件 | 技术 | 说明 |
+|------|------|------|
+| FastAPI | Server-Sent Events (SSE) | `/api/chat/stream`、`/api/chat/history/stream` 端点逐chunk推送 |
+| Spring Boot | `SseEmitter` | `/api/chat/stream` 端点，异步线程转发FastAPI SSE流 |
+| Vue 前端 | `fetch` + `ReadableStream` | 逐chunk拼接AI回复内容，实时渲染Markdown |
+
+**数据流**：
+```
+用户发送 → Vue fetch → Spring Boot SseEmitter → FastAPI SSE → Ollama stream → 逐chunk回传 → 实时渲染
+```
+
+**特性**：
+- ✅ 打字机效果：AI回复逐字显示，体验流畅
+- ✅ 实时Markdown渲染：每个chunk即时解析渲染
+- ✅ 降级兼容：流式失败时自动回退到非流式模式
+- ✅ 取消请求：支持 `AbortController` 中断流式传输
+- ✅ 超时保护：SseEmitter 300秒超时
+
+### 2. 📊 NutritionStandard 标准库接入（DRIs）
+
+基于中国居民膳食营养素参考摄入量（DRIs），实现**三级优先级**目标营养素计算：
+
+```
+优先级：用户手动设置 > DRIs标准值 > 热量推算
+```
+
+| 方法 | 说明 |
+|------|------|
+| `findNutritionStandard(user)` | 根据性别+年龄匹配 `nutrition_standard` 表 |
+| `getTargetProtein(user)` | 蛋白质目标：用户设置 > DRIs > 热量×20%÷4 |
+| `getTargetCarbohydrate(user)` | 碳水目标：用户设置 > DRIs > 热量×50%÷4 |
+| `getTargetFat(user)` | 脂肪目标：用户设置 > DRIs > 热量×30%÷9 |
+| `calculateTargetCalories(user)` | 热量目标：用户设置 > DRIs×目标系数 > TDEE×目标系数 |
+
+**标准库数据示例**（`nutrition_standard` 表）：
+
+| 性别 | 年龄段 | 热量(kcal) | 蛋白质(g) | 碳水(g) | 脂肪(g) |
+|------|--------|-----------|----------|---------|---------|
+| 男 | 18-30 | 2400 | 65 | 300 | 60 |
+| 男 | 31-50 | 2300 | 65 | 290 | 58 |
+| 女 | 18-30 | 2000 | 55 | 250 | 50 |
+| 女 | 31-50 | 1900 | 55 | 240 | 48 |
+
+### 3. 🛡️ JSON 解析鲁棒性增强
+
+解决结构化膳食建议生成时AI输出格式异常的问题，多层防护确保解析成功：
+
+| 防护层 | 说明 |
+|--------|------|
+| **Ollama JSON模式** | 前3次重试使用 `format="json"` 强制模型输出合法JSON |
+| **Markdown代码块清理** | 自动剥离 `` ```json ... ``` `` 包裹 |
+| **正则提取备份** | 当输出不以 `{` 开头时，用正则 `r"\{...\}"` 提取JSON对象 |
+| **重试次数提升** | `MAX_RETRIES` 从2提升到5，共6次尝试机会 |
+| **Pydantic校验** | 解析成功后通过 `StructuredDietPlan` 模型校验字段完整性 |
+| **降级兜底** | 全部失败时返回基于剩余热量/蛋白质缺口的基础建议 |
+
+**解析流程**：
+```
+AI原始输出 → 去除代码块包裹 → 检测是否以{开头 → 否则正则提取 → json.loads → Pydantic校验 → 返回
+```
+
+### 4. 🍽️ 推荐算法餐次感知
+
+不同餐次对营养素的需求不同，推荐算法根据餐次**动态调整权重**：
+
+| 餐次 | 热量权重 | 蛋白质权重 | 偏好权重 | 目标权重 | 特点 |
+|------|---------|-----------|---------|---------|------|
+| 早餐 | 0.30 | 0.20 | 0.15 | 0.15 | 碳水权重↑，提供充足能量 |
+| 午餐 | 0.35 | 0.30 | 0.15 | 0.15 | 均衡，热量和蛋白质并重 |
+| 晚餐 | 0.30 | 0.35 | 0.15 | 0.15 | 蛋白质权重↑，修复恢复 |
+| 加餐 | 0.20 | 0.40 | 0.15 | 0.15 | 蛋白质权重↑↑，补充缺口 |
+
+**实现方式**：
+- `FoodScoreCalculator` 新增 `MEAL_WEIGHTS` 配置Map
+- `RecommendationContext` 新增 `mealType` 字段
+- `calculateScore()` 方法根据 `context.getMealType()` 动态选择权重组合
 
 ---
 
@@ -406,11 +492,11 @@ DietAI-Planner/
 #### 目标热量计算
 
 ```
-减脂: target = TDEE × 0.8
-维持: target = TDEE
-增肌: target = TDEE × 1.15
+减脂: target = Base × 0.8
+维持: target = Base
+增肌: target = Base × 1.15
 
-优先级: 用户手动设置 > 饮食目标自动计算
+三级优先级: 用户手动设置 > DRIs标准值 > TDEE推算
 ```
 
 #### 智能营养评估评分
@@ -421,6 +507,17 @@ DietAI-Planner/
 | 蛋白质匹配度 | 30% | 实际蛋白质与目标蛋白质的接近程度 |
 | 用户偏好匹配 | 15% | 饮食偏好符合度 |
 | 饮食目标匹配 | 15% | 减脂/增肌/维持目标符合度 |
+
+#### 餐次感知推荐权重
+
+不同餐次对营养素的需求不同，推荐算法根据餐次动态调整权重：
+
+| 餐次 | 热量权重 | 蛋白质权重 | 偏好权重 | 目标权重 |
+|------|---------|-----------|---------|---------|
+| 早餐 | 0.30 | 0.20 | 0.15 | 0.15 |
+| 午餐 | 0.35 | 0.30 | 0.15 | 0.15 |
+| 晚餐 | 0.30 | 0.35 | 0.15 | 0.15 |
+| 加餐 | 0.20 | 0.40 | 0.15 | 0.15 |
 
 #### 营养素供能比例计算
 
@@ -500,6 +597,7 @@ DietAI-Planner/
 | GET | `/sessions` | 获取用户会话列表 | ✅ |
 | GET | `/sessions/{sessionId}/messages` | 获取会话消息 | ✅ |
 | POST | `/send` | 发送消息（调用 AI） | ✅ |
+| POST | `/stream` | 流式发送消息（SSE实时推送） | ✅ |
 | POST | `/sessions` | 创建新会话 | ✅ |
 | DELETE | `/sessions/{sessionId}` | 删除会话 | ✅ |
 
@@ -539,8 +637,10 @@ DietAI-Planner/
 |------|------|------|
 | POST | `/api/chat` | 单轮对话 |
 | POST | `/api/chat/history` | 多轮对话（带历史上下文） |
+| POST | `/api/chat/stream` | 单轮流式对话（SSE） |
+| POST | `/api/chat/history/stream` | 多轮流式对话（SSE） |
 | POST | `/api/diet-plan` | 生成膳食规划 |
-| POST | `/api/diet-plan/structured` | 生成结构化膳食方案（Pydantic校验） |
+| POST | `/api/diet-plan/structured` | 生成结构化膳食方案（Pydantic校验，JSON模式+鲁棒解析） |
 | GET | `/api/health` | 健康检查 |
 
 ---
@@ -578,11 +678,11 @@ ai-service/
 ├── main.py              # FastAPI 主程序（路由注册、启动入口）
 ├── requirements.txt     # Python 依赖清单
 ├── api/                 # API 路由层
-│   ├── chat.py          # 对话接口（单轮/多轮）
+│   ├── chat.py          # 对话接口（单轮/多轮 + SSE流式）
 │   ├── diet_plan.py     # 膳食规划接口（普通/结构化）
 │   └── health.py        # 健康检查接口
 ├── config/              # 配置层
-│   └── settings.py      # 全局配置（模型名、超时等）
+│   └── settings.py      # 全局配置（模型名、超时、MAX_RETRIES=5）
 ├── model/               # 数据模型层
 │   ├── request.py       # 请求模型（Pydantic）
 │   └── response.py      # 响应模型（Pydantic）
@@ -590,8 +690,8 @@ ai-service/
 │   └── system_prompt.py # 系统提示词模板
 └── service/             # 业务逻辑层
     ├── chat_service.py  # 对话服务（上下文构建、历史管理）
-    ├── diet_plan_service.py # 膳食规划服务
-    └── llm_service.py   # LLM 调用服务（Ollama SDK）
+    ├── diet_plan_service.py # 膳食规划服务（JSON模式+鲁棒解析）
+    └── llm_service.py   # LLM 调用服务（Ollama SDK，支持format参数）
 ```
 
 ### 核心 System Prompt
@@ -652,6 +752,23 @@ AI 助手名为 **"智慧膳食"**，具备以下能力：
 ```
 
 > `history` 携带历史对话，AI 基于上下文连贯回答
+
+#### POST `/api/chat/stream` — 单轮流式对话（SSE）
+
+请求体同 `/api/chat`，响应为 SSE 流：
+
+```
+data: {"content": "根据"}
+data: {"content": "您的"}
+data: {"content": "剩余热量..."}
+data: {"done": true, "session_id": 1}
+```
+
+> 前端使用 `fetch` + `ReadableStream` 逐chunk读取，实时渲染
+
+#### POST `/api/chat/history/stream` — 多轮流式对话（SSE）
+
+请求体同 `/api/chat/history`，响应为 SSE 流（格式同上）
 
 #### POST `/api/diet-plan` — 生成膳食规划
 
@@ -869,15 +986,28 @@ function formatDuration(seconds) {
 
 ### 后端调用 AI 服务的流程
 
+**非流式模式**：
 ```
-AiChatService.send(userId, message)
+AiChatService.chat(userId, message)
   │
-  ├─ 1. 构建 context：用户画像 + 今日摄入 + 剩余目标
+  ├─ 1. 构建 context：用户画像 + 今日摄入 + 剩余目标 + 推荐候选食物
   ├─ 2. 调用 FastAPI /api/chat/history（带历史消息）
   ├─ 3. 保存用户消息到 ai_chat_message 表
   ├─ 4. 保存 AI 回复到 ai_chat_message 表
   ├─ 5. 记录到 ai_generation_log 表（token 消耗、是否异常）
   └─ 6. 返回 AI 回复给前端
+```
+
+**流式模式**：
+```
+AiChatService.chatStream(userId, message, SseEmitter)
+  │
+  ├─ 1. 构建 context + 保存用户消息
+  ├─ 2. 调用 FastAPI /api/chat/history/stream（SSE流式）
+  ├─ 3. 逐chunk通过SseEmitter推送给前端
+  ├─ 4. 流结束后拼接完整回复，保存到 ai_chat_message 表
+  ├─ 5. 记录到 ai_generation_log 表（type=chat_stream）
+  └─ 6. 发送done事件，完成SseEmitter
 ```
 
 ### 如何更换 AI 模型

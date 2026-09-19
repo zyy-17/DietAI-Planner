@@ -193,9 +193,9 @@ public class NutritionAnalysisService {
         BigDecimal carbRatio = totalCalFromMacros.compareTo(BigDecimal.ZERO) > 0 ? avgCarb.multiply(new BigDecimal("400")).divide(totalCalFromMacros, 1, RoundingMode.HALF_UP) : BigDecimal.ZERO;
         BigDecimal fatRatio = totalCalFromMacros.compareTo(BigDecimal.ZERO) > 0 ? avgFat.multiply(new BigDecimal("900")).divide(totalCalFromMacros, 1, RoundingMode.HALF_UP) : BigDecimal.ZERO;
 
-        BigDecimal targetProtein = user.getTargetProtein() != null ? user.getTargetProtein() : new BigDecimal("65");
-        BigDecimal targetCarb = user.getTargetCarbohydrate() != null ? user.getTargetCarbohydrate() : new BigDecimal("250");
-        BigDecimal targetFat = user.getTargetFat() != null ? user.getTargetFat() : new BigDecimal("55");
+        BigDecimal targetProtein = userService.getTargetProtein(user);
+        BigDecimal targetCarb = userService.getTargetCarbohydrate(user);
+        BigDecimal targetFat = userService.getTargetFat(user);
 
         java.util.List<NutrientDetailResponse.NutrientAdvice> advices = new java.util.ArrayList<>();
         if (avgProtein.compareTo(targetProtein) < 0) {
@@ -309,9 +309,9 @@ public class NutritionAnalysisService {
         BigDecimal actualFat = todayRecords.stream().map(r -> r.getFat() != null ? r.getFat() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal targetCal = userService.calculateTargetCalories(user);
-        BigDecimal targetProtein = user.getTargetProtein() != null ? user.getTargetProtein() : new BigDecimal("65");
-        BigDecimal targetCarb = user.getTargetCarbohydrate() != null ? user.getTargetCarbohydrate() : new BigDecimal("250");
-        BigDecimal targetFat = user.getTargetFat() != null ? user.getTargetFat() : new BigDecimal("55");
+        BigDecimal targetProtein = userService.getTargetProtein(user);
+        BigDecimal targetCarb = userService.getTargetCarbohydrate(user);
+        BigDecimal targetFat = userService.getTargetFat(user);
 
         java.util.List<GoalCompletionResponse.GoalItem> goals = new java.util.ArrayList<>();
         goals.add(buildGoalItem("热量", targetCal, actualCal));
@@ -384,11 +384,11 @@ public class NutritionAnalysisService {
 
         BigDecimal targetCal = userService.calculateTargetCalories(user);
         int calorieScore = calculateItemScore(avgCalories, targetCal);
-        BigDecimal targetProtein = user.getTargetProtein() != null ? user.getTargetProtein() : new BigDecimal("65");
+        BigDecimal targetProtein = userService.getTargetProtein(user);
         int proteinScore = calculateItemScore(avgProtein, targetProtein);
-        BigDecimal targetCarb = user.getTargetCarbohydrate() != null ? user.getTargetCarbohydrate() : new BigDecimal("250");
+        BigDecimal targetCarb = userService.getTargetCarbohydrate(user);
         int carbScore = calculateItemScore(avgCarb, targetCarb);
-        BigDecimal targetFat = user.getTargetFat() != null ? user.getTargetFat() : new BigDecimal("55");
+        BigDecimal targetFat = userService.getTargetFat(user);
         int fatScore = calculateItemScore(avgFat, targetFat);
 
         int nutritionScore = (calorieScore * 30 + proteinScore * 30 + carbScore * 20 + fatScore * 20) / 100;

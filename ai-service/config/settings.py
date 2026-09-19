@@ -17,4 +17,4 @@ MODEL_OPTIONS = {
     "repeat_penalty": 1.1,
 }
 
-MAX_RETRIES = 2
+MAX_RETRIES = 5

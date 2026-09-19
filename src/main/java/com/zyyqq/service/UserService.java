@@ -22,6 +22,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final com.zyyqq.repository.NutritionStandardRepository nutritionStandardRepository;
 
     /** 用户注册，校验用户名和邮箱唯一性后创建账户并签发Token */
     @Transactional
@@ -146,6 +147,18 @@ public class UserService {
         if (user.getTargetCalories() != null && user.getTargetCalories().compareTo(java.math.BigDecimal.ZERO) > 0) {
             return user.getTargetCalories();
         }
+        com.zyyqq.entity.NutritionStandard standard = findNutritionStandard(user);
+        if (standard != null && standard.getCaloriesKcal() != null) {
+            String goal = user.getDietGoal() != null ? user.getDietGoal() : "maintain";
+            java.math.BigDecimal baseCal = java.math.BigDecimal.valueOf(standard.getCaloriesKcal());
+            java.math.BigDecimal goalFactor;
+            switch (goal) {
+                case "lose": goalFactor = new java.math.BigDecimal("0.8"); break;
+                case "gain": goalFactor = new java.math.BigDecimal("1.15"); break;
+                default: goalFactor = java.math.BigDecimal.ONE;
+            }
+            return baseCal.multiply(goalFactor).setScale(0, java.math.RoundingMode.HALF_UP);
+        }
         java.math.BigDecimal tdee = calculateTDEE(user);
         if (tdee.compareTo(java.math.BigDecimal.ZERO) == 0) return java.math.BigDecimal.ZERO;
 
@@ -157,6 +170,50 @@ public class UserService {
             default: goalFactor = java.math.BigDecimal.ONE;
         }
         return tdee.multiply(goalFactor).setScale(0, java.math.RoundingMode.HALF_UP);
+    }
+
+    /** 查找用户对应的营养标准（按性别+年龄匹配DRIs） */
+    public com.zyyqq.entity.NutritionStandard findNutritionStandard(User user) {
+        if (user.getGender() == null || user.getBirthDate() == null) return null;
+        int age = java.time.Period.between(user.getBirthDate(), java.time.LocalDate.now()).getYears();
+        if (age < 0 || age > 120) return null;
+        return nutritionStandardRepository.findByGenderAndAge(user.getGender(), age).orElse(null);
+    }
+
+    /** 获取目标蛋白质（优先用户设置 > DRIs标准 > 热量推算） */
+    public java.math.BigDecimal getTargetProtein(User user) {
+        if (user.getTargetProtein() != null && user.getTargetProtein().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            return user.getTargetProtein();
+        }
+        com.zyyqq.entity.NutritionStandard standard = findNutritionStandard(user);
+        if (standard != null && standard.getProteinG() != null && standard.getProteinG().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            return standard.getProteinG();
+        }
+        return calculateTargetCalories(user).multiply(new java.math.BigDecimal("0.20")).divide(new java.math.BigDecimal("4"), 1, java.math.RoundingMode.HALF_UP);
+    }
+
+    /** 获取目标碳水化合物（优先用户设置 > DRIs标准 > 热量推算） */
+    public java.math.BigDecimal getTargetCarbohydrate(User user) {
+        if (user.getTargetCarbohydrate() != null && user.getTargetCarbohydrate().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            return user.getTargetCarbohydrate();
+        }
+        com.zyyqq.entity.NutritionStandard standard = findNutritionStandard(user);
+        if (standard != null && standard.getCarbG() != null && standard.getCarbG().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            return standard.getCarbG();
+        }
+        return calculateTargetCalories(user).multiply(new java.math.BigDecimal("0.50")).divide(new java.math.BigDecimal("4"), 1, java.math.RoundingMode.HALF_UP);
+    }
+
+    /** 获取目标脂肪（优先用户设置 > DRIs标准 > 热量推算） */
+    public java.math.BigDecimal getTargetFat(User user) {
+        if (user.getTargetFat() != null && user.getTargetFat().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            return user.getTargetFat();
+        }
+        com.zyyqq.entity.NutritionStandard standard = findNutritionStandard(user);
+        if (standard != null && standard.getFatG() != null && standard.getFatG().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            return standard.getFatG();
+        }
+        return calculateTargetCalories(user).multiply(new java.math.BigDecimal("0.30")).divide(new java.math.BigDecimal("9"), 1, java.math.RoundingMode.HALF_UP);
     }
 
     /** 更新用户营养目标（热量/蛋白质/碳水/脂肪） */

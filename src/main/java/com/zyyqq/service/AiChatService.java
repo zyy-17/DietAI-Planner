@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -257,5 +258,127 @@ public class AiChatService {
         }
 
         return sb.toString();
+    }
+
+    /** 流式对话：通过SSE实时推送AI回复，完成后保存消息 */
+    @Transactional
+    public void chatStream(Long userId, ChatRequest request, SseEmitter emitter) {
+        AiChatSession session;
+        if (request.getSessionId() == null) {
+            session = AiChatSession.builder()
+                    .userId(userId)
+                    .title(request.getContent().length() > 20 ? request.getContent().substring(0, 20) : request.getContent())
+                    .build();
+            session = sessionRepository.save(session);
+        } else {
+            session = sessionRepository.findById(request.getSessionId())
+                    .orElseThrow(() -> new RuntimeException("会话不存在"));
+        }
+
+        String contextSnapshot = buildContextSnapshot(userId);
+
+        AiChatMessage userMessage = AiChatMessage.builder()
+                .sessionId(session.getId())
+                .userId(userId)
+                .role("user")
+                .content(request.getContent())
+                .contextSnapshot(contextSnapshot)
+                .build();
+        messageRepository.save(userMessage);
+
+        try {
+            emitter.send(SseEmitter.event().name("session").data(session.getId()));
+        } catch (Exception ignored) {}
+
+        StringBuilder fullResponse = new StringBuilder();
+
+        try {
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(10000);
+            factory.setReadTimeout(300000);
+            RestTemplate restTemplate = new RestTemplate(factory);
+
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("message", request.getContent());
+            requestBody.put("context", contextSnapshot);
+            requestBody.put("session_id", session.getId());
+            requestBody.put("user_id", userId);
+
+            List<AiChatMessage> historyMessages = messageRepository.findBySessionIdOrderByCreatedAtAsc(session.getId());
+            List<Map<String, String>> history = new java.util.ArrayList<>();
+            for (AiChatMessage msg : historyMessages) {
+                Map<String, String> item = new HashMap<>();
+                item.put("role", msg.getRole());
+                item.put("content", msg.getContent());
+                history.add(item);
+            }
+            requestBody.put("history", history);
+
+            String streamUrl = aiServiceUrl + "/api/chat/history/stream";
+
+            try (java.io.InputStream inputStream = restTemplate.execute(
+                    streamUrl,
+                    org.springframework.http.HttpMethod.POST,
+                    req -> {
+                        req.getHeaders().setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                        org.springframework.util.StreamUtils.copy(
+                                new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(requestBody),
+                                req.getBody());
+                    },
+                    org.springframework.http.client.ClientHttpResponse::getBody
+            )) {
+                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("data: ")) {
+                        String data = line.substring(6).trim();
+                        if (data.isEmpty()) continue;
+                        try {
+                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                            java.util.Map<String, Object> chunk = mapper.readValue(data, java.util.Map.class);
+                            if (chunk.containsKey("done") && Boolean.TRUE.equals(chunk.get("done"))) {
+                                break;
+                            }
+                            if (chunk.containsKey("content")) {
+                                String content = chunk.get("content").toString();
+                                fullResponse.append(content);
+                                emitter.send(SseEmitter.event().name("chunk").data(content));
+                            }
+                        } catch (Exception e) {
+                            // skip malformed chunk
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            if (fullResponse.isEmpty()) {
+                String fallback = generateLocalResponse(request.getContent(), contextSnapshot);
+                fullResponse.append(fallback);
+                emitter.send(SseEmitter.event().name("chunk").data(fallback));
+            }
+        }
+
+        AiChatMessage assistantMessage = AiChatMessage.builder()
+                .sessionId(session.getId())
+                .userId(userId)
+                .role("assistant")
+                .content(fullResponse.toString())
+                .build();
+        messageRepository.save(assistantMessage);
+
+        AiGenerationLog log = AiGenerationLog.builder()
+                .userId(userId)
+                .type("chat_stream")
+                .inputSummary(request.getContent())
+                .outputContent(fullResponse.toString())
+                .modelName("ai-service-stream")
+                .isAbnormal(0)
+                .build();
+        generationLogRepository.save(log);
+
+        try {
+            emitter.send(SseEmitter.event().name("done").data(assistantMessage.getId()));
+            emitter.complete();
+        } catch (Exception ignored) {}
     }
 }

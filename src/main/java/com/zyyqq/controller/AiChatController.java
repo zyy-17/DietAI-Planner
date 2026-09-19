@@ -6,10 +6,15 @@ import com.zyyqq.entity.AiChatMessage;
 import com.zyyqq.entity.AiChatSession;
 import com.zyyqq.service.AiChatService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -37,6 +42,29 @@ public class AiChatController {
                                                   @RequestBody ChatRequest request) {
         Long userId = getUserId(authentication);
         return ApiResponse.success(aiChatService.chat(userId, request));
+    }
+
+    @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamMessage(Authentication authentication,
+                                    @RequestBody ChatRequest request) {
+        Long userId = getUserId(authentication);
+        SseEmitter emitter = new SseEmitter(300_000L);
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
+            try {
+                aiChatService.chatStream(userId, request, emitter);
+            } catch (Exception e) {
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+                } catch (Exception ignored) {}
+                emitter.completeWithError(e);
+            } finally {
+                executor.shutdown();
+            }
+        });
+
+        return emitter;
     }
 
     /** 创建新的AI对话会话 */

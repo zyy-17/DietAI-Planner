@@ -19,17 +19,32 @@ public class FoodScoreCalculator {
     private static final BigDecimal PREFERENCE_WEIGHT = new BigDecimal("0.15");
     private static final BigDecimal GOAL_WEIGHT = new BigDecimal("0.15");
 
-    /** 计算单个食物的综合推荐分数（0-100） */
+    private static final java.util.Map<String, BigDecimal[]> MEAL_WEIGHTS = java.util.Map.of(
+        "breakfast", new BigDecimal[]{new BigDecimal("0.30"), new BigDecimal("0.20"), new BigDecimal("0.15"), new BigDecimal("0.15")},
+        "lunch",     new BigDecimal[]{new BigDecimal("0.35"), new BigDecimal("0.30"), new BigDecimal("0.15"), new BigDecimal("0.15")},
+        "dinner",    new BigDecimal[]{new BigDecimal("0.30"), new BigDecimal("0.35"), new BigDecimal("0.15"), new BigDecimal("0.15")},
+        "snack",     new BigDecimal[]{new BigDecimal("0.20"), new BigDecimal("0.40"), new BigDecimal("0.15"), new BigDecimal("0.15")}
+    );
+
+    /** 计算单个食物的综合推荐分数（0-100），支持餐次感知权重 */
     public FoodScoreResult calculateScore(Food food, RecommendationContext context) {
+        BigDecimal calW, proW, prefW, goalW;
+        if (context.getMealType() != null && MEAL_WEIGHTS.containsKey(context.getMealType())) {
+            BigDecimal[] weights = MEAL_WEIGHTS.get(context.getMealType());
+            calW = weights[0]; proW = weights[1]; prefW = weights[2]; goalW = weights[3];
+        } else {
+            calW = CALORIE_WEIGHT; proW = PROTEIN_WEIGHT; prefW = PREFERENCE_WEIGHT; goalW = GOAL_WEIGHT;
+        }
+
         BigDecimal calorieScore = calculateCalorieMatchScore(food, context);
         BigDecimal proteinScore = calculateProteinMatchScore(food, context);
         BigDecimal preferenceScore = calculatePreferenceScore(food, context);
         BigDecimal goalScore = calculateGoalScore(food, context);
 
-        BigDecimal totalScore = calorieScore.multiply(CALORIE_WEIGHT)
-                .add(proteinScore.multiply(PROTEIN_WEIGHT))
-                .add(preferenceScore.multiply(PREFERENCE_WEIGHT))
-                .add(goalScore.multiply(GOAL_WEIGHT));
+        BigDecimal totalScore = calorieScore.multiply(calW)
+                .add(proteinScore.multiply(proW))
+                .add(preferenceScore.multiply(prefW))
+                .add(goalScore.multiply(goalW));
 
         return FoodScoreResult.builder()
                 .foodId(food.getId())
@@ -144,6 +159,7 @@ public class FoodScoreCalculator {
         private String dietGoal;
         private String dietPreference;
         private List<String> avoidFoods;
+        private String mealType;
     }
 
     @lombok.Data

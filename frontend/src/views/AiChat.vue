@@ -342,50 +342,118 @@ async function sendMessage() {
   startTimer()
 
   try {
-    const res = await api.post('/chat/send', {
-      sessionId: currentSessionId.value,
-      content: text,
-      preset: preset.value
-    }, {
-      signal: abortController.signal  // 传递取消信号
-    })
+    const useStream = true
+    if (useStream) {
+      const aiMsgId = Date.now() + 1
+      const aiMessage = { id: aiMsgId, role: 'assistant', content: '', duration: 0 }
+      messages.value.push(aiMessage)
+      await nextTick()
+      scrollToBottom()
 
-    // 计算AI回复耗时（秒）
-    const duration = Math.round((Date.now() - requestStartTime) / 1000)
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          sessionId: currentSessionId.value,
+          content: text
+        }),
+        signal: abortController.signal
+      })
 
-    if (!currentSessionId.value) {
-      currentSessionId.value = res.sessionId
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          const dataStr = line.substring(5).trim()
+          if (!dataStr) continue
+
+          try {
+            const event = JSON.parse(dataStr)
+            if (event.type === 'session' && event.data) {
+              if (!currentSessionId.value) {
+                currentSessionId.value = event.data
+              }
+            } else if (event.type === 'chunk' && event.data) {
+              const msg = messages.value.find(m => m.id === aiMsgId)
+              if (msg) {
+                msg.content += event.data
+              }
+              await nextTick()
+              scrollToBottom()
+            } else if (event.type === 'done') {
+              const msg = messages.value.find(m => m.id === aiMsgId)
+              if (msg) {
+                msg.id = event.data || aiMsgId
+                msg.duration = Math.round((Date.now() - requestStartTime) / 1000)
+              }
+              if (currentSessionId.value && event.data) {
+                saveDurationToStorage(currentSessionId.value, event.data, msg.duration)
+              }
+            }
+          } catch (e) {
+            // skip malformed data
+          }
+        }
+      }
+
+      loadSessions()
+    } else {
+      const res = await api.post('/chat/send', {
+        sessionId: currentSessionId.value,
+        content: text,
+        preset: preset.value
+      }, {
+        signal: abortController.signal
+      })
+
+      const duration = Math.round((Date.now() - requestStartTime) / 1000)
+
+      if (!currentSessionId.value) {
+        currentSessionId.value = res.sessionId
+      }
+
+      const aiMessage = {
+        ...res,
+        duration: duration
+      }
+      messages.value.push(aiMessage)
+
+      if (currentSessionId.value && res.id) {
+        saveDurationToStorage(currentSessionId.value, res.id, duration)
+      }
+
+      await nextTick()
+      scrollToBottom()
+      loadSessions()
     }
-
-    // 将耗时信息添加到AI回复消息中
-    const aiMessage = {
-      ...res,
-      duration: duration  // 添加耗时字段
-    }
-    messages.value.push(aiMessage)
-
-    // 持久化：将耗时保存到 LocalStorage（方案B）
-    if (currentSessionId.value && res.id) {
-      saveDurationToStorage(currentSessionId.value, res.id, duration)
-    }
-
-    await nextTick()
-    scrollToBottom()
-    loadSessions()
   } catch (error) {
-    // 如果是用户主动取消，不显示错误信息
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED' || error.name === 'AbortError') {
       console.log('请求已取消')
-      // 可选：添加一条系统消息提示用户
-      // messages.value.push({ id: Date.now(), role: 'assistant', content: '❌ 请求已取消' })
     } else {
       console.error('发送消息失败:', error)
     }
   } finally {
     sending.value = false
     abortController = null
-    requestStartTime = null  // 清空开始时间
-    // 停止打字机效果和计时器
+    requestStartTime = null
     stopTypewriter()
     stopTimer()
   }
