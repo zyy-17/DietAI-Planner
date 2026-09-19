@@ -156,18 +156,17 @@ function formatReminderTime(date) {
 async function loadSettings() {
   loading.value = true
   try {
-    const { data } = await api.get('/user/settings')
-    if (data && data.data) {
-      const s = data.data
-      form.dietReminder = s.dietReminder ?? true
-      form.reminderTime = parseReminderTime(s.reminderTime)
-      form.goalReminder = s.goalReminder ?? true
-      form.aiSuggestion = s.aiSuggestion ?? true
-      form.theme = s.theme || 'light'
-      form.language = s.language || 'zh-CN'
-      form.collapsedSidebar = s.collapsedSidebar ?? false
-      form.dataSharing = s.dataSharing ?? false
-      form.publicRecords = s.publicRecords ?? false
+    const data = await api.get('/user/settings')
+    if (data) {
+      form.dietReminder = data.dietReminder ?? true
+      form.reminderTime = parseReminderTime(data.reminderTime)
+      form.goalReminder = data.goalReminder ?? true
+      form.aiSuggestion = data.aiSuggestion ?? true
+      form.theme = data.theme || 'light'
+      form.language = data.language || 'zh-CN'
+      form.collapsedSidebar = data.collapsedSidebar ?? false
+      form.dataSharing = data.dataSharing ?? false
+      form.publicRecords = data.publicRecords ?? false
     }
   } catch (e) {
     console.warn('加载设置失败，使用默认值')
