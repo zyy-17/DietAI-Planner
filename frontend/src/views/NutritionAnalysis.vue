@@ -1,7 +1,7 @@
 <template>
   <div class="nutrition-analysis">
     <!-- 智能营养评估卡片（优化一） -->
-    <el-card v-if="evaluation" class="eval-card" shadow="hover">
+    <el-card v-if="evaluation && mode === 'default'" class="eval-card" shadow="hover">
       <template #header>
         <div class="card-header">
           <span>🧬 智能营养评估</span>
@@ -153,7 +153,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import * as echarts from 'echarts'
 import api from '../utils/api'
@@ -292,6 +292,11 @@ function renderCharts() {
 }
 
 onMounted(() => {
+  loadEvaluation()
+  loadAnalysis()
+})
+
+watch(() => route.fullPath, () => {
   loadEvaluation()
   loadAnalysis()
 })

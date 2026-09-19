@@ -141,8 +141,11 @@ public class UserService {
         return bmr.multiply(activityFactor);
     }
 
-    /** 根据饮食目标计算每日目标热量（减脂×0.8，增肌×1.15，维持×1.0） */
+    /** 根据饮食目标计算每日目标热量（优先使用用户手动设置值，否则按TDEE×目标系数计算） */
     public java.math.BigDecimal calculateTargetCalories(User user) {
+        if (user.getTargetCalories() != null && user.getTargetCalories().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            return user.getTargetCalories();
+        }
         java.math.BigDecimal tdee = calculateTDEE(user);
         if (tdee.compareTo(java.math.BigDecimal.ZERO) == 0) return java.math.BigDecimal.ZERO;
 
