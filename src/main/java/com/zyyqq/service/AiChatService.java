@@ -28,6 +28,7 @@ public class AiChatService {
     private final AiGenerationLogRepository generationLogRepository;
     private final UserService userService;
     private final DietRecordService dietRecordService;
+    private final RecommendationService recommendationService;
 
     @Value("${ai-service.url}")
     private String aiServiceUrl;
@@ -173,6 +174,19 @@ public class AiChatService {
         BigDecimal todayFat = todayRecords.stream().map(r -> r.getFat() != null ? r.getFat() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add);
         sb.append("\n今日已摄入：热量").append(todayCal).append("kcal(剩余").append(targetCal.subtract(todayCal)).append("kcal)");
         sb.append(", 蛋白质").append(todayProtein).append("g, 碳水").append(todayCarb).append("g, 脂肪").append(todayFat).append("g");
+
+        // 基于推荐算法的候选食物（Java推荐引擎计算Top5）
+        try {
+            Map<String, Object> recContext = recommendationService.buildAiRecommendContext(userId, 5);
+            @SuppressWarnings("unchecked")
+            List<String> candidates = (List<String>) recContext.get("candidateFoods");
+            if (candidates != null && !candidates.isEmpty()) {
+                sb.append("\n推荐候选食物(算法评分Top5)：").append(String.join("、", candidates));
+                sb.append("（请优先从这些食物中推荐，并结合用户偏好生成膳食建议）");
+            }
+        } catch (Exception e) {
+            // 推荐算法失败不影响主流程
+        }
 
         return sb.toString();
     }
