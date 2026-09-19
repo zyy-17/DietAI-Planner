@@ -12,8 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import tools.jackson.databind.ObjectMapper;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.math.BigDecimal;
+import java.net.HttpURLConnection;
+import java.net.URI;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -293,11 +298,6 @@ public class AiChatService {
         StringBuilder fullResponse = new StringBuilder();
 
         try {
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-            factory.setConnectTimeout(10000);
-            factory.setReadTimeout(300000);
-            RestTemplate restTemplate = new RestTemplate(factory);
-
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("message", request.getContent());
             requestBody.put("context", contextSnapshot);
@@ -314,28 +314,31 @@ public class AiChatService {
             }
             requestBody.put("history", history);
 
-            String streamUrl = aiServiceUrl + "/api/chat/history/stream";
+            ObjectMapper objectMapper = new ObjectMapper();
+            byte[] jsonBytes = objectMapper.writeValueAsBytes(requestBody);
 
-            try (java.io.InputStream inputStream = restTemplate.execute(
-                    streamUrl,
-                    org.springframework.http.HttpMethod.POST,
-                    req -> {
-                        req.getHeaders().setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-                        org.springframework.util.StreamUtils.copy(
-                                new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(requestBody),
-                                req.getBody());
-                    },
-                    org.springframework.http.client.ClientHttpResponse::getBody
-            )) {
-                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream));
+            String streamUrl = aiServiceUrl + "/api/chat/history/stream";
+            HttpURLConnection conn = (HttpURLConnection) URI.create(streamUrl).toURL().openConnection();
+            conn.setDoOutput(true);
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(300000);
+
+            try (var os = conn.getOutputStream()) {
+                os.write(jsonBytes);
+                os.flush();
+            }
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.startsWith("data: ")) {
                         String data = line.substring(6).trim();
                         if (data.isEmpty()) continue;
                         try {
-                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                            java.util.Map<String, Object> chunk = mapper.readValue(data, java.util.Map.class);
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> chunk = objectMapper.readValue(data, Map.class);
                             if (chunk.containsKey("done") && Boolean.TRUE.equals(chunk.get("done"))) {
                                 break;
                             }
@@ -354,7 +357,9 @@ public class AiChatService {
             if (fullResponse.isEmpty()) {
                 String fallback = generateLocalResponse(request.getContent(), contextSnapshot);
                 fullResponse.append(fallback);
-                emitter.send(SseEmitter.event().name("chunk").data(fallback));
+                try {
+                    emitter.send(SseEmitter.event().name("chunk").data(fallback));
+                } catch (Exception ignored) {}
             }
         }
 
