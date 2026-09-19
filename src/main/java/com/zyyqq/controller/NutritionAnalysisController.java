@@ -1,8 +1,6 @@
 package com.zyyqq.controller;
 
-import com.zyyqq.dto.response.ApiResponse;
-import com.zyyqq.dto.response.NutritionAnalysisResponse;
-import com.zyyqq.dto.response.NutritionEvaluationResponse;
+import com.zyyqq.dto.response.*;
 import com.zyyqq.service.NutritionAnalysisService;
 import com.zyyqq.service.NutritionEvaluationService;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +50,40 @@ public class NutritionAnalysisController {
                 .actualFat(result.getActualFat())
                 .build();
         return ApiResponse.success(response);
+    }
+
+    /** 营养素详细分析：各营养素每日趋势+比例+建议 */
+    @GetMapping("/nutrients")
+    public ApiResponse<NutrientDetailResponse> nutrients(
+            Authentication authentication,
+            @RequestParam(defaultValue = "7") int days) {
+        Long userId = getUserId(authentication);
+        return ApiResponse.success(nutritionAnalysisService.analyzeNutrients(userId, days));
+    }
+
+    /** 热量详细分析：每日热量+时段分布+达标率 */
+    @GetMapping("/calorie")
+    public ApiResponse<CalorieDetailResponse> calorie(
+            Authentication authentication,
+            @RequestParam(defaultValue = "7") int days) {
+        Long userId = getUserId(authentication);
+        return ApiResponse.success(nutritionAnalysisService.analyzeCalories(userId, days));
+    }
+
+    /** 目标完成度分析：各营养素完成百分比+建议 */
+    @GetMapping("/goal")
+    public ApiResponse<GoalCompletionResponse> goal(Authentication authentication) {
+        Long userId = getUserId(authentication);
+        return ApiResponse.success(nutritionAnalysisService.analyzeGoalCompletion(userId));
+    }
+
+    /** 营养报告：综合分析+评分+关键发现+建议 */
+    @GetMapping("/report")
+    public ApiResponse<NutritionReportResponse> report(
+            Authentication authentication,
+            @RequestParam(defaultValue = "7") int days) {
+        Long userId = getUserId(authentication);
+        return ApiResponse.success(nutritionAnalysisService.generateReport(userId, days));
     }
 
     /** 从认证信息中提取用户ID */
