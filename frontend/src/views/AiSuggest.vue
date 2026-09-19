@@ -185,17 +185,14 @@ async function loadStructuredPlan() {
   if (!recommendation.value) return
   planLoading.value = true
   try {
-    const token = localStorage.getItem('token')
-    const res = await axios.post('http://localhost:8000/api/diet-plan/structured', {
+    const userId = JSON.parse(localStorage.getItem('user') || '{}').id || 1
+    const res = await axios.post('/ai-api/diet-plan/structured', {
+      user_id: userId,
       remaining_calories: recommendation.value.remainingCalories || 0,
       target_calories: 2000,
-      protein_gap: recommendation.value.proteinGap || 0,
       diet_goal: recommendation.value.dietGoal || 'maintain',
       candidate_foods: recommendation.value.candidateFoods || []
-    }, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      timeout: 120000
-    })
+    }, { timeout: 120000 })
     structuredPlan.value = res.data
   } catch (e) {
     console.warn('加载结构化膳食方案失败', e)
