@@ -397,11 +397,13 @@ function scrollToBottom() {
   }
 }
 
-onMounted(() => {
-  loadSessions()
+onMounted(async () => {
+  await loadSessions()
   const sessionId = route.query.sessionId
   if (sessionId) {
-    loadSession(sessionId)
+    loadSession(Number(sessionId))
+  } else if (sessions.value.length > 0) {
+    loadSession(sessions.value[0].id)
   }
 })
 

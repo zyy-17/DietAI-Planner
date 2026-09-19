@@ -381,6 +381,7 @@ DietAI-Planner/
 | 组件库 | Element Plus，按需自动导入 |
 | 图表 | ECharts 5，营养趋势图、目标完成度环形图、时段分布饼图 |
 | 图表切换 | 路由切换时 dispose 旧实例 + 重新 init，解决 v-if 导致的图表消失问题 |
+| 主题切换 | 支持浅色/深色/跟随系统三种模式，后端持久化 + 前端 CSS 类切换（html.dark），登录时自动加载 |
 | 布局 | MainLayout.vue，顶栏 + 侧栏 + 内容区响应式 |
 
 ### 营养分析算法
@@ -574,8 +575,23 @@ DietAI-Planner/
 
 ```
 ai-service/
-├── main.py              # FastAPI 主程序（所有逻辑）
-└── requirements.txt     # Python 依赖清单
+├── main.py              # FastAPI 主程序（路由注册、启动入口）
+├── requirements.txt     # Python 依赖清单
+├── api/                 # API 路由层
+│   ├── chat.py          # 对话接口（单轮/多轮）
+│   ├── diet_plan.py     # 膳食规划接口（普通/结构化）
+│   └── health.py        # 健康检查接口
+├── config/              # 配置层
+│   └── settings.py      # 全局配置（模型名、超时等）
+├── model/               # 数据模型层
+│   ├── request.py       # 请求模型（Pydantic）
+│   └── response.py      # 响应模型（Pydantic）
+├── prompt/              # Prompt 模板层
+│   └── system_prompt.py # 系统提示词模板
+└── service/             # 业务逻辑层
+    ├── chat_service.py  # 对话服务（上下文构建、历史管理）
+    ├── diet_plan_service.py # 膳食规划服务
+    └── llm_service.py   # LLM 调用服务（Ollama SDK）
 ```
 
 ### 核心 System Prompt

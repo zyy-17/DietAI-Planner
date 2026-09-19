@@ -93,9 +93,11 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
+import { useUserStore } from '../stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const section = computed(() => route.meta.section || 'default')
 
 const tabs = [
@@ -208,6 +210,9 @@ async function saveSettings() {
       publicRecords: form.publicRecords
     }
     await api.put('/user/settings', payload)
+    if (payload.theme) {
+      userStore.setTheme(payload.theme)
+    }
     ElMessage.success('设置已保存')
   } catch (e) {
     ElMessage.error('保存失败，请重试')
