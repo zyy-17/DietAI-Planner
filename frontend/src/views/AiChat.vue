@@ -63,7 +63,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, UserFilled } from '@element-plus/icons-vue'
@@ -407,6 +407,10 @@ onMounted(async () => {
   }
 })
 
+watch(() => route.query.sessionId, (newId) => {
+  if (newId) loadSession(Number(newId))
+})
+
 // 组件卸载时清理定时器
 onUnmounted(() => {
   stopTypewriter()
@@ -597,4 +601,33 @@ onUnmounted(() => {
   font-size: 12px;
   padding: 4px 12px;
 }
+</style>
+
+<style>
+html.dark .chat-sidebar { background: #16213e; border-right-color: #2a3a5c; }
+html.dark .session-item { color: #8ea1af; }
+html.dark .session-item:hover { background: #1e3a5f; }
+html.dark .session-item.active { background: #1e3a5f; color: #74b9ff; }
+html.dark .session-delete { color: #636e72; }
+html.dark .session-delete:hover { color: #f56c6c; }
+html.dark .chat-main { background: #1a1a2e; }
+html.dark .messages { background: #1a1a2e; }
+html.dark .message.assistant .msg-text { background: #1a2744; color: #c8d6e5; }
+html.dark .empty-chat { color: #636e72; }
+html.dark .chat-input { background: #16213e; border-top-color: #2a3a5c; }
+html.dark .thinking-text { background: linear-gradient(135deg, #1a2744 0%, #16213e 100%); border-color: #2a3a5c; color: #c8d6e5 !important; }
+html.dark .thinking-header { color: #74b9ff; }
+html.dark .cursor-blink { color: #74b9ff; }
+html.dark .waiting-time { color: #636e72; }
+html.dark .response-time { border-top-color: #2a3a5c; color: #636e72; }
+html.dark .markdown-body :deep(strong) { color: #c8d6e5; }
+html.dark .markdown-body :deep(em) { color: #c8d6e5; }
+html.dark .markdown-body :deep(h1), html.dark .markdown-body :deep(h2),
+html.dark .markdown-body :deep(h3), html.dark .markdown-body :deep(h4) { color: #c8d6e5; }
+html.dark .markdown-body :deep(code) { background: #1a2744; color: #f78166; }
+html.dark .markdown-body :deep(pre) { background: #1a2744; }
+html.dark .markdown-body :deep(pre code) { color: #c8d6e5; }
+html.dark .markdown-body :deep(blockquote) { border-left-color: #2a3a5c; color: #8ea1af; }
+html.dark .markdown-body :deep(a) { color: #74b9ff; }
+html.dark .preset-hint small { color: #74b9ff; background: #1e3a5f; }
 </style>

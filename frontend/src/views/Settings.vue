@@ -213,6 +213,10 @@ async function saveSettings() {
     if (payload.theme) {
       userStore.setTheme(payload.theme)
     }
+    if (payload.collapsedSidebar !== undefined) {
+      localStorage.setItem('sidebarCollapsed', payload.collapsedSidebar ? '1' : '0')
+      window.dispatchEvent(new Event('settings-changed'))
+    }
     ElMessage.success('设置已保存')
   } catch (e) {
     ElMessage.error('保存失败，请重试')

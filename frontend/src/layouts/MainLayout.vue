@@ -29,14 +29,15 @@
     </header>
 
     <div class="layout">
-      <aside>
+      <aside :class="{ collapsed: sidebarCollapsed }">
         <div class="side-section">
-          <div class="section-title">{{ currentModuleTitle }}</div>
+          <div v-if="!sidebarCollapsed" class="section-title">{{ currentModuleTitle }}</div>
           <div v-for="m in currentSideMenus" :key="m.path"
             class="side-item"
             :class="{ selected: isSideActive(m.path) }"
             @click="router.push(m.path)">
-            {{ m.icon }}　{{ m.name }}
+            <span class="side-icon">{{ m.icon }}</span>
+            <span v-if="!sidebarCollapsed" class="side-name">{{ m.name }}</span>
           </div>
         </div>
 
@@ -45,12 +46,17 @@
             class="side-item aux-item"
             :class="{ selected: isAuxActive(item.key) }"
             @click="router.push(item.path)">
-            {{ item.icon }}　{{ item.name }}
+            <span class="side-icon">{{ item.icon }}</span>
+            <span v-if="!sidebarCollapsed" class="side-name">{{ item.name }}</span>
           </div>
         </div>
 
-        <div class="side-bottom">
+        <div class="side-bottom" v-if="!sidebarCollapsed">
           健康饮食<br>从今天开始 🌱
+        </div>
+
+        <div class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
+          {{ sidebarCollapsed ? '▶' : '◀' }}
         </div>
       </aside>
 
@@ -62,10 +68,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { UserFilled } from '@element-plus/icons-vue'
+import api from '../utils/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -137,6 +144,8 @@ const currentModuleTitle = computed(() => moduleTitleMap[activeTopModule.value] 
 
 const currentSideMenus = computed(() => sideMenusMap[activeTopModule.value] || [])
 
+const sidebarCollapsed = ref(false)
+
 function isSideActive(path) {
   return route.path === path
 }
@@ -149,14 +158,28 @@ function isAuxActive(key) {
   return false
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (userStore.token && !userStore.avatarUrl) {
     userStore.fetchProfile()
   }
   if (userStore.token) {
-    userStore.fetchAndApplyTheme()
+    await userStore.fetchAndApplyTheme()
+    try {
+      const data = await api.get('/user/settings')
+      if (data) sidebarCollapsed.value = data.collapsedSidebar ?? false
+    } catch (e) {}
   }
+  window.addEventListener('settings-changed', onSettingsChanged)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('settings-changed', onSettingsChanged)
+})
+
+function onSettingsChanged() {
+  const val = localStorage.getItem('sidebarCollapsed')
+  if (val !== null) sidebarCollapsed.value = val === '1'
+}
 
 function handleCommand(command) {
   if (command === 'logout') {
@@ -184,7 +207,8 @@ nav span.active { color: #2589ee; background: #eef7ff; border-bottom: 3px solid 
 .user-area { margin-left: auto; }
 .user-info { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #55738d; font-size: 14px; }
 .layout { display: flex; }
-aside { width: 200px; min-height: calc(100vh - 70px); background: #fff; padding: 16px 10px; position: relative; border-right: 1px solid #e8edf2; display: flex; flex-direction: column; overflow-y: auto; }
+aside { width: 200px; min-height: calc(100vh - 70px); background: #fff; padding: 16px 10px; position: relative; border-right: 1px solid #e8edf2; display: flex; flex-direction: column; overflow-y: auto; transition: width 0.2s; }
+aside.collapsed { width: 60px; padding: 16px 6px; }
 
 .side-section { margin-bottom: 12px; }
 .section-title { font-size: 12px; color: #8ea1af; padding: 0 15px 8px; font-weight: 600; letter-spacing: 1px; }
@@ -192,19 +216,26 @@ aside { width: 200px; min-height: calc(100vh - 70px); background: #fff; padding:
 .side-item { height: 42px; border-radius: 8px; padding: 0 15px; display: flex; align-items: center; color: #55738d; cursor: pointer; margin-bottom: 4px; font-size: 13px; transition: all 0.2s; white-space: nowrap; }
 .side-item:hover { background: #edf7ff; color: #2789ed; }
 .side-item.selected { background: #e6f3ff; color: #2589ee; font-weight: 600; }
+.side-icon { flex-shrink: 0; font-size: 16px; }
+.side-name { margin-left: 6px; overflow: hidden; text-overflow: ellipsis; }
+aside.collapsed .side-item { justify-content: center; padding: 0; }
 
 .side-aux { margin-top: auto; padding-top: 12px; border-top: 1px solid #eef2f6; }
 .aux-item { height: 38px; font-size: 13px; }
 
 .side-bottom { padding: 16px 15px 8px; color: #69beb6; line-height: 1.8; font-size: 12px; }
+.collapse-btn { position: absolute; bottom: 12px; right: 8px; width: 24px; height: 24px; border-radius: 4px; background: #eef2f6; color: #55738d; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 10px; transition: all 0.2s; }
+.collapse-btn:hover { background: #dce4ec; color: #2789ed; }
 .main-content { flex: 1; overflow-y: auto; }
 
 @media (max-width: 800px) {
   aside { width: 65px; padding: 10px 6px; }
-  .side-item { justify-content: center; padding: 0; font-size: 0; }
+  .side-item { justify-content: center; padding: 0; }
+  .side-name { display: none; }
   .section-title, .side-bottom { display: none; }
   .logo { width: 100px; }
   nav span { min-width: 75px; font-size: 12px; }
+  .collapse-btn { display: none; }
 }
 </style>
 
@@ -223,6 +254,7 @@ html.dark .side-item:hover { background: #1e3a5f; color: #74b9ff; }
 html.dark .side-item.selected { background: #1e3a5f; color: #74b9ff; }
 html.dark .side-aux { border-top-color: #2a3a5c; }
 html.dark .side-bottom { color: #636e72; }
+html.dark .main-content { background: #1a1a2e; }
 html.dark .el-card { background: #16213e; border-color: #2a3a5c; color: #c8d6e5; }
 html.dark .el-card__header { border-bottom-color: #2a3a5c; color: #c8d6e5; }
 html.dark .el-table { background: #16213e; color: #c8d6e5; }
@@ -244,4 +276,72 @@ html.dark .el-statistic__content { color: #c8d6e5; }
 html.dark .el-radio__label { color: #c8d6e5; }
 html.dark .el-switch__label { color: #8ea1af; }
 html.dark .el-button--default { background: #1a2744; border-color: #2a3a5c; color: #c8d6e5; }
+html.dark .el-text { color: #c8d6e5; }
+html.dark .el-link { color: #74b9ff; }
+html.dark .el-tag { border-color: #2a3a5c; }
+html.dark .el-divider { border-color: #2a3a5c; }
+html.dark .el-progress__text { color: #c8d6e5; }
+html.dark .el-timeline-item__content { color: #c8d6e5; }
+html.dark .el-timeline-item__timestamp { color: #8ea1af; }
+html.dark .el-empty__description p { color: #8ea1af; }
+html.dark .el-alert { background: #1a2744; border-color: #2a3a5c; }
+html.dark .el-alert__title { color: #c8d6e5; }
+html.dark .el-menu { background: #16213e; }
+html.dark .el-menu-item { color: #8ea1af; }
+html.dark .el-tabs__item { color: #8ea1af; }
+html.dark .el-tabs__item.is-active { color: #74b9ff; }
+html.dark .el-breadcrumb__inner { color: #8ea1af; }
+html.dark .el-page-header__title { color: #c8d6e5; }
+html.dark .el-tooltip__trigger { color: #c8d6e5; }
+html.dark .el-checkbox__label { color: #c8d6e5; }
+html.dark .el-pager li { background: #1a2744; color: #8ea1af; }
+html.dark .el-pager li.is-active { color: #74b9ff; }
+html.dark .el-pagination button { background: #1a2744; color: #8ea1af; }
+html.dark .el-dropdown-menu { background: #16213e; border-color: #2a3a5c; }
+html.dark .el-dropdown-menu__item { color: #c8d6e5; }
+html.dark .el-dropdown-menu__item:hover { background: #1e3a5f; color: #74b9ff; }
+html.dark .el-popover { background: #16213e; border-color: #2a3a5c; }
+html.dark .el-message-box { background: #16213e; border-color: #2a3a5c; }
+html.dark .el-message-box__title { color: #c8d6e5; }
+html.dark .el-message-box__message p { color: #c8d6e5; }
+html.dark .el-time-panel { background: #16213e; border-color: #2a3a5c; }
+html.dark .el-date-editor { background: #1a2744; }
+html.dark .el-picker-panel { background: #16213e; border-color: #2a3a5c; }
+html.dark .el-calendar-table td { color: #c8d6e5; }
+html.dark .el-input-number { background: #1a2744; }
+html.dark .el-textarea__inner { background: #1a2744; color: #c8d6e5; border-color: #2a3a5c; }
+html.dark .el-select-dropdown { background: #16213e; border-color: #2a3a5c; }
+html.dark .el-select-dropdown__item { color: #c8d6e5; }
+html.dark .el-select-dropdown__item.hover { background: #1e3a5f; }
+html.dark .el-select-dropdown__item.selected { color: #74b9ff; }
+html.dark .el-radio-button__inner { background: #1a2744; border-color: #2a3a5c; color: #c8d6e5; }
+html.dark .el-radio-button__original-radio:checked + .el-radio-button__inner { background: #2589ee; border-color: #2589ee; color: #fff; }
+html.dark .el-switch.is-checked .el-switch__core { background: #2589ee; border-color: #2589ee; }
+html.dark .el-time-picker__panel { background: #16213e; }
+html.dark .el-picker-panel__body { background: #16213e; }
+html.dark .el-date-table td .el-date-table__cell { color: #c8d6e5; }
+html.dark .el-date-table td.current .el-date-table__cell { color: #74b9ff; }
+html.dark .el-date-picker__header { color: #c8d6e5; }
+html.dark .el-date-picker__header-label { color: #c8d6e5; }
+html.dark .el-day-editor { background: #1a2744; }
+html.dark .el-col { color: #c8d6e5; }
+html.dark .el-row { color: #c8d6e5; }
+html.dark .chart-title { color: #c8d6e5 !important; }
+html.dark .card-header span { color: #c8d6e5 !important; }
+html.dark .settings-page { background: #1a1a2e; }
+html.dark .page-tabs { border-bottom-color: #2a3a5c; }
+html.dark .tab-item { color: #8ea1af; }
+html.dark .tab-item:hover { color: #74b9ff; }
+html.dark .tab-item.active { color: #74b9ff; border-bottom-color: #74b9ff; }
+html.dark .hint { color: #636e72 !important; }
+html.dark .profile-page { background: #1a1a2e; }
+html.dark .food-library { background: #1a1a2e; }
+html.dark .diet-stats { background: #1a1a2e; }
+html.dark .diet-records { background: #1a1a2e; }
+html.dark .nutrition-analysis { background: #1a1a2e; }
+html.dark .ai-suggest { background: #1a1a2e; }
+html.dark .today-diet { background: #1a1a2e; }
+html.dark .eval-card { background: #1a2744; }
+html.dark .collapse-btn { background: #2a3a5c; color: #8ea1af; }
+html.dark .collapse-btn:hover { background: #1e3a5f; color: #74b9ff; }
 </style>
