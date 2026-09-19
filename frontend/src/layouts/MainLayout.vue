@@ -107,8 +107,7 @@ const sideMenusMap = {
     { name: '膳食规划', path: '/chat/diet-plan', icon: '🥗' },
     { name: '减脂方案', path: '/chat/fat-loss', icon: '🔥' },
     { name: '增肌方案', path: '/chat/muscle-gain', icon: '💪' },
-    { name: '饮食咨询', path: '/chat/consult', icon: '🍎' },
-    { name: '历史对话', path: '/chat/history', icon: '🕘' }
+    { name: '饮食咨询', path: '/chat/consult', icon: '🍎' }
   ]
 }
 

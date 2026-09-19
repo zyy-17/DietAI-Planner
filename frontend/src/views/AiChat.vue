@@ -275,6 +275,12 @@ async function loadSessions() {
 }
 
 async function createSession() {
+  // 检查是否已存在最新的空会话（避免重复创建）
+  if (sessions.value.length > 0 && currentSessionId.value === sessions.value[0].id && messages.value.length === 0) {
+    console.log('[AI Chat] 当前已是最新空会话，无需刷新')
+    return
+  }
+  
   const title = presetTitle.value || '新对话'
   const session = await api.post('/chat/sessions', { title, preset: preset.value })
   currentSessionId.value = session.id
