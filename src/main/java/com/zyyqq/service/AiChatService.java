@@ -2,27 +2,30 @@ package com.zyyqq.service;
 
 import com.zyyqq.dto.request.ChatRequest;
 import com.zyyqq.entity.*;
+import com.zyyqq.exception.BusinessException;
 import com.zyyqq.repository.AiChatMessageRepository;
 import com.zyyqq.repository.AiChatSessionRepository;
 import com.zyyqq.repository.AiGenerationLogRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AiChatService {
+
+    private static final int MAX_HISTORY_ROUNDS = 6;
 
     private final AiChatSessionRepository sessionRepository;
     private final AiChatMessageRepository messageRepository;
@@ -31,28 +34,28 @@ public class AiChatService {
     private final DietRecordService dietRecordService;
     private final RecommendationService recommendationService;
     private final TransactionTemplate transactionTemplate;
+    private final RestTemplate aiRestTemplate;
 
     @Value("${ai-service.url}")
     private String aiServiceUrl;
 
-    /** 获取用户的所有AI对话会话列表 */
     public List<AiChatSession> getUserSessions(Long userId) {
         return sessionRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
-    /** 获取指定会话的消息列表，校验会话归属 */
     public List<AiChatMessage> getSessionMessages(Long sessionId, Long userId) {
         AiChatSession session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new RuntimeException("会话不存在"));
+                .orElseThrow(() -> new BusinessException("会话不存在"));
         if (!session.getUserId().equals(userId)) {
-            throw new RuntimeException("无权访问此会话");
+            throw new BusinessException("无权访问此会话");
         }
         return messageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
     }
 
-    /** 发送消息并获取AI回复，自动创建或续接会话 */
     public AiChatMessage chat(Long userId, ChatRequest request) {
+        long start = System.currentTimeMillis();
         String contextSnapshot = buildContextSnapshot(userId);
+        log.debug("上下文快照生成耗时: {}ms", System.currentTimeMillis() - start);
 
         Long sessionId = transactionTemplate.execute(status -> {
             AiChatSession session;
@@ -64,7 +67,7 @@ public class AiChatService {
                 session = sessionRepository.save(session);
             } else {
                 session = sessionRepository.findById(request.getSessionId())
-                        .orElseThrow(() -> new RuntimeException("会话不存在"));
+                        .orElseThrow(() -> new BusinessException("会话不存在"));
             }
 
             if (messageRepository.countBySessionId(session.getId()) == 0) {
@@ -84,7 +87,9 @@ public class AiChatService {
             return session.getId();
         });
 
+        long aiStart = System.currentTimeMillis();
         String aiResponse = callAiService(userId, request.getContent(), contextSnapshot, sessionId);
+        log.info("AI调用耗时: {}ms, sessionId={}", System.currentTimeMillis() - aiStart, sessionId);
 
         AiChatMessage assistantMessage = transactionTemplate.execute(status -> {
             AiChatMessage msg = AiChatMessage.builder()
@@ -95,7 +100,7 @@ public class AiChatService {
                     .build();
             msg = messageRepository.save(msg);
 
-            AiGenerationLog log = AiGenerationLog.builder()
+            AiGenerationLog genLog = AiGenerationLog.builder()
                     .userId(userId)
                     .type("chat")
                     .inputSummary(request.getContent())
@@ -103,7 +108,7 @@ public class AiChatService {
                     .modelName("ai-service")
                     .isAbnormal(0)
                     .build();
-            generationLogRepository.save(log);
+            generationLogRepository.save(genLog);
 
             return msg;
         });
@@ -111,7 +116,6 @@ public class AiChatService {
         return assistantMessage;
     }
 
-    /** 创建新的AI对话会话 */
     @Transactional
     public AiChatSession createSession(Long userId, String title) {
         AiChatSession session = AiChatSession.builder()
@@ -121,20 +125,17 @@ public class AiChatService {
         return sessionRepository.save(session);
     }
 
-    /** 删除会话及其所有消息 */
     @Transactional
     public void deleteSession(Long sessionId, Long userId) {
         AiChatSession session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new RuntimeException("会话不存在"));
+                .orElseThrow(() -> new BusinessException("会话不存在"));
         if (!session.getUserId().equals(userId)) {
-            throw new RuntimeException("无权删除此会话");
+            throw new BusinessException("无权删除此会话");
         }
-        List<AiChatMessage> messages = messageRepository.findBySessionId(sessionId);
-        messageRepository.deleteAll(messages);
+        messageRepository.deleteBySessionId(sessionId);
         sessionRepository.deleteById(sessionId);
     }
 
-    /** 构建用户上下文快照，包含个人画像和今日饮食数据 */
     private String buildContextSnapshot(Long userId) {
         User user = userService.getUserById(userId);
         StringBuilder sb = new StringBuilder();
@@ -175,9 +176,9 @@ public class AiChatService {
         BigDecimal targetCal = userService.calculateTargetCalories(user);
         sb.append(", 每日目标热量=").append(targetCal).append("kcal");
 
-        BigDecimal proteinTarget = targetCal.multiply(new BigDecimal("0.20")).divide(new BigDecimal("4"), 1, java.math.RoundingMode.HALF_UP);
-        BigDecimal carbTarget = targetCal.multiply(new BigDecimal("0.50")).divide(new BigDecimal("4"), 1, java.math.RoundingMode.HALF_UP);
-        BigDecimal fatTarget = targetCal.multiply(new BigDecimal("0.30")).divide(new BigDecimal("9"), 1, java.math.RoundingMode.HALF_UP);
+        BigDecimal proteinTarget = resolveTarget(user.getTargetProtein(), targetCal, new BigDecimal("0.20"), new BigDecimal("4"));
+        BigDecimal carbTarget = resolveTarget(user.getTargetCarbohydrate(), targetCal, new BigDecimal("0.50"), new BigDecimal("4"));
+        BigDecimal fatTarget = resolveTarget(user.getTargetFat(), targetCal, new BigDecimal("0.30"), new BigDecimal("9"));
         sb.append("\n推荐营养素：蛋白质").append(proteinTarget).append("g, 碳水").append(carbTarget).append("g, 脂肪").append(fatTarget).append("g");
 
         List<DietRecord> todayRecords = dietRecordService.getTodayRecords(userId);
@@ -188,7 +189,6 @@ public class AiChatService {
         sb.append("\n今日已摄入：热量").append(todayCal).append("kcal(剩余").append(targetCal.subtract(todayCal)).append("kcal)");
         sb.append(", 蛋白质").append(todayProtein).append("g, 碳水").append(todayCarb).append("g, 脂肪").append(todayFat).append("g");
 
-        // 基于推荐算法的候选食物（Java推荐引擎计算Top5）
         try {
             Map<String, Object> recContext = recommendationService.buildAiRecommendContext(userId, 5);
             @SuppressWarnings("unchecked")
@@ -198,20 +198,21 @@ public class AiChatService {
                 sb.append("（请优先从这些食物中推荐，并结合用户偏好生成膳食建议）");
             }
         } catch (Exception e) {
-            // 推荐算法失败不影响主流程
+            log.warn("推荐算法构建上下文失败: {}", e.getMessage());
         }
 
         return sb.toString();
     }
 
-    /** 调用外部AI服务获取回复，失败时降级为本地生成 */
+    private BigDecimal resolveTarget(BigDecimal userTarget, BigDecimal targetCal, BigDecimal ratio, BigDecimal calPerGram) {
+        if (userTarget != null && userTarget.compareTo(BigDecimal.ZERO) > 0) {
+            return userTarget;
+        }
+        return targetCal.multiply(ratio).divide(calPerGram, 1, RoundingMode.HALF_UP);
+    }
+
     private String callAiService(Long userId, String message, String context, Long sessionId) {
         try {
-            // 配置RestTemplate超时：连接10秒，读取300秒/5分钟（适配复杂问题的长时间生成）
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-            factory.setConnectTimeout(10000);
-            factory.setReadTimeout(300000);
-            RestTemplate restTemplate = new RestTemplate(factory);
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("message", message);
             requestBody.put("context", context);
@@ -219,6 +220,11 @@ public class AiChatService {
             requestBody.put("user_id", userId);
 
             List<AiChatMessage> historyMessages = messageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+            int maxMessages = MAX_HISTORY_ROUNDS * 2;
+            if (historyMessages.size() > maxMessages) {
+                historyMessages = historyMessages.subList(historyMessages.size() - maxMessages, historyMessages.size());
+                log.debug("历史消息截断: 保留最近{}条", maxMessages);
+            }
             List<Map<String, String>> history = new java.util.ArrayList<>();
             for (AiChatMessage msg : historyMessages) {
                 Map<String, String> item = new HashMap<>();
@@ -229,7 +235,7 @@ public class AiChatService {
             requestBody.put("history", history);
 
             @SuppressWarnings("unchecked")
-            Map<String, Object> response = restTemplate.postForObject(
+            Map<String, Object> response = aiRestTemplate.postForObject(
                     aiServiceUrl + "/api/chat/history",
                     requestBody,
                     Map.class
@@ -239,12 +245,12 @@ public class AiChatService {
                 return response.get("response").toString();
             }
         } catch (Exception e) {
+            log.warn("AI服务调用失败，降级为本地回复: {}", e.getMessage());
             return generateLocalResponse(message, context);
         }
         return generateLocalResponse(message, context);
     }
 
-    /** 本地降级回复：当AI服务不可用时提供基础膳食建议 */
     private String generateLocalResponse(String message, String context) {
         StringBuilder sb = new StringBuilder();
         sb.append("根据您的健康数据，");
@@ -272,7 +278,6 @@ public class AiChatService {
         return sb.toString();
     }
 
-    /** 根据用户第一条消息生成会话标题 */
     private String generateSessionTitle(String content) {
         if (content == null || content.trim().isEmpty()) {
             return "新对话";

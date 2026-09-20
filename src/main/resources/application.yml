@@ -37,6 +37,11 @@ jwt:
 
 ai-service:
   url: http://localhost:8000
+  connect-timeout: 10
+  read-timeout: 120
+  pool:
+    max-total: 50
+    max-per-route: 20
 
 logging:
   level:

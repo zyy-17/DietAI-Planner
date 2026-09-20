@@ -23,9 +23,10 @@ public interface FoodRepository extends JpaRepository<Food, Long> {
     @Query("SELECT f FROM Food f WHERE f.name LIKE %:keyword% AND f.status = 'approved'")
     List<Food> searchApproved(@Param("keyword") String keyword);
 
-    /** 获取指定状态的所有食物列表 */
     List<Food> findByStatus(String status);
 
-    /** 按来源和状态查询食物（如用户提交的待审核食物） */
     List<Food> findBySourceAndStatus(String source, String status);
+
+    @Query("SELECT f.id, f.name FROM Food f WHERE f.id IN :ids")
+    List<Object[]> findIdAndNameByIds(@Param("ids") List<Long> ids);
 }

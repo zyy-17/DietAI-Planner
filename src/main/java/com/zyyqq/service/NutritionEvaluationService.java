@@ -3,6 +3,7 @@ package com.zyyqq.service;
 import com.zyyqq.entity.DietRecord;
 import com.zyyqq.entity.User;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -11,6 +12,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NutritionEvaluationService {
 
     private final UserService userService;
@@ -20,7 +22,6 @@ public class NutritionEvaluationService {
     private static final BigDecimal CARB_CAL_FACTOR = new BigDecimal("4");
     private static final BigDecimal FAT_CAL_FACTOR = new BigDecimal("9");
 
-    /** 计算BMI（体重kg / 身高m²） */
     public BigDecimal calculateBMI(User user) {
         if (user.getWeight() == null || user.getHeight() == null) return BigDecimal.ZERO;
         if (user.getHeight().compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
@@ -29,28 +30,24 @@ public class NutritionEvaluationService {
         return user.getWeight().divide(heightM.multiply(heightM), 1, RoundingMode.HALF_UP);
     }
 
-    /** 计算BMR（委托给UserService的Mifflin-St Jeor公式） */
     public BigDecimal calculateBMR(User user) {
         return userService.calculateBMR(user);
     }
 
-    /** 计算TDEE（委托给UserService） */
     public BigDecimal calculateTDEE(User user) {
         return userService.calculateTDEE(user);
     }
 
-    /** 计算目标热量（委托给UserService） */
     public BigDecimal calculateTargetCalories(User user) {
         return userService.calculateTargetCalories(user);
     }
 
-    /** 计算今日营养缺口（目标 - 实际摄入） */
     public NutritionGap calculateNutritionGap(Long userId) {
         User user = userService.getUserById(userId);
         BigDecimal targetCal = calculateTargetCalories(user);
-        BigDecimal targetProtein = targetCal.multiply(new BigDecimal("0.20")).divide(PROTEIN_CAL_FACTOR, 1, RoundingMode.HALF_UP);
-        BigDecimal targetCarb = targetCal.multiply(new BigDecimal("0.50")).divide(CARB_CAL_FACTOR, 1, RoundingMode.HALF_UP);
-        BigDecimal targetFat = targetCal.multiply(new BigDecimal("0.30")).divide(FAT_CAL_FACTOR, 1, RoundingMode.HALF_UP);
+        BigDecimal targetProtein = resolveTarget(user.getTargetProtein(), targetCal, new BigDecimal("0.20"), PROTEIN_CAL_FACTOR);
+        BigDecimal targetCarb = resolveTarget(user.getTargetCarbohydrate(), targetCal, new BigDecimal("0.50"), CARB_CAL_FACTOR);
+        BigDecimal targetFat = resolveTarget(user.getTargetFat(), targetCal, new BigDecimal("0.30"), FAT_CAL_FACTOR);
 
         List<DietRecord> todayRecords = dietRecordService.getTodayRecords(userId);
         BigDecimal actualCal = todayRecords.stream().map(DietRecord::getCalories).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -74,7 +71,6 @@ public class NutritionEvaluationService {
                 .build();
     }
 
-    /** 综合评估营养状态，返回评估结果和评分 */
     public NutritionEvaluationResult evaluateNutritionStatus(Long userId) {
         User user = userService.getUserById(userId);
         NutritionGap gap = calculateNutritionGap(userId);
@@ -89,32 +85,28 @@ public class NutritionEvaluationService {
         String fatStatus = evaluateStatus(gap.getFatGap(), gap.getTargetFat());
 
         int nutritionScore = calculateNutritionScore(gap);
-
         String mainProblem = identifyMainProblem(calorieStatus, proteinStatus, carbStatus, fatStatus);
 
         return NutritionEvaluationResult.builder()
-                .bmi(bmi)
-                .bmr(bmr)
-                .tdee(tdee)
+                .bmi(bmi).bmr(bmr).tdee(tdee)
                 .targetCalories(gap.getTargetCalories())
-                .calorieStatus(calorieStatus)
-                .proteinStatus(proteinStatus)
-                .carbStatus(carbStatus)
-                .fatStatus(fatStatus)
-                .nutritionScore(nutritionScore)
-                .mainProblem(mainProblem)
-                .calorieGap(gap.getCalorieGap())
-                .proteinGap(gap.getProteinGap())
-                .carbGap(gap.getCarbGap())
-                .fatGap(gap.getFatGap())
-                .actualCalories(gap.getActualCalories())
-                .actualProtein(gap.getActualProtein())
-                .actualCarb(gap.getActualCarb())
-                .actualFat(gap.getActualFat())
+                .calorieStatus(calorieStatus).proteinStatus(proteinStatus)
+                .carbStatus(carbStatus).fatStatus(fatStatus)
+                .nutritionScore(nutritionScore).mainProblem(mainProblem)
+                .calorieGap(gap.getCalorieGap()).proteinGap(gap.getProteinGap())
+                .carbGap(gap.getCarbGap()).fatGap(gap.getFatGap())
+                .actualCalories(gap.getActualCalories()).actualProtein(gap.getActualProtein())
+                .actualCarb(gap.getActualCarb()).actualFat(gap.getActualFat())
                 .build();
     }
 
-    /** 评估单项营养素状态：不足/正常/偏高 */
+    private BigDecimal resolveTarget(BigDecimal userTarget, BigDecimal targetCal, BigDecimal ratio, BigDecimal calPerGram) {
+        if (userTarget != null && userTarget.compareTo(BigDecimal.ZERO) > 0) {
+            return userTarget;
+        }
+        return targetCal.multiply(ratio).divide(calPerGram, 1, RoundingMode.HALF_UP);
+    }
+
     private String evaluateStatus(BigDecimal gap, BigDecimal target) {
         if (target.compareTo(BigDecimal.ZERO) == 0) return "正常";
         BigDecimal ratio = gap.divide(target, 4, RoundingMode.HALF_UP);
@@ -123,17 +115,14 @@ public class NutritionEvaluationService {
         return "正常";
     }
 
-    /** 计算营养评分（热量30+蛋白质30+碳水20+脂肪20=100分） */
     private int calculateNutritionScore(NutritionGap gap) {
         int calorieScore = scoreItem(gap.getCalorieGap(), gap.getTargetCalories());
         int proteinScore = scoreItem(gap.getProteinGap(), gap.getTargetProtein());
         int carbScore = scoreItem(gap.getCarbGap(), gap.getTargetCarb());
         int fatScore = scoreItem(gap.getFatGap(), gap.getTargetFat());
-
         return (calorieScore * 30 + proteinScore * 30 + carbScore * 20 + fatScore * 20) / 100;
     }
 
-    /** 单项评分：根据缺口比例打0-100分 */
     private int scoreItem(BigDecimal gap, BigDecimal target) {
         if (target.compareTo(BigDecimal.ZERO) == 0) return 100;
         BigDecimal ratio = gap.abs().divide(target, 4, RoundingMode.HALF_UP);
@@ -145,7 +134,6 @@ public class NutritionEvaluationService {
         return 20;
     }
 
-    /** 识别主要营养问题 */
     private String identifyMainProblem(String calorieStatus, String proteinStatus,
                                         String carbStatus, String fatStatus) {
         if ("不足".equals(proteinStatus)) return "蛋白质摄入不足";

@@ -5,6 +5,7 @@ import com.zyyqq.entity.DietRecord;
 import com.zyyqq.entity.Food;
 import com.zyyqq.entity.User;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class RecommendationService {
 
     private final UserService userService;
@@ -21,12 +23,12 @@ public class RecommendationService {
     private final FoodService foodService;
     private final FoodScoreCalculator foodScoreCalculator;
 
-    /** 生成个性化食物推荐（Top-N） */
     public FoodRecommendationResponse recommend(Long userId, int topN) {
+        long start = System.currentTimeMillis();
         User user = userService.getUserById(userId);
 
         BigDecimal targetCal = userService.calculateTargetCalories(user);
-        BigDecimal targetProtein = targetCal.multiply(new BigDecimal("0.20")).divide(new BigDecimal("4"), 1, RoundingMode.HALF_UP);
+        BigDecimal targetProtein = resolveTargetProtein(user, targetCal);
 
         List<DietRecord> todayRecords = dietRecordService.getTodayRecords(userId);
         BigDecimal actualCal = todayRecords.stream().map(DietRecord::getCalories).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -70,6 +72,8 @@ public class RecommendationService {
                 .map(FoodScoreCalculator.FoodScoreResult::getFoodName)
                 .collect(Collectors.toList());
 
+        log.debug("推荐算法执行耗时: {}ms, 候选食物={}, 推荐Top{}", System.currentTimeMillis() - start, candidateFoods.size(), topN);
+
         return FoodRecommendationResponse.builder()
                 .remainingCalories(remainingCal)
                 .proteinGap(proteinGap)
@@ -79,7 +83,6 @@ public class RecommendationService {
                 .build();
     }
 
-    /** 构建发送给AI服务的推荐上下文 */
     public Map<String, Object> buildAiRecommendContext(Long userId, int topN) {
         FoodRecommendationResponse recommendation = recommend(userId, topN);
         Map<String, Object> context = new HashMap<>();
@@ -90,7 +93,13 @@ public class RecommendationService {
         return context;
     }
 
-    /** 从饮食偏好中解析忌口食物列表 */
+    private BigDecimal resolveTargetProtein(User user, BigDecimal targetCal) {
+        if (user.getTargetProtein() != null && user.getTargetProtein().compareTo(BigDecimal.ZERO) > 0) {
+            return user.getTargetProtein();
+        }
+        return targetCal.multiply(new BigDecimal("0.20")).divide(new BigDecimal("4"), 1, RoundingMode.HALF_UP);
+    }
+
     private List<String> parseAvoidFoods(String dietPreference) {
         if (dietPreference == null || dietPreference.isEmpty()) return Collections.emptyList();
         return Arrays.stream(dietPreference.split("[,，、]"))
@@ -99,7 +108,6 @@ public class RecommendationService {
                 .collect(Collectors.toList());
     }
 
-    /** 根据忌口列表过滤食物 */
     private List<Food> filterByAvoidList(List<Food> foods, List<String> avoidFoods) {
         if (avoidFoods.isEmpty()) return foods;
         return foods.stream()

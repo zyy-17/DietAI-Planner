@@ -5,6 +5,8 @@ import com.zyyqq.entity.Food;
 import com.zyyqq.exception.BusinessException;
 import com.zyyqq.repository.FoodRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -12,7 +14,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -20,7 +24,6 @@ public class FoodService {
 
     private final FoodRepository foodRepository;
 
-    /** 分页查询已审核食物，支持按分类和关键词筛选 */
     public Page<Food> getFoods(Long categoryId, String keyword, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         if (keyword != null && !keyword.isEmpty()) {
@@ -32,24 +35,34 @@ public class FoodService {
         return foodRepository.findByStatus("approved", pageable);
     }
 
-    /** 根据ID获取食物，不存在则抛异常 */
     public Food getFoodById(Long id) {
         return foodRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("食物不存在"));
     }
 
-    /** 搜索已审核食物（不分页，用于快速添加） */
     public List<Food> searchFoods(String keyword) {
         return foodRepository.searchApproved(keyword);
     }
 
-    /** 获取所有已审核食物列表 */
+    @Cacheable(value = "approvedFoods", key = "'all'")
     public List<Food> getAllApprovedFoods() {
         return foodRepository.findByStatus("approved");
     }
 
-    /** 用户添加自定义食物，直接可用 */
+    public Map<Long, String> getFoodNamesByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        List<Object[]> results = foodRepository.findIdAndNameByIds(ids);
+        Map<Long, String> nameMap = new HashMap<>();
+        for (Object[] row : results) {
+            nameMap.put((Long) row[0], (String) row[1]);
+        }
+        return nameMap;
+    }
+
     @Transactional
+    @CacheEvict(value = "approvedFoods", key = "'all'")
     public Food addFoodByUser(AddFoodRequest request, Long userId) {
         Food food = Food.builder()
                 .name(request.getName())
@@ -67,8 +80,8 @@ public class FoodService {
         return foodRepository.save(food);
     }
 
-    /** 更新食物信息 */
     @Transactional
+    @CacheEvict(value = "approvedFoods", key = "'all'")
     public Food updateFood(Long id, AddFoodRequest request) {
         Food food = getFoodById(id);
         food.setName(request.getName());
@@ -84,26 +97,24 @@ public class FoodService {
         return foodRepository.save(food);
     }
 
-    /** 更新食物审核状态 */
     @Transactional
+    @CacheEvict(value = "approvedFoods", key = "'all'")
     public void updateFoodStatus(Long id, String status) {
         Food food = getFoodById(id);
         food.setStatus(status);
         foodRepository.save(food);
     }
 
-    /** 删除食物 */
     @Transactional
+    @CacheEvict(value = "approvedFoods", key = "'all'")
     public void deleteFood(Long id) {
         foodRepository.deleteById(id);
     }
 
-    /** 获取用户提交的待审核食物 */
     public List<Food> getPendingFoods() {
         return foodRepository.findBySourceAndStatus("user", "pending");
     }
 
-    /** 管理端分页查询所有食物，支持按状态筛选 */
     public Page<Food> getAllFoodsForAdmin(String status, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         if (status != null && !status.isEmpty()) {

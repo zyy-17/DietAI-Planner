@@ -48,11 +48,7 @@ public class TodayDietController {
     public ApiResponse<List<DietRecord>> addDietRecordBatch(Authentication authentication,
                                                             @RequestBody List<AddDietRecordRequest> requests) {
         Long userId = getUserId(authentication);
-        List<DietRecord> results = new java.util.ArrayList<>();
-        for (AddDietRecordRequest request : requests) {
-            results.add(dietRecordService.addDietRecord(userId, request));
-        }
-        return ApiResponse.success(results);
+        return ApiResponse.success(dietRecordService.addDietRecordBatch(userId, requests));
     }
 
     /** 更新用户的每日营养目标（热量/蛋白质/碳水/脂肪） */
