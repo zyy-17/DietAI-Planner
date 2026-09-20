@@ -55,7 +55,7 @@ public class AiChatService {
         if (request.getSessionId() == null) {
             session = AiChatSession.builder()
                     .userId(userId)
-                    .title(request.getContent().length() > 20 ? request.getContent().substring(0, 20) : request.getContent())
+                    .title("新对话")
                     .build();
             session = sessionRepository.save(session);
         } else {
@@ -63,7 +63,11 @@ public class AiChatService {
                     .orElseThrow(() -> new RuntimeException("会话不存在"));
         }
 
-        // 构建用户上下文快照（画像+今日摄入）
+        if (messageRepository.countBySessionId(session.getId()) == 0) {
+            session.setTitle(generateSessionTitle(request.getContent()));
+            sessionRepository.save(session);
+        }
+
         String contextSnapshot = buildContextSnapshot(userId);
 
         AiChatMessage userMessage = AiChatMessage.builder()
@@ -257,5 +261,17 @@ public class AiChatService {
         }
 
         return sb.toString();
+    }
+
+    /** 根据用户第一条消息生成会话标题 */
+    private String generateSessionTitle(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            return "新对话";
+        }
+        String title = content.trim().replaceAll("\\s+", " ");
+        if (title.length() > 20) {
+            title = title.substring(0, 20) + "...";
+        }
+        return title;
     }
 }
