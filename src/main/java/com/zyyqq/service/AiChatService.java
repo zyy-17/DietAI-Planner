@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
@@ -29,6 +30,7 @@ public class AiChatService {
     private final UserService userService;
     private final DietRecordService dietRecordService;
     private final RecommendationService recommendationService;
+    private final TransactionTemplate transactionTemplate;
 
     @Value("${ai-service.url}")
     private String aiServiceUrl;
@@ -49,55 +51,62 @@ public class AiChatService {
     }
 
     /** 发送消息并获取AI回复，自动创建或续接会话 */
-    @Transactional
     public AiChatMessage chat(Long userId, ChatRequest request) {
-        AiChatSession session;
-        if (request.getSessionId() == null) {
-            session = AiChatSession.builder()
-                    .userId(userId)
-                    .title("新对话")
-                    .build();
-            session = sessionRepository.save(session);
-        } else {
-            session = sessionRepository.findById(request.getSessionId())
-                    .orElseThrow(() -> new RuntimeException("会话不存在"));
-        }
-
-        if (messageRepository.countBySessionId(session.getId()) == 0) {
-            session.setTitle(generateSessionTitle(request.getContent()));
-            sessionRepository.save(session);
-        }
-
         String contextSnapshot = buildContextSnapshot(userId);
 
-        AiChatMessage userMessage = AiChatMessage.builder()
-                .sessionId(session.getId())
-                .userId(userId)
-                .role("user")
-                .content(request.getContent())
-                .contextSnapshot(contextSnapshot)
-                .build();
-        messageRepository.save(userMessage);
+        Long sessionId = transactionTemplate.execute(status -> {
+            AiChatSession session;
+            if (request.getSessionId() == null) {
+                session = AiChatSession.builder()
+                        .userId(userId)
+                        .title("新对话")
+                        .build();
+                session = sessionRepository.save(session);
+            } else {
+                session = sessionRepository.findById(request.getSessionId())
+                        .orElseThrow(() -> new RuntimeException("会话不存在"));
+            }
 
-        String aiResponse = callAiService(userId, request.getContent(), contextSnapshot, session.getId());
+            if (messageRepository.countBySessionId(session.getId()) == 0) {
+                session.setTitle(generateSessionTitle(request.getContent()));
+                sessionRepository.save(session);
+            }
 
-        AiChatMessage assistantMessage = AiChatMessage.builder()
-                .sessionId(session.getId())
-                .userId(userId)
-                .role("assistant")
-                .content(aiResponse)
-                .build();
-        assistantMessage = messageRepository.save(assistantMessage);
+            AiChatMessage userMessage = AiChatMessage.builder()
+                    .sessionId(session.getId())
+                    .userId(userId)
+                    .role("user")
+                    .content(request.getContent())
+                    .contextSnapshot(contextSnapshot)
+                    .build();
+            messageRepository.save(userMessage);
 
-        AiGenerationLog log = AiGenerationLog.builder()
-                .userId(userId)
-                .type("chat")
-                .inputSummary(request.getContent())
-                .outputContent(aiResponse)
-                .modelName("ai-service")
-                .isAbnormal(0)
-                .build();
-        generationLogRepository.save(log);
+            return session.getId();
+        });
+
+        String aiResponse = callAiService(userId, request.getContent(), contextSnapshot, sessionId);
+
+        AiChatMessage assistantMessage = transactionTemplate.execute(status -> {
+            AiChatMessage msg = AiChatMessage.builder()
+                    .sessionId(sessionId)
+                    .userId(userId)
+                    .role("assistant")
+                    .content(aiResponse)
+                    .build();
+            msg = messageRepository.save(msg);
+
+            AiGenerationLog log = AiGenerationLog.builder()
+                    .userId(userId)
+                    .type("chat")
+                    .inputSummary(request.getContent())
+                    .outputContent(aiResponse)
+                    .modelName("ai-service")
+                    .isAbnormal(0)
+                    .build();
+            generationLogRepository.save(log);
+
+            return msg;
+        });
 
         return assistantMessage;
     }
