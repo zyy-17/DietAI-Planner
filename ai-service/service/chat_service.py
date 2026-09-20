@@ -3,6 +3,7 @@ from typing import Optional, List
 from service.llm_service import call_ollama_text, call_ollama_stream, get_model
 from prompt.system_prompt import SYSTEM_PROMPT
 from model.request import ChatHistoryItem
+from config.settings import MAX_HISTORY_ROUNDS
 
 logger = logging.getLogger("dietai")
 
@@ -18,6 +19,10 @@ def build_messages(message: str, context: Optional[str] = None,
     messages = [{"role": "system", "content": system}]
 
     if history:
+        if len(history) > MAX_HISTORY_ROUNDS * 2:
+            trimmed = history[-(MAX_HISTORY_ROUNDS * 2):]
+            logger.info(f"历史消息截断: {len(history)}条 → {len(trimmed)}条(保留最近{MAX_HISTORY_ROUNDS}轮)")
+            history = trimmed
         for item in history:
             messages.append({"role": item.role, "content": item.content})
 

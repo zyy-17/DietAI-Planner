@@ -62,5 +62,9 @@ STRUCTURED_DIET_PLAN_PROMPT = """请根据以下信息生成结构化膳食建�
   "suggestions": ["建议1", "建议2", "建议3"]
 }}
 
-只返回JSON，不要添加其他文字。
+要求：
+1. 只返回JSON，不要添加任何其他文字、解释或markdown标记
+2. summary不超过30字
+3. suggestions给出3-5条具体可执行的建议
+4. 不确定的字段留空字符串，不要编造数据
 """

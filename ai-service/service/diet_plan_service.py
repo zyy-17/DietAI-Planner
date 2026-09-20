@@ -1,4 +1,5 @@
 import json
+import re
 import logging
 from typing import Optional, List
 from service.llm_service import call_ollama_text, get_model
@@ -9,6 +10,19 @@ from config.settings import MAX_RETRIES
 logger = logging.getLogger("dietai")
 
 FALLBACK_PLAN = "AI 服务暂不可用，请稍后重试。"
+
+
+def _clean_json_response(raw: str) -> str:
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        cleaned = "\n".join(lines).strip()
+    if not cleaned.startswith("{"):
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            cleaned = match.group()
+    return cleaned
 
 
 def generate_diet_plan(request: DietPlanRequest) -> dict:
@@ -85,28 +99,41 @@ def generate_structured_suggestion(remaining_calories: float, protein_gap: float
         candidate_foods=", ".join(candidate_foods) if candidate_foods else "无",
     )
 
+    use_json_mode = True
     for attempt in range(MAX_RETRIES + 1):
         try:
-            raw = call_ollama_text([{"role": "user", "content": prompt}])
-            cleaned = raw.strip()
-            if cleaned.startswith("```"):
-                lines = cleaned.split("\n")
-                lines = [l for l in lines if not l.strip().startswith("```")]
-                cleaned = "\n".join(lines)
+            if attempt < 3 and use_json_mode:
+                raw = call_ollama_text([{"role": "user", "content": prompt}], fmt="json")
+            else:
+                raw = call_ollama_text([{"role": "user", "content": prompt}])
+
+            if not raw or not raw.strip():
+                logger.warning(f"AI返回空响应(尝试{attempt + 1})")
+                continue
+
+            cleaned = _clean_json_response(raw)
+            if not cleaned:
+                logger.warning(f"JSON清理后为空(尝试{attempt + 1})")
+                continue
+
             parsed = json.loads(cleaned)
             validated = StructuredDietPlan(**parsed)
             result["summary"] = validated.summary
             result["suggestions"] = validated.suggestions or []
+            logger.info(f"结构化输出解析成功(尝试{attempt + 1})")
             return result
-        except (json.JSONDecodeError, Exception) as e:
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON解析失败(尝试{attempt + 1}): {e}")
+            if attempt == 2:
+                use_json_mode = False
+                logger.info("JSON模式3次失败，切换为普通模式+正则提取")
+        except Exception as e:
             logger.warning(f"结构化输出解析失败(尝试{attempt + 1}): {e}")
-            if attempt == MAX_RETRIES:
-                result["summary"] = "营养分析完成（AI输出格式异常，已降级）"
-                result["suggestions"] = [
-                    f"剩余热量{round(remaining_calories)}kcal，蛋白质缺口{round(protein_gap, 1)}g",
-                    "建议增加优质蛋白质摄入",
-                    "控制高脂食物摄入",
-                ]
-                return result
 
+    result["summary"] = "营养分析完成（AI输出格式异常，已降级）"
+    result["suggestions"] = [
+        f"剩余热量{round(remaining_calories)}kcal，蛋白质缺口{round(protein_gap, 1)}g",
+        "建议增加优质蛋白质摄入",
+        "控制高脂食物摄入",
+    ]
     return result

@@ -30,11 +30,12 @@ async def chat_with_history_endpoint(request: ChatWithHistoryRequest):
 
 
 @router.post("/api/chat/stream")
-async def chat_stream_endpoint(chat_message: ChatMessage):
+async def chat_stream_endpoint(chat_message: ChatWithHistoryRequest):
     messages = chat_stream(
         message=chat_message.message,
         context=chat_message.context or "",
         session_id=chat_message.session_id or 0,
+        history=chat_message.history,
     )
     session_id = chat_message.session_id or 0
 

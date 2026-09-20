@@ -17,4 +17,6 @@ MODEL_OPTIONS = {
     "repeat_penalty": 1.1,
 }
 
-MAX_RETRIES = 2
+MAX_RETRIES = 5
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "120"))
+MAX_HISTORY_ROUNDS = int(os.getenv("MAX_HISTORY_ROUNDS", "10"))
