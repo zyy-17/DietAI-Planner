@@ -51,6 +51,19 @@ public class TodayDietController {
         return ApiResponse.success(dietRecordService.addDietRecordBatch(userId, requests));
     }
 
+    @PostMapping("/today/apply-suggestion")
+    public ApiResponse<List<DietRecord>> applySuggestion(Authentication authentication,
+                                                         @RequestBody Map<String, Object> body) {
+        Long userId = getUserId(authentication);
+        String mealType = (String) body.get("mealType");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> foodItems = (List<Map<String, Object>>) body.get("foodItems");
+        if (mealType == null || foodItems == null || foodItems.isEmpty()) {
+            return ApiResponse.error("参数不完整");
+        }
+        return ApiResponse.success(dietRecordService.addDietRecordByNames(userId, mealType, foodItems));
+    }
+
     /** 更新用户的每日营养目标（热量/蛋白质/碳水/脂肪） */
     @PutMapping("/today/target")
     public ApiResponse<Void> updateTodayTarget(Authentication authentication,

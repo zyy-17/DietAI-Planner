@@ -33,6 +33,15 @@ public class UserController {
     @Value("${app.upload.avatar-url-prefix:/avatars}")
     private String avatarUrlPrefix;
 
+    @GetMapping("/greeting")
+    public ApiResponse<java.util.Map<String, String>> getGreetingInfo(Authentication authentication) {
+        Long userId = getUserId(authentication);
+        User user = userService.getUserById(userId);
+        String displayName = (user.getRealName() != null && !user.getRealName().isBlank())
+                ? user.getRealName() : user.getUsername();
+        return ApiResponse.success(java.util.Map.of("name", displayName));
+    }
+
     @GetMapping("/profile")
     public ApiResponse<UserProfileVO> getProfile(Authentication authentication) {
         Long userId = getUserId(authentication);

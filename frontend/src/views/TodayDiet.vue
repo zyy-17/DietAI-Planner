@@ -4,7 +4,7 @@
       <div class="welcome-text">
         <span class="greeting-icon">{{ greetingIcon }}</span>
         <div>
-          <h1>{{ greetingText }}，<br>今天也要好好吃饭！</h1>
+          <h1>{{ greetingText }}，{{ userName }}，<br>今天也要好好吃饭！</h1>
           <p>合理膳食 · 科学营养 · 健康生活</p>
         </div>
       </div>
@@ -318,6 +318,14 @@ const weekDay = weekDays[now.getDay()]
 const hour = now.getHours()
 const greetingIcon = hour < 12 ? '☀️' : hour < 18 ? '🌤️' : '🌙'
 const greetingText = hour < 12 ? '早上好' : hour < 18 ? '下午好' : '晚上好'
+const userName = ref('')
+
+async function loadGreeting() {
+  try {
+    const data = await api.get('/user/greeting')
+    userName.value = data.name || ''
+  } catch (e) {}
+}
 
 const nutrients = computed(() => [
   { key: 'protein', name: '蛋白质', icon: '🥩', current: overview.value.totalProtein || 0, target: overview.value.targetProtein || 0, barClass: 'bar-protein' },
@@ -541,7 +549,10 @@ async function deleteRecord(id) {
   } catch (e) {}
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+  loadGreeting()
+})
 </script>
 
 <style scoped>

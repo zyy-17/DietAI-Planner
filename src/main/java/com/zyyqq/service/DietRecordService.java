@@ -175,4 +175,56 @@ public class DietRecordService {
             record.setFoodName(foodNameMap.getOrDefault(record.getFoodId(), "未知食物"));
         }
     }
+
+    @Transactional
+    public List<DietRecord> addDietRecordByNames(Long userId, String mealType, List<Map<String, Object>> foodItems) {
+        List<Food> allFoods = foodService.getAllApprovedFoods();
+        Map<String, Food> foodNameMap = new java.util.HashMap<>();
+        for (Food food : allFoods) {
+            foodNameMap.put(food.getName(), food);
+        }
+
+        List<DietRecord> results = new java.util.ArrayList<>();
+        for (Map<String, Object> item : foodItems) {
+            String foodName = (String) item.get("foodName");
+            BigDecimal amount = new BigDecimal(String.valueOf(item.getOrDefault("amount", 100)));
+
+            Food food = foodNameMap.get(foodName);
+            if (food == null) {
+                for (Food f : allFoods) {
+                    if (f.getName().contains(foodName) || foodName.contains(f.getName())) {
+                        food = f;
+                        break;
+                    }
+                }
+            }
+            if (food == null) {
+                log.warn("AI建议应用: 食物[{}]未在数据库中找到，跳过", foodName);
+                continue;
+            }
+
+            BigDecimal ratio = amount.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+            BigDecimal calories = food.getCalories().multiply(ratio).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal protein = food.getProtein() != null ? food.getProtein().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+            BigDecimal carbohydrate = food.getCarbohydrate() != null ? food.getCarbohydrate().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+            BigDecimal fat = food.getFat() != null ? food.getFat().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+
+            DietRecord record = DietRecord.builder()
+                    .userId(userId)
+                    .foodId(food.getId())
+                    .mealType(mealType)
+                    .amount(amount)
+                    .calories(calories)
+                    .protein(protein)
+                    .carbohydrate(carbohydrate)
+                    .fat(fat)
+                    .recordDate(LocalDate.now())
+                    .build();
+            record = dietRecordRepository.save(record);
+            record.setFoodName(food.getName());
+            results.add(record);
+        }
+        log.info("AI建议应用饮食记录: userId={}, mealType={}, count={}", userId, mealType, results.size());
+        return results;
+    }
 }

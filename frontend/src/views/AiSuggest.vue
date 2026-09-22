@@ -123,7 +123,7 @@
             <span>🫒 {{ s.fat }} g</span>
           </div>
         </div>
-        <el-button type="primary" text @click="applySuggestion(s)">应用到今日饮食 ›</el-button>
+        <el-button type="primary" text @click="applySuggestion(s)" :loading="applying">应用到今日饮食 ›</el-button>
       </div>
     </div>
 
@@ -149,6 +149,7 @@ import axios from 'axios'
 const router = useRouter()
 const loading = ref(false)
 const planLoading = ref(false)
+const applying = ref(false)
 const recommendation = ref(null)
 const structuredPlan = ref(null)
 
@@ -204,24 +205,24 @@ async function loadStructuredPlan() {
 
 const allSuggestions = [
   [
-    { type: 'breakfast', icon: '🥣', label: '推荐早餐', title: '燕麦牛奶碗 + 水煮蛋 + 蓝莓', desc: '富含优质蛋白和膳食纤维，帮助控制血糖，提供持久能量。', calories: 420, protein: 24, carb: 52, fat: 12 },
-    { type: 'lunch', icon: '🥗', label: '推荐午餐', title: '鸡胸肉沙拉 + 全麦面包 + 酸奶', desc: '高蛋白低脂，搭配丰富蔬菜补充维生素和矿物质。', calories: 520, protein: 35, carb: 55, fat: 15 },
-    { type: 'dinner', icon: '🍲', label: '推荐晚餐', title: '清蒸鱼 + 糙米饭 + 西兰花', desc: '优质蛋白加粗粮，营养均衡易消化，适合晚间食用。', calories: 480, protein: 30, carb: 48, fat: 14 }
+    { type: 'breakfast', icon: '🥣', label: '推荐早餐', title: '燕麦牛奶碗 + 水煮蛋 + 蓝莓', desc: '富含优质蛋白和膳食纤维，帮助控制血糖，提供持久能量。', calories: 420, protein: 24, carb: 52, fat: 12, foods: [{ foodName: '燕麦片', amount: 40 }, { foodName: '牛奶', amount: 250 }, { foodName: '鸡蛋', amount: 100 }, { foodName: '蓝莓', amount: 50 }] },
+    { type: 'lunch', icon: '🥗', label: '推荐午餐', title: '鸡胸肉沙拉 + 全麦面包 + 酸奶', desc: '高蛋白低脂，搭配丰富蔬菜补充维生素和矿物质。', calories: 520, protein: 35, carb: 55, fat: 15, foods: [{ foodName: '鸡胸肉', amount: 150 }, { foodName: '全麦面包', amount: 80 }, { foodName: '酸奶', amount: 200 }, { foodName: '番茄', amount: 100 }] },
+    { type: 'dinner', icon: '🍲', label: '推荐晚餐', title: '清蒸鱼 + 糙米饭 + 西兰花', desc: '优质蛋白加粗粮，营养均衡易消化，适合晚间食用。', calories: 480, protein: 30, carb: 48, fat: 14, foods: [{ foodName: '清蒸鱼', amount: 150 }, { foodName: '糙米饭', amount: 200 }, { foodName: '西兰花', amount: 100 }] }
   ],
   [
-    { type: 'breakfast', icon: '🥞', label: '推荐早餐', title: '全麦吐司 + 牛油果 + 煎蛋', desc: '健康脂肪与优质蛋白组合，提供上午所需能量。', calories: 380, protein: 18, carb: 35, fat: 18 },
-    { type: 'lunch', icon: '🍱', label: '推荐午餐', title: '牛肉西兰花 + 紫薯 + 豆腐汤', desc: '补铁增肌，粗粮替代精米，膳食纤维丰富。', calories: 550, protein: 32, carb: 60, fat: 16 },
-    { type: 'dinner', icon: '🥘', label: '推荐晚餐', title: '番茄鸡蛋面 + 凉拌黄瓜', desc: '清淡易消化，番茄红素抗氧化，适合晚间。', calories: 400, protein: 15, carb: 55, fat: 10 }
+    { type: 'breakfast', icon: '🥞', label: '推荐早餐', title: '全麦吐司 + 牛油果 + 煎蛋', desc: '健康脂肪与优质蛋白组合，提供上午所需能量。', calories: 380, protein: 18, carb: 35, fat: 18, foods: [{ foodName: '全麦面包', amount: 80 }, { foodName: '鸡蛋', amount: 100 }, { foodName: '牛奶', amount: 250 }] },
+    { type: 'lunch', icon: '🍱', label: '推荐午餐', title: '牛肉西兰花 + 紫薯 + 豆腐汤', desc: '补铁增肌，粗粮替代精米，膳食纤维丰富。', calories: 550, protein: 32, carb: 60, fat: 16, foods: [{ foodName: '牛肉', amount: 150 }, { foodName: '西兰花', amount: 100 }, { foodName: '红薯', amount: 200 }, { foodName: '豆腐', amount: 100 }] },
+    { type: 'dinner', icon: '🥘', label: '推荐晚餐', title: '番茄鸡蛋面 + 凉拌黄瓜', desc: '清淡易消化，番茄红素抗氧化，适合晚间。', calories: 400, protein: 15, carb: 55, fat: 10, foods: [{ foodName: '面条(煮)', amount: 200 }, { foodName: '鸡蛋', amount: 100 }, { foodName: '番茄', amount: 100 }, { foodName: '黄瓜', amount: 100 }] }
   ],
   [
-    { type: 'breakfast', icon: '🥛', label: '推荐早餐', title: '豆浆 + 杂粮馒头 + 水煮蛋', desc: '植物蛋白与粗粮搭配，低脂高纤维，稳定血糖。', calories: 360, protein: 20, carb: 42, fat: 8 },
-    { type: 'lunch', icon: '🍛', label: '推荐午餐', title: '虾仁炒饭 + 海带汤 + 橙子', desc: '海鲜优质蛋白，海带补碘，橙子补充维C。', calories: 580, protein: 28, carb: 65, fat: 18 },
-    { type: 'dinner', icon: '🥬', label: '推荐晚餐', title: '白灼虾 + 蒸南瓜 + 小米粥', desc: '低脂高蛋白，南瓜富含β胡萝卜素，小米养胃。', calories: 350, protein: 22, carb: 40, fat: 6 }
+    { type: 'breakfast', icon: '🥛', label: '推荐早餐', title: '豆浆 + 杂粮馒头 + 水煮蛋', desc: '植物蛋白与粗粮搭配，低脂高纤维，稳定血糖。', calories: 360, protein: 20, carb: 42, fat: 8, foods: [{ foodName: '豆浆', amount: 300 }, { foodName: '鸡蛋', amount: 100 }] },
+    { type: 'lunch', icon: '🍛', label: '推荐午餐', title: '虾仁炒饭 + 海带汤 + 橙子', desc: '海鲜优质蛋白，海带补碘，橙子补充维C。', calories: 580, protein: 28, carb: 65, fat: 18, foods: [{ foodName: '虾', amount: 150 }, { foodName: '白米饭', amount: 200 }, { foodName: '橙子', amount: 200 }] },
+    { type: 'dinner', icon: '🥬', label: '推荐晚餐', title: '白灼虾 + 蒸南瓜 + 小米粥', desc: '低脂高蛋白，南瓜富含β胡萝卜素，小米养胃。', calories: 350, protein: 22, carb: 40, fat: 6, foods: [{ foodName: '虾', amount: 150 }, { foodName: '红薯', amount: 150 }] }
   ],
   [
-    { type: 'breakfast', icon: '🫐', label: '推荐早餐', title: '希腊酸奶 + 坚果麦片 + 香蕉', desc: '高蛋白酸奶搭配坚果，提供持久饱腹感和优质脂肪。', calories: 410, protein: 22, carb: 48, fat: 14 },
-    { type: 'lunch', icon: '🥙', label: '推荐午餐', title: '三文鱼饭团 + 味噌汤 + 毛豆', desc: 'Omega-3丰富，味噌发酵食品益肠道，毛豆补植物蛋白。', calories: 530, protein: 30, carb: 58, fat: 16 },
-    { type: 'dinner', icon: '🍜', label: '推荐晚餐', title: '鸡丝凉面 + 蒜蓉菠菜 + 蘑菇汤', desc: '清淡爽口，菠菜补铁，蘑菇增强免疫力。', calories: 420, protein: 20, carb: 52, fat: 12 }
+    { type: 'breakfast', icon: '🫐', label: '推荐早餐', title: '希腊酸奶 + 坚果麦片 + 香蕉', desc: '高蛋白酸奶搭配坚果，提供持久饱腹感和优质脂肪。', calories: 410, protein: 22, carb: 48, fat: 14, foods: [{ foodName: '酸奶', amount: 200 }, { foodName: '香蕉', amount: 100 }] },
+    { type: 'lunch', icon: '🥙', label: '推荐午餐', title: '三文鱼饭团 + 味噌汤 + 毛豆', desc: 'Omega-3丰富，味噌发酵食品益肠道，毛豆补植物蛋白。', calories: 530, protein: 30, carb: 58, fat: 16, foods: [{ foodName: '三文鱼', amount: 150 }, { foodName: '白米饭', amount: 200 }] },
+    { type: 'dinner', icon: '🍜', label: '推荐晚餐', title: '鸡丝凉面 + 蒜蓉菠菜 + 蘑菇汤', desc: '清淡爽口，菠菜补铁，蘑菇增强免疫力。', calories: 420, protein: 20, carb: 52, fat: 12, foods: [{ foodName: '鸡胸肉', amount: 100 }, { foodName: '面条(煮)', amount: 200 }, { foodName: '菠菜', amount: 100 }] }
   ]
 ]
 
@@ -237,9 +238,27 @@ function refreshSuggestion() {
   }, 500)
 }
 
-function applySuggestion(s) {
-  ElMessage.success(`已将「${s.title}」方案记录，快去添加食物吧！`)
-  router.push(`/today/${s.type}`)
+async function applySuggestion(s) {
+  if (!s.foods || s.foods.length === 0) {
+    ElMessage.warning('该方案暂无可应用的食物数据')
+    router.push(`/today/${s.type}`)
+    return
+  }
+  applying.value = true
+  try {
+    const res = await api.post('/diet/today/apply-suggestion', {
+      mealType: s.type,
+      foodItems: s.foods
+    })
+    const count = res.length || 0
+    ElMessage.success(`已将「${s.title}」方案应用到${s.type === 'breakfast' ? '早餐' : s.type === 'lunch' ? '午餐' : s.type === 'dinner' ? '晚餐' : '加餐'}，共${count}种食物已记录`)
+    router.push('/today')
+  } catch (e) {
+    ElMessage.error('应用失败，请手动添加食物')
+    router.push(`/today/${s.type}`)
+  } finally {
+    applying.value = false
+  }
 }
 
 onMounted(async () => {
