@@ -11,7 +11,8 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * 管理端食物库管理接口（对应客户端"食物库"模块）。
- * 支持新增系统食物、编辑、审核（通过/驳回）、删除，以及查看用户提交的待审核食物。
+ * 仅管理系统食物（source='system'），用户自定义食物不在管理端出现。
+ * 支持新增、编辑、审核（通过/驳回）、删除。
  */
 @RestController
 @RequestMapping("/api/admin/foods")
@@ -20,7 +21,7 @@ public class AdminFoodController {
 
     private final FoodService foodService;
 
-    /** 分页查询食物库，可按状态（approved/pending/rejected）与名称关键字筛选 */
+    /** 分页查询系统食物库，可按状态（approved/pending/rejected）与名称关键字筛选 */
     @GetMapping
     public ApiResponse<Page<Food>> getFoods(
             @RequestParam(required = false) String status,

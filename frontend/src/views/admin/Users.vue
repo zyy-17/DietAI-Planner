@@ -43,13 +43,10 @@
         <el-table-column prop="createdAt" label="注册时间" width="170">
           <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" :type="row.status === 1 ? 'warning' : 'success'" @click="toggleStatus(row)">
               {{ row.status === 1 ? '禁用' : '启用' }}
-            </el-button>
-            <el-button size="small" @click="toggleRole(row)">
-              {{ row.role === 'admin' ? '降为用户' : '设为管理员' }}
             </el-button>
             <el-button size="small" type="info" @click="openReset(row)">重置密码</el-button>
             <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
@@ -131,18 +128,6 @@ function search() {
 async function toggleStatus(user) {
   const newStatus = user.status === 1 ? 0 : 1
   await api.put(`/admin/users/${user.id}/status`, { status: newStatus })
-  ElMessage.success('操作成功')
-  loadUsers()
-}
-
-async function toggleRole(user) {
-  const nextRole = user.role === 'admin' ? 'user' : 'admin'
-  await ElMessageBox.confirm(
-    `确定将「${user.username}」的角色改为${nextRole === 'admin' ? '管理员' : '普通用户'}？`,
-    '提示',
-    { type: 'warning' }
-  )
-  await api.put(`/admin/users/${user.id}/role`, { role: nextRole })
   ElMessage.success('操作成功')
   loadUsers()
 }

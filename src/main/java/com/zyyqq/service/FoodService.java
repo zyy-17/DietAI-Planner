@@ -32,6 +32,8 @@ public class FoodService {
 
     /** 用户自定义食物来源标记 */
     private static final String SOURCE_USER = "user";
+    /** 系统食物来源标记（管理端只管理这一类） */
+    private static final String SOURCE_SYSTEM = "system";
     /** 审核通过状态 */
     private static final String STATUS_APPROVED = "approved";
     /** 自定义食物兜底分类名称 */
@@ -212,29 +214,24 @@ public class FoodService {
         return foodRepository.findBySourceAndStatus(SOURCE_USER, "pending");
     }
 
-    public Page<Food> getAllFoodsForAdmin(String status, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        if (status != null && !status.isEmpty()) {
-            return foodRepository.findByStatus(status, pageable);
-        }
-        return foodRepository.findAll(pageable);
-    }
-
-    /** 管理端分页查询食物，支持状态与关键字筛选 */
+    /**
+     * 管理端分页查询食物库，支持状态与关键字筛选。
+     * 只返回系统食物（source='system'），用户自定义食物（source='user'）不在管理端展示。
+     */
     public Page<Food> getAllFoodsForAdmin(String status, String keyword, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         boolean hasKeyword = keyword != null && !keyword.trim().isEmpty();
         boolean hasStatus = status != null && !status.isEmpty();
         if (hasKeyword && hasStatus) {
-            return foodRepository.searchByKeywordAndStatus(keyword.trim(), status, pageable);
+            return foodRepository.searchAdminFoodsByStatus(SOURCE_SYSTEM, status, keyword.trim(), pageable);
         }
         if (hasKeyword) {
-            return foodRepository.searchAllByKeyword(keyword.trim(), pageable);
+            return foodRepository.searchAdminFoods(SOURCE_SYSTEM, keyword.trim(), pageable);
         }
         if (hasStatus) {
-            return foodRepository.findByStatus(status, pageable);
+            return foodRepository.findAdminFoodsByStatus(SOURCE_SYSTEM, status, pageable);
         }
-        return foodRepository.findAll(pageable);
+        return foodRepository.findAdminFoods(SOURCE_SYSTEM, pageable);
     }
 
     /**

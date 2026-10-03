@@ -33,8 +33,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AdminService {
 
-    /** 待审核状态 */
-    private static final String STATUS_PENDING = "pending";
+    /** 系统食物来源标记（管理端只统计/管理这一类） */
+    private static final String SOURCE_SYSTEM = "system";
 
     private final UserRepository userRepository;
     private final FoodRepository foodRepository;
@@ -48,8 +48,8 @@ public class AdminService {
         Map<String, Object> overview = new LinkedHashMap<>();
         overview.put("totalUsers", userRepository.countByDeleted(0));
         overview.put("todayNewUsers", userRepository.countByCreatedAtAfter(todayStart));
-        overview.put("totalFoods", foodRepository.count());
-        overview.put("pendingFoods", foodRepository.countByStatus(STATUS_PENDING));
+        // 食物库总数只统计系统食物，与"食物管理"列表口径一致
+        overview.put("totalFoods", foodRepository.countBySource(SOURCE_SYSTEM));
         overview.put("totalDietRecords", dietRecordRepository.count());
         overview.put("todayDietRecords", dietRecordRepository.countByRecordDate(LocalDate.now()));
         overview.put("totalAiLogs", aiGenerationLogRepository.count());

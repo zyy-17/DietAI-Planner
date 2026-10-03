@@ -33,7 +33,6 @@
         <el-card>
           <template #header><span>快捷入口</span></template>
           <el-button type="primary" plain @click="$router.push('/admin/foods')">➕ 添加食物</el-button>
-          <el-button type="warning" plain @click="$router.push('/admin/foods?status=pending')">📝 待审核食物（{{ overview.pendingFoods ?? 0 }}）</el-button>
           <el-button type="info" plain @click="$router.push('/admin/users')">👥 用户管理</el-button>
         </el-card>
       </el-col>
@@ -61,7 +60,6 @@ const overview = reactive({
   totalUsers: 0,
   todayNewUsers: 0,
   totalFoods: 0,
-  pendingFoods: 0,
   totalDietRecords: 0,
   todayDietRecords: 0,
   totalAiLogs: 0,
@@ -72,7 +70,6 @@ const cards = [
   { key: 'totalUsers', label: '注册用户', icon: '👥', bg: '#e6f1ff' },
   { key: 'todayNewUsers', label: '今日新增用户', icon: '🆕', bg: '#e8f8ef' },
   { key: 'totalFoods', label: '食物库总数', icon: '🍎', bg: '#fff3e0' },
-  { key: 'pendingFoods', label: '待审核食物', icon: '📝', bg: '#fdecea' },
   { key: 'totalDietRecords', label: '饮食记录总数', icon: '🍽️', bg: '#f0e9ff' },
   { key: 'todayDietRecords', label: '今日记录数', icon: '📅', bg: '#e6f7f8' },
   { key: 'totalAiLogs', label: 'AI 生成次数', icon: '🤖', bg: '#eef2f7' },

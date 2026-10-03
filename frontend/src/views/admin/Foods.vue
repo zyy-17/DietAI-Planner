@@ -12,11 +12,6 @@
               style="width: 200px"
               @keyup.enter="search"
               @clear="search" />
-            <el-select v-model="statusFilter" placeholder="状态筛选" clearable style="width: 140px" @change="search">
-              <el-option value="approved" label="已通过" />
-              <el-option value="pending" label="待审核" />
-              <el-option value="rejected" label="已驳回" />
-            </el-select>
             <el-button type="primary" @click="openDialog()">➕ 添加食物</el-button>
           </div>
         </div>
@@ -32,22 +27,13 @@
         <el-table-column prop="protein" label="蛋白质(g)" width="100" />
         <el-table-column prop="carbohydrate" label="碳水(g)" width="100" />
         <el-table-column prop="fat" label="脂肪(g)" width="90" />
-        <el-table-column label="来源" width="90">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.source === 'user' ? 'warning' : 'info'">
-              {{ row.source === 'user' ? '用户' : '系统' }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <el-tag size="small" :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'pending'" size="small" type="success" @click="updateStatus(row.id, 'approved')">通过</el-button>
-            <el-button v-if="row.status === 'pending'" size="small" type="warning" @click="updateStatus(row.id, 'rejected')">驳回</el-button>
             <el-button size="small" @click="openDialog(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="deleteFood(row)">删除</el-button>
           </template>
@@ -108,18 +94,14 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../utils/api'
-
-const route = useRoute()
 
 const foods = ref([])
 const categories = ref([])
 const page = ref(1)
 const total = ref(0)
 const keyword = ref('')
-const statusFilter = ref(null)
 const loading = ref(false)
 
 const dialogVisible = ref(false)
@@ -171,7 +153,6 @@ async function loadFoods() {
   loading.value = true
   try {
     const params = { page: page.value - 1 }
-    if (statusFilter.value) params.status = statusFilter.value
     if (keyword.value.trim()) params.keyword = keyword.value.trim()
     const data = await api.get('/admin/foods', { params })
     foods.value = data.content
@@ -224,12 +205,6 @@ async function saveFood() {
   }
 }
 
-async function updateStatus(id, status) {
-  await api.put(`/admin/foods/${id}/status`, { status })
-  ElMessage.success('操作成功')
-  loadFoods()
-}
-
 async function deleteFood(row) {
   await ElMessageBox.confirm(`确定删除「${row.name}」？删除后不可恢复。`, '提示', { type: 'warning' })
   await api.delete(`/admin/foods/${row.id}`)
@@ -238,7 +213,6 @@ async function deleteFood(row) {
 }
 
 onMounted(async () => {
-  if (route.query.status) statusFilter.value = route.query.status
   await loadCategories()
   await loadFoods()
 })

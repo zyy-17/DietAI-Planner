@@ -74,4 +74,26 @@ public interface FoodRepository extends JpaRepository<Food, Long> {
 
     /** 管理端按来源分页查询食物 */
     Page<Food> findBySource(String source, Pageable pageable);
+
+    /** 统计指定来源的食物数量 */
+    long countBySource(String source);
+
+    // ==================== 管理端食物库（仅系统食物，不含用户自定义） ====================
+
+    /** 管理端分页查询系统食物 */
+    @Query("SELECT f FROM Food f WHERE f.source = :source")
+    Page<Food> findAdminFoods(@Param("source") String source, Pageable pageable);
+
+    /** 管理端按状态分页查询系统食物 */
+    @Query("SELECT f FROM Food f WHERE f.source = :source AND f.status = :status")
+    Page<Food> findAdminFoodsByStatus(@Param("source") String source, @Param("status") String status, Pageable pageable);
+
+    /** 管理端按名称关键字分页查询系统食物 */
+    @Query("SELECT f FROM Food f WHERE f.source = :source AND f.name LIKE %:keyword%")
+    Page<Food> searchAdminFoods(@Param("source") String source, @Param("keyword") String keyword, Pageable pageable);
+
+    /** 管理端按状态 + 名称关键字分页查询系统食物 */
+    @Query("SELECT f FROM Food f WHERE f.source = :source AND f.status = :status AND f.name LIKE %:keyword%")
+    Page<Food> searchAdminFoodsByStatus(@Param("source") String source, @Param("status") String status,
+                                        @Param("keyword") String keyword, Pageable pageable);
 }
