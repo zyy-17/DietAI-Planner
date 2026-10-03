@@ -45,3 +45,9 @@ ai-service/.venv/
 ### OS ###
 .DS_Store
 Thumbs.db
+
+### Runtime data ###
+uploads/
+
+### Misc ###
+ai-service/package-lock.json
