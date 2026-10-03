@@ -28,6 +28,9 @@
                 👋 你好，我是你的 AI 饮食助手。<br />
                 我可以根据你的健康档案和饮食记录，帮助你分析营养摄入、调整膳食计划、推荐食物和解决饮食问题。
               </div>
+              <div class="welcome-context">
+                📎 已自动读取你的健康档案与饮食记录{{ readDays ? `（近 7 天中有 ${readDays} 天数据）` : '' }}
+              </div>
               <div class="welcome-chips">
                 <button v-for="q in welcomeQuestions" :key="q" class="chip"
                   :disabled="sending" @click="sendMessage(q)">{{ q }}</button>
@@ -198,6 +201,8 @@ const messagesRef = ref(null)
 // 第三栏：今日营养数据
 const overview = ref(null)
 const dietGoalLabel = ref('未设置')
+// 欢迎卡片展示"AI 已读到多少天数据"，让用户直观感知个性化来源
+const readDays = ref(null)
 const GOAL_LABELS = { lose: '减脂', maintain: '维持体重', gain: '增肌' }
 
 // 打字机效果、等待时间、取消请求相关状态
@@ -359,6 +364,10 @@ async function loadNutrition() {
   try {
     const profile = await api.get('/user/profile')
     dietGoalLabel.value = GOAL_LABELS[profile?.dietGoal] || profile?.dietGoal || '未设置'
+  } catch (e) {}
+  try {
+    const stats = await api.get('/diet/stats?period=week')
+    readDays.value = stats?.totalDays ?? null
   } catch (e) {}
 }
 
@@ -527,6 +536,7 @@ onUnmounted(() => {
 .welcome-avatar { font-size: 28px; flex-shrink: 0; }
 .welcome-body { background: #fff; border-radius: 8px; padding: 14px 16px; max-width: 78%; }
 .welcome-text { line-height: 1.8; color: #333; margin-bottom: 12px; }
+.welcome-context { font-size: 12px; color: #8ea1af; margin: -4px 0 12px; }
 .welcome-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { border: 1px solid #b5d4f4; background: #f2f8ff; color: #185fa5; border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
 .chip:hover:not(:disabled) { background: #2589ee; border-color: #2589ee; color: #fff; }
@@ -605,6 +615,7 @@ html.dark .messages { background: #1a1a2e; }
 html.dark .message.assistant .msg-text { background: #1a2744; color: #c8d6e5; }
 html.dark .welcome-body { background: #1a2744; }
 html.dark .welcome-text { color: #c8d6e5; }
+html.dark .welcome-context { color: #636e72; }
 html.dark .chip { background: #1e3a5f; border-color: #2a3a5c; color: #74b9ff; }
 html.dark .chip:hover:not(:disabled) { background: #2589ee; border-color: #2589ee; color: #fff; }
 html.dark .chat-input { background: #16213e; border-top-color: #2a3a5c; }

@@ -38,7 +38,8 @@ jwt:
 ai-service:
   url: http://localhost:8000
   connect-timeout: 10
-  read-timeout: 120
+  # 本机 Ollama 推理较慢，上下文越长耗时越久；120s 会在生成途中被掐断并降级为兜底文案
+  read-timeout: 300
   pool:
     max-total: 50
     max-per-route: 20
