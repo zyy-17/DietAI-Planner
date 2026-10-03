@@ -349,14 +349,61 @@ public class AiChatService {
         return sb.toString();
     }
 
+    /**
+     * 会话标题关键词规则表。
+     * 每个元素为 {标题, 关键词1, 关键词2, ...}，按数组顺序判定优先级，先命中先返回。
+     * 目的：让左侧会话列表显示「晚餐推荐」这类概括性标题，而不是把用户原话整句贴上去。
+     */
+    private static final List<String[]> TITLE_RULES = List.of(
+            new String[]{"晚餐推荐", "晚餐", "晚饭", "晚上", "夜宵"},
+            new String[]{"午餐推荐", "午餐", "午饭", "中饭", "中午"},
+            new String[]{"早餐推荐", "早餐", "早饭", "早上"},
+            new String[]{"加餐建议", "加餐", "零食", "下午茶"},
+            new String[]{"食物替换", "替换", "换掉", "换成", "替代"},
+            new String[]{"减脂建议", "减脂", "减肥", "瘦身", "掉秤"},
+            new String[]{"增肌建议", "增肌", "长肌肉", "增重"},
+            new String[]{"饮食分析", "分析", "评估", "达标", "摄入"},
+            new String[]{"蛋白质摄入", "蛋白质"},
+            new String[]{"膳食纤维", "膳食纤维", "蔬菜", "纤维"},
+            new String[]{"热量咨询", "热量", "卡路里", "kcal", "大卡"},
+            new String[]{"膳食计划", "食谱", "菜单", "计划", "安排", "搭配"},
+            new String[]{"食物推荐", "推荐", "吃什么", "吃啥", "建议"}
+    );
+
+    /** 兜底截断时先去掉的口语化填充词 */
+    private static final String[] TITLE_FILLERS = {
+            "请问", "帮我", "我想", "麻烦", "一下", "能不能", "可以", "然后", "今天", "我"
+    };
+
     private String generateSessionTitle(String content) {
         if (content == null || content.trim().isEmpty()) {
             return "新对话";
         }
-        String title = content.trim().replaceAll("\\s+", " ");
-        if (title.length() > 20) {
-            title = title.substring(0, 20) + "...";
+        String text = content.trim();
+
+        // 1. 命中关键词：直接给出概括性标题
+        //    例：「我今天晚上不知道吃什么，你帮我推荐一下」→「晚餐推荐」
+        for (String[] rule : TITLE_RULES) {
+            for (int i = 1; i < rule.length; i++) {
+                if (text.contains(rule[i])) {
+                    return rule[0];
+                }
+            }
         }
-        return title;
+
+        // 2. 未命中时：去掉填充词与标点后截断，避免整句话占满侧边栏
+        String fallback = text;
+        for (String filler : TITLE_FILLERS) {
+            fallback = fallback.replace(filler, "");
+        }
+        fallback = fallback.replaceAll("[\\s？?！!。，,、~～]+", "").trim();
+        if (fallback.isEmpty()) {
+            fallback = text;
+        }
+        boolean truncated = fallback.length() > 12;
+        if (truncated) {
+            fallback = fallback.substring(0, 12) + "…";
+        }
+        return fallback;
     }
 }

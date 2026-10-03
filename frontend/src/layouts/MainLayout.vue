@@ -29,7 +29,7 @@
     </header>
 
     <div class="layout">
-      <aside :class="{ collapsed: sidebarCollapsed, 'no-section': currentSideMenus.length === 0 }">
+      <aside v-if="!hideSidebar" :class="{ collapsed: sidebarCollapsed }">
         <div class="side-section" v-if="currentSideMenus.length > 0">
           <div v-if="!sidebarCollapsed" class="section-title">{{ currentModuleTitle }}</div>
           <div v-for="m in currentSideMenus" :key="m.path"
@@ -139,6 +139,9 @@ const currentModuleTitle = computed(() => moduleTitleMap[activeTopModule.value] 
 
 const currentSideMenus = computed(() => sideMenusMap[activeTopModule.value] || [])
 
+// AI 饮食助手页面自带三栏布局（会话 / 对话 / 今日营养），不需要外层左侧导航
+const hideSidebar = computed(() => activeTopModule.value === 'chat')
+
 const sidebarCollapsed = ref(false)
 
 function isSideActive(path) {
@@ -216,8 +219,6 @@ aside.collapsed { width: 60px; padding: 16px 6px; }
 aside.collapsed .side-item { justify-content: center; padding: 0; }
 
 .side-aux { margin-top: auto; padding-top: 12px; border-top: 1px solid #eef2f6; }
-/* 当前模块没有二级菜单时（例如 AI 饮食助手），把快捷入口提到顶部，避免左侧留白 */
-aside.no-section .side-aux { margin-top: 0; padding-top: 0; border-top: none; }
 .aux-item { height: 38px; font-size: 13px; }
 
 .side-bottom { padding: 16px 15px 8px; color: #69beb6; line-height: 1.8; font-size: 12px; }
