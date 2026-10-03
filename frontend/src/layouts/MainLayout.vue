@@ -29,8 +29,8 @@
     </header>
 
     <div class="layout">
-      <aside :class="{ collapsed: sidebarCollapsed }">
-        <div class="side-section">
+      <aside :class="{ collapsed: sidebarCollapsed, 'no-section': currentSideMenus.length === 0 }">
+        <div class="side-section" v-if="currentSideMenus.length > 0">
           <div v-if="!sidebarCollapsed" class="section-title">{{ currentModuleTitle }}</div>
           <div v-for="m in currentSideMenus" :key="m.path"
             class="side-item"
@@ -82,7 +82,7 @@ const topMenus = [
   { key: 'today', name: '今日饮食', icon: '🏠', path: '/today' },
   { key: 'records', name: '饮食记录', icon: '📋', path: '/records' },
   { key: 'nutrition', name: '营养分析', icon: '📊', path: '/nutrition' },
-  { key: 'chat', name: 'AI对话', icon: '🤖', path: '/chat' }
+  { key: 'chat', name: 'AI饮食助手', icon: '🤖', path: '/chat' }
 ]
 
 const sideMenusMap = {
@@ -109,20 +109,15 @@ const sideMenusMap = {
     { name: '目标完成度', path: '/nutrition/goal', icon: '🎯' },
     { name: '营养报告', path: '/nutrition/report', icon: '📄' }
   ],
-  chat: [
-    { name: '新建对话', path: '/chat', icon: '💬' },
-    { name: '膳食规划', path: '/chat/diet-plan', icon: '🥗' },
-    { name: '减脂方案', path: '/chat/fat-loss', icon: '🔥' },
-    { name: '增肌方案', path: '/chat/muscle-gain', icon: '💪' },
-    { name: '饮食咨询', path: '/chat/consult', icon: '🍎' }
-  ]
+  // AI 饮食助手：所有模式共用同一个模型，不再提供预设方案入口
+  chat: []
 }
 
 const moduleTitleMap = {
   today: '🏠 今日饮食',
   records: '📋 饮食记录',
   nutrition: '📊 营养分析',
-  chat: '🤖 AI对话'
+  chat: '🤖 AI饮食助手'
 }
 
 const auxLinks = [
@@ -221,6 +216,8 @@ aside.collapsed { width: 60px; padding: 16px 6px; }
 aside.collapsed .side-item { justify-content: center; padding: 0; }
 
 .side-aux { margin-top: auto; padding-top: 12px; border-top: 1px solid #eef2f6; }
+/* 当前模块没有二级菜单时（例如 AI 饮食助手），把快捷入口提到顶部，避免左侧留白 */
+aside.no-section .side-aux { margin-top: 0; padding-top: 0; border-top: none; }
 .aux-item { height: 38px; font-size: 13px; }
 
 .side-bottom { padding: 16px 15px 8px; color: #69beb6; line-height: 1.8; font-size: 12px; }

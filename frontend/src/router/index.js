@@ -117,31 +117,12 @@ const routes = [
         path: 'chat',
         name: 'AiChat',
         component: () => import('../views/AiChat.vue'),
-        meta: { title: '新建对话' }
+        meta: { title: 'AI饮食助手' }
       },
       {
-        path: 'chat/diet-plan',
-        name: 'AiDietPlan',
-        component: () => import('../views/AiChat.vue'),
-        meta: { title: '膳食规划', preset: 'diet-plan' }
-      },
-      {
-        path: 'chat/fat-loss',
-        name: 'AiFatLoss',
-        component: () => import('../views/AiChat.vue'),
-        meta: { title: '减脂方案', preset: 'fat-loss' }
-      },
-      {
-        path: 'chat/muscle-gain',
-        name: 'AiMuscleGain',
-        component: () => import('../views/AiChat.vue'),
-        meta: { title: '增肌方案', preset: 'muscle-gain' }
-      },
-      {
-        path: 'chat/consult',
-        name: 'AiConsult',
-        component: () => import('../views/AiChat.vue'),
-        meta: { title: '饮食咨询', preset: 'consult' }
+        // 旧的预设方案入口已下线，统一跳转到 AI 饮食助手
+        path: 'chat/:legacy(diet-plan|fat-loss|muscle-gain|consult)',
+        redirect: '/chat'
       },
       {
         path: 'chat/history',

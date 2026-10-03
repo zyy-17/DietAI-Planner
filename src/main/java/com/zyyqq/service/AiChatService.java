@@ -189,6 +189,34 @@ public class AiChatService {
         sb.append("\n今日已摄入：热量").append(todayCal).append("kcal(剩余").append(targetCal.subtract(todayCal)).append("kcal)");
         sb.append(", 蛋白质").append(todayProtein).append("g, 碳水").append(todayCarb).append("g, 脂肪").append(todayFat).append("g");
 
+        // 今日饮食明细：让 AI 明确知道用户"今天具体吃了什么"
+        sb.append("\n今日饮食明细：");
+        if (todayRecords.isEmpty()) {
+            sb.append("暂无记录（用户今天还没有添加任何饮食）");
+        } else {
+            Map<String, List<DietRecord>> byMeal = new java.util.LinkedHashMap<>();
+            for (String meal : List.of("breakfast", "lunch", "dinner", "snack")) {
+                byMeal.put(meal, new java.util.ArrayList<>());
+            }
+            for (DietRecord r : todayRecords) {
+                byMeal.computeIfAbsent(r.getMealType(), k -> new java.util.ArrayList<>()).add(r);
+            }
+            for (String meal : List.of("breakfast", "lunch", "dinner", "snack")) {
+                List<DietRecord> items = byMeal.get(meal);
+                if (items == null || items.isEmpty()) continue;
+                sb.append("\n- ").append(mealLabel(meal)).append("：");
+                List<String> parts = new java.util.ArrayList<>();
+                for (DietRecord r : items) {
+                    String name = r.getFoodName() != null ? r.getFoodName() : "未知食物";
+                    parts.add(name + " " + r.getAmount() + "g(" + r.getCalories() + "kcal)");
+                }
+                sb.append(String.join("、", parts));
+            }
+        }
+
+        // 近期概览：帮助 AI 判断用户的饮食习惯
+        appendRecentSummary(sb, userId);
+
         try {
             Map<String, Object> recContext = recommendationService.buildAiRecommendContext(userId, 5);
             @SuppressWarnings("unchecked")
@@ -202,6 +230,49 @@ public class AiChatService {
         }
 
         return sb.toString();
+    }
+
+    /** 餐次中文名 */
+    private String mealLabel(String mealType) {
+        if (mealType == null) {
+            return "其他";
+        }
+        return switch (mealType) {
+            case "breakfast" -> "早餐";
+            case "lunch" -> "午餐";
+            case "dinner" -> "晚餐";
+            case "snack" -> "加餐";
+            default -> mealType;
+        };
+    }
+
+    /** 近 7 天饮食概览：帮助 AI 判断用户长期饮食习惯 */
+    private void appendRecentSummary(StringBuilder sb, Long userId) {
+        try {
+            java.time.LocalDate today = java.time.LocalDate.now();
+            java.time.LocalDate start = today.minusDays(6);
+            List<DietRecord> records = dietRecordService.getRecordsByDateRange(userId, start, today);
+            if (records.isEmpty()) {
+                return;
+            }
+            java.util.Set<java.time.LocalDate> days = new java.util.HashSet<>();
+            BigDecimal totalCal = BigDecimal.ZERO;
+            BigDecimal totalProtein = BigDecimal.ZERO;
+            for (DietRecord r : records) {
+                if (r.getRecordDate() != null) {
+                    days.add(r.getRecordDate());
+                }
+                totalCal = totalCal.add(r.getCalories() != null ? r.getCalories() : BigDecimal.ZERO);
+                totalProtein = totalProtein.add(r.getProtein() != null ? r.getProtein() : BigDecimal.ZERO);
+            }
+            int dayCount = Math.max(days.size(), 1);
+            BigDecimal avgCal = totalCal.divide(BigDecimal.valueOf(dayCount), 0, RoundingMode.HALF_UP);
+            BigDecimal avgProtein = totalProtein.divide(BigDecimal.valueOf(dayCount), 1, RoundingMode.HALF_UP);
+            sb.append("\n近7天概览(含今天)：共记录").append(dayCount).append("天, 日均热量")
+                    .append(avgCal).append("kcal, 日均蛋白质").append(avgProtein).append("g");
+        } catch (Exception e) {
+            log.warn("构建近期饮食概览失败: {}", e.getMessage());
+        }
     }
 
     private BigDecimal resolveTarget(BigDecimal userTarget, BigDecimal targetCal, BigDecimal ratio, BigDecimal calPerGram) {

@@ -2,10 +2,7 @@
   <div class="ai-chat">
     <el-container style="height:calc(100vh - 100px)">
       <el-aside width="260px" class="chat-sidebar">
-        <el-button type="primary" style="width:100%;margin-bottom:12px" @click="createSession">{{ presetTitle || '新对话' }}</el-button>
-        <div class="preset-hint" v-if="presetTitle">
-          <small>当前模式：{{ presetTitle }}</small>
-        </div>
+        <el-button type="primary" style="width:100%;margin-bottom:12px" @click="createSession">新对话</el-button>
         <div v-for="s in sessions" :key="s.id" class="session-item" :class="{ active: currentSessionId === s.id }">
           <span class="session-title" @click="loadSession(s.id)">{{ s.title }}</span>
           <el-icon class="session-delete" @click.stop="confirmDeleteSession(s.id)"><Delete /></el-icon>
@@ -63,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, UserFilled } from '@element-plus/icons-vue'
@@ -75,18 +72,9 @@ import { useUserStore } from '../stores/user'
 const route = useRoute()
 const userStore = useUserStore()
 
-const preset = computed(() => route.meta.preset || '')
-
-const presetMap = {
-  'diet-plan': { title: '膳食规划', greeting: '🤖 您好！我是您的膳食规划助手，请告诉我您的饮食偏好和目标，我来为您定制专属膳食方案。', placeholder: '描述您的饮食目标和偏好...' },
-  'fat-loss': { title: '减脂方案', greeting: '🤖 您好！我是您的减脂顾问，请告诉我您的当前体重、目标体重和日常活动情况，我来为您制定科学减脂方案。', placeholder: '描述您的减脂需求...' },
-  'muscle-gain': { title: '增肌方案', greeting: '🤖 您好！我是您的增肌顾问，请告诉我您的训练计划和营养需求，我来为您制定增肌饮食方案。', placeholder: '描述您的增肌需求...' },
-  'consult': { title: '饮食咨询', greeting: '🤖 您好！我是您的饮食健康顾问，有任何关于饮食营养、食物搭配、特殊饮食需求的问题都可以问我。', placeholder: '输入您的饮食问题...' }
-}
-
-const presetTitle = computed(() => presetMap[preset.value]?.title || '')
-const emptyChatText = computed(() => presetMap[preset.value]?.greeting || '🤖 您好！我是您的智能膳食助手，有什么可以帮您的？')
-const inputPlaceholder = computed(() => presetMap[preset.value]?.placeholder || '输入您的问题...')
+// 单入口 AI 饮食助手：所有提问都走同一个模型，并自动携带当前登录用户的数据
+const emptyChatText = '🤖 您好！我是您的 AI 饮食助手。\n我已经可以读取您的身体数据、饮食目标和今日饮食记录。\n您可以试着问我：「我今天还能吃什么？」「帮我看看今天的营养够不够」「给我一份明天的减脂食谱」。'
+const inputPlaceholder = '输入您的问题...'
 
 const sessions = ref([])
 const messages = ref([])
@@ -281,8 +269,7 @@ async function createSession() {
     return
   }
   
-  const title = presetTitle.value || '新对话'
-  const session = await api.post('/chat/sessions', { title, preset: preset.value })
+  const session = await api.post('/chat/sessions', { title: '新对话' })
   currentSessionId.value = session.id
   messages.value = []
   loadSessions()
@@ -344,8 +331,7 @@ async function sendMessage() {
   try {
     const res = await api.post('/chat/send', {
       sessionId: currentSessionId.value,
-      content: text,
-      preset: preset.value
+      content: text
     }, {
       signal: abortController.signal  // 传递取消信号
     })
@@ -424,8 +410,6 @@ onUnmounted(() => {
 
 <style scoped>
 .chat-sidebar { background: #fff; padding: 12px; border-right: 1px solid #e4e7ed; overflow-y: auto; }
-.preset-hint { margin-bottom: 10px; text-align: center; }
-.preset-hint small { color: #409eff; background: #ecf5ff; padding: 3px 8px; border-radius: 4px; }
 .session-item { padding: 10px 12px; cursor: pointer; border-radius: 6px; margin-bottom: 4px; font-size: 14px; color: #606266; display: flex; align-items: center; justify-content: space-between; }
 .session-item:hover { background: #f5f7fa; }
 .session-item.active { background: #ecf5ff; color: #409eff; }
@@ -542,7 +526,8 @@ onUnmounted(() => {
   color: #909399;
   text-align: right;
 }
-.empty-chat { text-align: center; padding: 60px 0; color: #909399; font-size: 16px; }
+.empty-chat { text-align: center; padding: 60px 0; color: #909399; font-size: 15px; line-height: 2; }
+.empty-chat p { white-space: pre-line; }
 .chat-input { padding: 12px 16px; border-top: 1px solid #e4e7ed; background: #fff; }
 
 /* AI思考中提示样式（增强版） */
@@ -629,5 +614,4 @@ html.dark .markdown-body :deep(pre) { background: #1a2744; }
 html.dark .markdown-body :deep(pre code) { color: #c8d6e5; }
 html.dark .markdown-body :deep(blockquote) { border-left-color: #2a3a5c; color: #8ea1af; }
 html.dark .markdown-body :deep(a) { color: #74b9ff; }
-html.dark .preset-hint small { color: #74b9ff; background: #1e3a5f; }
 </style>
