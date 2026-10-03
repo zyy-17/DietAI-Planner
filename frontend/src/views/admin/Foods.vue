@@ -27,11 +27,6 @@
         <el-table-column prop="protein" label="蛋白质(g)" width="100" />
         <el-table-column prop="carbohydrate" label="碳水(g)" width="100" />
         <el-table-column prop="fat" label="脂肪(g)" width="90" />
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag size="small" :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="openDialog(row)">编辑</el-button>
@@ -130,19 +125,6 @@ const rules = {
 function categoryName(id) {
   const hit = categories.value.find((c) => c.id === id)
   return hit ? hit.name : '-'
-}
-
-function statusType(status) {
-  if (status === 'approved') return 'success'
-  if (status === 'pending') return 'warning'
-  return 'danger'
-}
-
-function statusText(status) {
-  if (status === 'approved') return '已通过'
-  if (status === 'pending') return '待审核'
-  if (status === 'rejected') return '已驳回'
-  return status || '-'
 }
 
 async function loadCategories() {
