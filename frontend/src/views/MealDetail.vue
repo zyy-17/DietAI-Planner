@@ -116,14 +116,15 @@
       </div>
 
       <div class="food-select-list" v-if="filteredFoods.length">
-        <div v-for="f in filteredFoods" :key="f.id" class="food-select-item" :class="{ chosen: isChosen(f.id) }" @click="toggleFood(f)">
+        <div v-for="f in filteredFoods" :key="f.key" class="food-select-item" :class="{ chosen: isChosen(f.key) }" @click="toggleFood(f)">
           <div class="food-select-left">
-            <span class="check-box">{{ isChosen(f.id) ? '✅' : '⬜' }}</span>
+            <span class="check-box">{{ isChosen(f.key) ? '✅' : '⬜' }}</span>
             <span class="food-select-name">{{ f.name }}</span>
+            <el-tag v-if="f.custom" size="small" type="warning" effect="plain">自定义</el-tag>
             <small class="food-select-cal">{{ f.calories }} kcal/100g</small>
           </div>
-          <div v-if="isChosen(f.id)" class="food-select-amount" @click.stop>
-            <el-input-number v-model="getChosenItem(f.id).amount" :min="1" :max="5000" :step="10" size="small" style="width:120px" />
+          <div v-if="isChosen(f.key)" class="food-select-amount" @click.stop>
+            <el-input-number v-model="getChosenItem(f.key).amount" :min="1" :max="5000" :step="10" size="small" style="width:120px" />
             <small>g</small>
           </div>
         </div>
@@ -133,11 +134,11 @@
       <div v-if="chosenFoods.length" class="chosen-summary">
         <div class="chosen-title">已选择 {{ chosenFoods.length }} 种食物</div>
         <div class="chosen-preview">
-          <div v-for="c in chosenFoods" :key="c.foodId" class="chosen-item">
-            <span>{{ c.foodName }}</span>
+          <div v-for="c in chosenFoods" :key="c.key" class="chosen-item">
+            <span>{{ c.foodName }}<em v-if="c.foodSource === 'user'" class="custom-flag">自定义</em></span>
             <small>{{ c.amount }}g</small>
             <em>{{ ((c.calories || 0) * c.amount / 100).toFixed(0) }} kcal</em>
-            <i @click="removeChosen(c.foodId)">✕</i>
+            <i @click="removeChosen(c.key)">✕</i>
           </div>
         </div>
         <div class="chosen-total">
@@ -201,33 +202,36 @@ const customFood = reactive({ foodName: '', categoryId: null, calories: 0, prote
 
 const customPreviewCal = computed(() => ((customFood.calories || 0) * (customFood.amount || 0) / 100).toFixed(1))
 
-function isChosen(foodId) {
-  return chosenFoods.value.some(c => c.foodId === foodId)
+function isChosen(key) {
+  return chosenFoods.value.some(c => c.key === key)
 }
 
-function getChosenItem(foodId) {
-  return chosenFoods.value.find(c => c.foodId === foodId)
+function getChosenItem(key) {
+  return chosenFoods.value.find(c => c.key === key)
 }
 
 function toggleFood(food) {
-  const idx = chosenFoods.value.findIndex(c => c.foodId === food.id)
+  const item = toPickerItem(food)
+  const idx = chosenFoods.value.findIndex(c => c.key === item.key)
   if (idx >= 0) {
     chosenFoods.value.splice(idx, 1)
   } else {
     chosenFoods.value.push({
-      foodId: food.id,
-      foodName: food.name,
+      key: item.key,
+      foodId: item.id,
+      foodSource: item.foodSource,
+      foodName: item.name,
       amount: 100,
-      calories: food.calories || 0,
-      protein: food.protein || 0,
-      carbohydrate: food.carbohydrate || 0,
-      fat: food.fat || 0
+      calories: item.calories || 0,
+      protein: item.protein || 0,
+      carbohydrate: item.carbohydrate || 0,
+      fat: item.fat || 0
     })
   }
 }
 
-function removeChosen(foodId) {
-  const idx = chosenFoods.value.findIndex(c => c.foodId === foodId)
+function removeChosen(key) {
+  const idx = chosenFoods.value.findIndex(c => c.key === key)
   if (idx >= 0) chosenFoods.value.splice(idx, 1)
 }
 
@@ -236,9 +240,18 @@ const chosenTotalProtein = computed(() => chosenFoods.value.reduce((s, c) => s +
 const chosenTotalCarb = computed(() => chosenFoods.value.reduce((s, c) => s + (c.carbohydrate || 0) * c.amount / 100, 0).toFixed(1))
 const chosenTotalFat = computed(() => chosenFoods.value.reduce((s, c) => s + (c.fat || 0) * c.amount / 100, 0).toFixed(1))
 
+/** 统一食物选择项：系统食物与自定义食物分属两张表、ID 会重复，用 key 区分 */
+function toPickerItem(f) {
+  const source = f.foodSource || (f.custom ? 'user' : 'system')
+  return { ...f, foodSource: source, key: f.key || (source === 'user' ? 'u' : 's') + f.id }
+}
+
 async function loadData() {
   try { records.value = await api.get('/diet/today/records') } catch (e) {}
-  try { allFoods.value = await api.get('/foods/all') } catch (e) {}
+  try {
+    const foods = await api.get('/foods/all')
+    allFoods.value = (foods || []).map(toPickerItem)
+  } catch (e) {}
   if (categories.value.length === 0) {
     try { categories.value = await api.get('/categories') } catch (e) {}
   }
@@ -307,6 +320,7 @@ async function addDietRecords() {
   try {
     const payload = chosenFoods.value.map(c => ({
       foodId: c.foodId,
+      foodSource: c.foodSource,
       amount: c.amount,
       mealType: mealType.value
     }))
@@ -379,6 +393,7 @@ onMounted(loadData)
 .chosen-item span { flex: 1; color: #244b6b; }
 .chosen-item small { color: #8499a8; }
 .chosen-item em { color: #e6a23c; font-style: normal; }
+.chosen-item em.custom-flag { color: #d48806; background: #fff5e6; border-radius: 4px; padding: 0 4px; font-size: 11px; margin-left: 6px; }
 .chosen-item i { color: #c0c4cc; cursor: pointer; font-style: normal; }
 .chosen-item i:hover { color: #f56c6c; }
 .chosen-total { margin-top: 8px; font-size: 12px; color: #55738d; padding-top: 8px; border-top: 1px solid #eef2f6; }

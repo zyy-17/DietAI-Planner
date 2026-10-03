@@ -1,8 +1,10 @@
 package com.zyyqq.controller;
 
 import com.zyyqq.dto.response.ApiResponse;
+import com.zyyqq.dto.response.FoodOptionVO;
 import com.zyyqq.entity.Food;
 import com.zyyqq.service.FoodService;
+import com.zyyqq.service.UserCustomFoodService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.security.core.Authentication;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 public class FoodController {
 
     private final FoodService foodService;
+    private final UserCustomFoodService userCustomFoodService;
 
     @GetMapping
     public ApiResponse<Page<Food>> getFoods(
@@ -35,18 +38,18 @@ public class FoodController {
     }
 
     /**
-     * 获取当前用户可选择的食物列表（公开食物库 + 本人自定义食物）。
-     * 其他用户的自定义食物不会出现在这里，保证自定义食物的私密性。
+     * 获取当前用户可选择的食物列表：公共食物库 + 本人自定义食物。
+     * 每项的 custom 字段标识是否为本人私有食物（自定义食物存放在 user_custom_food 表，不进入公共食物库）。
      */
     @GetMapping("/all")
-    public ApiResponse<java.util.List<Food>> getAllFoods(Authentication authentication) {
-        return ApiResponse.success(foodService.getAvailableFoods(getUserIdOrNull(authentication)));
+    public ApiResponse<java.util.List<FoodOptionVO>> getAllFoods(Authentication authentication) {
+        return ApiResponse.success(foodService.getAvailableFoodOptions(getUserIdOrNull(authentication)));
     }
 
     /** 获取当前用户自己添加的自定义食物（仅本人可见） */
     @GetMapping("/my")
-    public ApiResponse<java.util.List<Food>> getMyFoods(Authentication authentication) {
-        return ApiResponse.success(foodService.getMyCustomFoods(getUserIdOrNull(authentication)));
+    public ApiResponse<java.util.List<FoodOptionVO>> getMyFoods(Authentication authentication) {
+        return ApiResponse.success(userCustomFoodService.listMineAsOptions(getUserIdOrNull(authentication)));
     }
 
     /** 从认证信息中提取用户ID，未登录或匿名访问时返回 null */

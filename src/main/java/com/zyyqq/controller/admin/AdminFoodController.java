@@ -11,8 +11,9 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * 管理端食物库管理接口（对应客户端"食物库"模块）。
- * 仅管理系统食物（source='system'），用户自定义食物不在管理端出现。
- * 支持新增、编辑、审核（通过/驳回）、删除。
+ * 只管理系统食物（source='system'）。用户自定义食物存放在 user_custom_food 表，
+ * 属于用户私有数据，不在管理端出现。
+ * 支持新增、编辑、上下架、删除。
  */
 @RestController
 @RequestMapping("/api/admin/foods")
@@ -61,11 +62,5 @@ public class AdminFoodController {
     public ApiResponse<Void> deleteFood(@PathVariable Long id) {
         foodService.deleteFood(id);
         return ApiResponse.success("删除成功", null);
-    }
-
-    /** 获取用户提交的待审核食物列表 */
-    @GetMapping("/pending")
-    public ApiResponse<java.util.List<Food>> getPendingFoods() {
-        return ApiResponse.success(foodService.getPendingFoods());
     }
 }

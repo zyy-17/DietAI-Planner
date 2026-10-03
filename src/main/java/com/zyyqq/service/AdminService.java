@@ -35,12 +35,15 @@ public class AdminService {
 
     /** 系统食物来源标记（管理端只统计/管理这一类） */
     private static final String SOURCE_SYSTEM = "system";
+    /** 用户自定义食物来源标记 */
+    private static final String SOURCE_USER = "user";
 
     private final UserRepository userRepository;
     private final FoodRepository foodRepository;
     private final DietRecordRepository dietRecordRepository;
     private final AiGenerationLogRepository aiGenerationLogRepository;
     private final FoodService foodService;
+    private final UserCustomFoodService userCustomFoodService;
 
     /** 数据看板核心指标 */
     public Map<String, Object> getOverview() {
@@ -116,8 +119,18 @@ public class AdminService {
         if (records == null || records.isEmpty()) {
             return;
         }
-        List<Long> foodIds = records.stream().map(DietRecord::getFoodId).distinct().toList();
-        Map<Long, String> foodNameMap = foodService.getFoodNamesByIds(foodIds);
+        // 系统食物与用户自定义食物分属两张表，ID 各自独立，需按 food_source 分别查询
+        List<Long> systemIds = new ArrayList<>();
+        List<Long> customIds = new ArrayList<>();
+        for (DietRecord record : records) {
+            if (SOURCE_USER.equals(record.getFoodSource())) {
+                customIds.add(record.getFoodId());
+            } else {
+                systemIds.add(record.getFoodId());
+            }
+        }
+        Map<Long, String> systemNames = foodService.getFoodNamesByIds(systemIds.stream().distinct().toList());
+        Map<Long, String> customNames = userCustomFoodService.getNamesByIds(customIds.stream().distinct().toList());
 
         List<Long> userIds = records.stream().map(DietRecord::getUserId).distinct().toList();
         Map<Long, String> userNameMap = new HashMap<>();
@@ -126,7 +139,8 @@ public class AdminService {
         }
 
         for (DietRecord record : records) {
-            record.setFoodName(foodNameMap.getOrDefault(record.getFoodId(), "未知食物"));
+            Map<Long, String> names = SOURCE_USER.equals(record.getFoodSource()) ? customNames : systemNames;
+            record.setFoodName(names.getOrDefault(record.getFoodId(), "未知食物"));
             record.setUserName(userNameMap.getOrDefault(record.getUserId(), "未知用户"));
         }
     }

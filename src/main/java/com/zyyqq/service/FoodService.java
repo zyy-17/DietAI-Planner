@@ -1,8 +1,8 @@
 package com.zyyqq.service;
 
 import com.zyyqq.dto.request.AddFoodRequest;
+import com.zyyqq.dto.response.FoodOptionVO;
 import com.zyyqq.entity.Food;
-import com.zyyqq.entity.FoodCategory;
 import com.zyyqq.exception.BusinessException;
 import com.zyyqq.repository.FoodCategoryRepository;
 import com.zyyqq.repository.FoodRepository;
@@ -17,31 +17,35 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 
+/**
+ * 公共食物库（food 表）业务。
+ * <p>
+ * 食物库只存放系统食物（source='system'），由管理员维护；
+ * 用户自定义食物存放在 user_custom_food 表，见 {@link UserCustomFoodService}，
+ * 两者物理隔离，用户自建的食物不会进入食物库。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FoodService {
 
-    /** 用户自定义食物来源标记 */
+    /** 用户自定义食物来源标记（历史数据兼容：食物库查询会排除该来源） */
     private static final String SOURCE_USER = "user";
     /** 系统食物来源标记（管理端只管理这一类） */
     private static final String SOURCE_SYSTEM = "system";
     /** 审核通过状态 */
     private static final String STATUS_APPROVED = "approved";
-    /** 自定义食物兜底分类名称 */
-    private static final String DEFAULT_CATEGORY_NAME = "其他";
 
     private final FoodRepository foodRepository;
     private final FoodCategoryRepository foodCategoryRepository;
+    private final UserCustomFoodService userCustomFoodService;
 
+    /** 公共食物库分页查询（仅系统食物） */
     public Page<Food> getFoods(Long categoryId, String keyword, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         if (keyword != null && !keyword.isEmpty()) {
@@ -58,18 +62,6 @@ public class FoodService {
                 .orElseThrow(() -> new BusinessException("食物不存在"));
     }
 
-    /**
-     * 校验食物对该用户是否可见：
-     * 系统食物（source != 'user'）所有人可见；用户自定义食物仅创建者本人可见。
-     */
-    public Food getVisibleFoodForUser(Long foodId, Long userId) {
-        Food food = getFoodById(foodId);
-        if (SOURCE_USER.equals(food.getSource()) && !Objects.equals(food.getCreatedBy(), userId)) {
-            throw new BusinessException("该食物为其他用户的自定义食物，无法查看");
-        }
-        return food;
-    }
-
     public List<Food> searchFoods(String keyword) {
         return foodRepository.searchPublicApproved(keyword);
     }
@@ -80,22 +72,17 @@ public class FoodService {
         return foodRepository.findPublicFoodList(STATUS_APPROVED, SOURCE_USER);
     }
 
-    /** 当前用户可用食物：公开食物库 + 本人自定义食物（不含其他用户的自定义食物） */
-    @Cacheable(value = "approvedFoods", key = "'user:' + #userId")
-    public List<Food> getAvailableFoods(Long userId) {
-        List<Food> foods = new ArrayList<>(foodRepository.findPublicFoodList(STATUS_APPROVED, SOURCE_USER));
-        if (userId != null) {
-            foods.addAll(foodRepository.findByCreatedByAndStatusAndSource(userId, STATUS_APPROVED, SOURCE_USER));
+    /**
+     * 当前用户可选的食物：公共食物库 + 本人自定义食物。
+     * 自定义食物来自 user_custom_food 表，仅本人可见。
+     */
+    public List<FoodOptionVO> getAvailableFoodOptions(Long userId) {
+        List<FoodOptionVO> options = new ArrayList<>();
+        for (Food food : getAllApprovedFoods()) {
+            options.add(FoodOptionVO.fromFood(food));
         }
-        return foods;
-    }
-
-    /** 当前用户的自定义（私有）食物 */
-    public List<Food> getMyCustomFoods(Long userId) {
-        if (userId == null) {
-            return List.of();
-        }
-        return foodRepository.findByCreatedByAndStatusAndSource(userId, STATUS_APPROVED, SOURCE_USER);
+        options.addAll(userCustomFoodService.listMineAsOptions(userId));
+        return options;
     }
 
     public Map<Long, String> getFoodNamesByIds(List<Long> ids) {
@@ -108,75 +95,6 @@ public class FoodService {
             nameMap.put((Long) row[0], (String) row[1]);
         }
         return nameMap;
-    }
-
-    /**
-     * 记录饮食时创建/复用用户的私有自定义食物。
-     * 同名食物会被复用并刷新营养数据，保证不会污染其他用户的公开食物库。
-     */
-    @Transactional
-    @CacheEvict(value = "approvedFoods", allEntries = true)
-    public Food findOrCreateCustomFood(Long userId, String name, Long categoryId, BigDecimal calories,
-                                       BigDecimal protein, BigDecimal carbohydrate, BigDecimal fat,
-                                       BigDecimal fiber) {
-        String foodName = name == null ? "" : name.trim();
-        if (foodName.isEmpty()) {
-            throw new BusinessException("食物名称不能为空");
-        }
-        Optional<Food> existing = foodRepository.findFirstByCreatedByAndNameAndSource(userId, foodName, SOURCE_USER);
-        if (existing.isPresent()) {
-            Food food = existing.get();
-            food.setCalories(calories);
-            food.setProtein(protein);
-            food.setCarbohydrate(carbohydrate);
-            food.setFat(fat);
-            if (fiber != null) {
-                food.setFiber(fiber);
-            }
-            if (categoryId != null) {
-                food.setCategoryId(categoryId);
-            }
-            return foodRepository.save(food);
-        }
-        return createCustomFood(userId, foodName, categoryId, calories, protein, carbohydrate, fat, fiber);
-    }
-
-    /** 创建用户的私有自定义食物 */
-    @Transactional
-    @CacheEvict(value = "approvedFoods", allEntries = true)
-    public Food createCustomFood(Long userId, String name, Long categoryId, BigDecimal calories,
-                                 BigDecimal protein, BigDecimal carbohydrate, BigDecimal fat,
-                                 BigDecimal fiber) {
-        Food food = Food.builder()
-                .name(name)
-                .categoryId(resolveCategoryId(categoryId))
-                .calories(calories)
-                .protein(protein)
-                .carbohydrate(carbohydrate)
-                .fat(fat)
-                .fiber(fiber)
-                .source(SOURCE_USER)
-                .status(STATUS_APPROVED)
-                .createdBy(userId)
-                .build();
-        return foodRepository.save(food);
-    }
-
-    /** 解析食物分类ID，未指定时使用"其他"或第一个可用分类兜底 */
-    private Long resolveCategoryId(Long categoryId) {
-        if (categoryId != null) {
-            return categoryId;
-        }
-        List<FoodCategory> categories = foodCategoryRepository.findAllEnabled();
-        if (categories.isEmpty()) {
-            // 极端情况下没有分类，使用 1 兜底以保证外键有效
-            return 1L;
-        }
-        return categories.stream()
-                .filter(c -> DEFAULT_CATEGORY_NAME.equals(c.getName()))
-                .map(FoodCategory::getId)
-                .findFirst()
-                .orElse(categories.get(0).getId());
     }
 
     @Transactional
@@ -210,13 +128,9 @@ public class FoodService {
         foodRepository.deleteById(id);
     }
 
-    public List<Food> getPendingFoods() {
-        return foodRepository.findBySourceAndStatus(SOURCE_USER, "pending");
-    }
-
     /**
-     * 管理端分页查询食物库，支持状态与关键字筛选。
-     * 只返回系统食物（source='system'），用户自定义食物（source='user'）不在管理端展示。
+     * 管理端分页查询食物库，支持名称关键字筛选。
+     * 只返回系统食物（source='system'），用户自定义食物不在管理端展示。
      */
     public Page<Food> getAllFoodsForAdmin(String status, String keyword, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -256,7 +170,7 @@ public class FoodService {
                 .fat(request.getFat())
                 .fiber(request.getFiber())
                 .imageUrl(request.getImageUrl())
-                .source("system")
+                .source(SOURCE_SYSTEM)
                 .status(STATUS_APPROVED)
                 .build();
         Food saved = foodRepository.save(food);
