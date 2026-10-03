@@ -52,6 +52,14 @@ public class UserCustomFood {
     @Column(precision = 8, scale = 2)
     private BigDecimal fiber;
 
+    /** 常用计量单位名称（个/份/盒/片…），为空表示只能按克数记录 */
+    @Column(name = "unit_name", length = 20)
+    private String unitName;
+
+    /** 每个/每份约多少克，配合 unitName 做「按个数」换算 */
+    @Column(name = "unit_weight", precision = 8, scale = 2)
+    private BigDecimal unitWeight;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

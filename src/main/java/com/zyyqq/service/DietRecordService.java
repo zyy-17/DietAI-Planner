@@ -76,7 +76,9 @@ public class DietRecordService {
                 request.getProtein(),
                 request.getCarbohydrate(),
                 request.getFat(),
-                request.getFiber());
+                request.getFiber(),
+                request.getUnitName(),
+                request.getUnitWeight());
         DietRecord record = saveRecord(userId, custom.getId(), SOURCE_USER, custom.getName(),
                 custom.getCalories(), custom.getProtein(), custom.getCarbohydrate(), custom.getFat(),
                 request.getMealType(), request.getAmount());

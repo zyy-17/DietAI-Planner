@@ -17,6 +17,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -111,7 +112,20 @@ public class FoodService {
         if (request.getImageUrl() != null) {
             food.setImageUrl(request.getImageUrl());
         }
+        applyUnit(food, request.getUnitName(), request.getUnitWeight());
         return foodRepository.save(food);
+    }
+
+    /** 写入计量单位信息：单位名为空时一并清掉参考克重，避免出现半截数据 */
+    private void applyUnit(Food food, String unitName, BigDecimal unitWeight) {
+        String name = unitName == null ? null : unitName.trim();
+        if (name == null || name.isEmpty()) {
+            food.setUnitName(null);
+            food.setUnitWeight(null);
+            return;
+        }
+        food.setUnitName(name);
+        food.setUnitWeight(unitWeight != null && unitWeight.compareTo(BigDecimal.ZERO) > 0 ? unitWeight : null);
     }
 
     @Transactional
@@ -173,6 +187,7 @@ public class FoodService {
                 .source(SOURCE_SYSTEM)
                 .status(STATUS_APPROVED)
                 .build();
+        applyUnit(food, request.getUnitName(), request.getUnitWeight());
         Food saved = foodRepository.save(food);
         log.info("管理端新增系统食物: id={}, name={}", saved.getId(), saved.getName());
         return saved;

@@ -41,7 +41,7 @@ public class UserCustomFoodService {
     @Transactional
     public UserCustomFood findOrCreate(Long userId, String name, Long categoryId, BigDecimal calories,
                                        BigDecimal protein, BigDecimal carbohydrate, BigDecimal fat,
-                                       BigDecimal fiber) {
+                                       BigDecimal fiber, String unitName, BigDecimal unitWeight) {
         String foodName = name == null ? "" : name.trim();
         if (foodName.isEmpty()) {
             throw new BusinessException("食物名称不能为空");
@@ -59,6 +59,7 @@ public class UserCustomFoodService {
             if (categoryId != null) {
                 food.setCategoryId(categoryId);
             }
+            applyUnit(food, unitName, unitWeight);
             return userCustomFoodRepository.save(food);
         }
         UserCustomFood food = UserCustomFood.builder()
@@ -71,9 +72,22 @@ public class UserCustomFoodService {
                 .fat(fat)
                 .fiber(fiber)
                 .build();
+        applyUnit(food, unitName, unitWeight);
         UserCustomFood saved = userCustomFoodRepository.save(food);
         log.info("创建用户自定义食物: userId={}, name={}", userId, saved.getName());
         return saved;
+    }
+
+    /** 单位名为空时视为不使用单位计数，一并清掉参考克重 */
+    private void applyUnit(UserCustomFood food, String unitName, BigDecimal unitWeight) {
+        String name = unitName == null ? null : unitName.trim();
+        if (name == null || name.isEmpty()) {
+            food.setUnitName(null);
+            food.setUnitWeight(null);
+            return;
+        }
+        food.setUnitName(name);
+        food.setUnitWeight(unitWeight != null && unitWeight.compareTo(BigDecimal.ZERO) > 0 ? unitWeight : null);
     }
 
     /** 当前用户的自定义（私有）食物列表 */

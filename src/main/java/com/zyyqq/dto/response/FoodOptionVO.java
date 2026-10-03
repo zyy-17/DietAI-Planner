@@ -41,6 +41,12 @@ public class FoodOptionVO {
 
     private String imageUrl;
 
+    /** 常用计量单位名称（个/份/盒/片…），为空表示只能按克数记录 */
+    private String unitName;
+
+    /** 每个/每份约多少克 */
+    private BigDecimal unitWeight;
+
     /** 是否为用户自定义（私有）食物 */
     private boolean custom;
 
@@ -55,6 +61,8 @@ public class FoodOptionVO {
                 .fat(food.getFat())
                 .fiber(food.getFiber())
                 .imageUrl(food.getImageUrl())
+                .unitName(food.getUnitName())
+                .unitWeight(food.getUnitWeight())
                 .custom(false)
                 .build();
     }
@@ -69,6 +77,8 @@ public class FoodOptionVO {
                 .carbohydrate(food.getCarbohydrate())
                 .fat(food.getFat())
                 .fiber(food.getFiber())
+                .unitName(food.getUnitName())
+                .unitWeight(food.getUnitWeight())
                 .custom(true)
                 .build();
     }

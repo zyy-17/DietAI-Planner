@@ -35,4 +35,10 @@ public class AddCustomDietRecordRequest {
 
     @NotNull(message = "食用份量不能为空")
     private BigDecimal amount;
+
+    /** 常用计量单位名称，如 个/份（可选） */
+    private String unitName;
+
+    /** 每个/每份约多少克（可选） */
+    private BigDecimal unitWeight;
 }

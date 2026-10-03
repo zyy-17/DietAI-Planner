@@ -45,6 +45,14 @@ public class Food {
     @Column(name = "image_url", length = 255)
     private String imageUrl;
 
+    /** 常用计量单位名称（个/份/盒/片/根…），为空表示只能按克数记录 */
+    @Column(name = "unit_name", length = 20)
+    private String unitName;
+
+    /** 每个/每份约多少克，配合 unitName 做「按个数」换算 */
+    @Column(name = "unit_weight", precision = 8, scale = 2)
+    private BigDecimal unitWeight;
+
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String source = "system";

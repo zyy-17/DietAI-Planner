@@ -19,7 +19,14 @@
 
       <el-table :data="foods" stripe v-loading="loading">
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.name }}
+            <el-tag v-if="row.unitName && row.unitWeight" size="small" type="success" effect="plain" style="margin-left:6px">
+              1{{ row.unitName }}≈{{ row.unitWeight }}g
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="分类" width="110">
           <template #default="{ row }">{{ categoryName(row.categoryId) }}</template>
         </el-table-column>
@@ -69,6 +76,17 @@
         <el-form-item label="膳食纤维(g)">
           <el-input-number v-model="form.fiber" :min="0" :precision="2" :step="1" style="width: 100%" />
         </el-form-item>
+        <el-form-item label="计量单位">
+          <div class="unit-row">
+            <el-select v-model="form.unitName" placeholder="不设置则只能按克数记录" clearable filterable allow-create style="width: 170px">
+              <el-option v-for="u in COMMON_UNIT_NAMES" :key="u" :label="u" :value="u" />
+            </el-select>
+            <span class="unit-label">每 1 个/份约</span>
+            <el-input-number v-model="form.unitWeight" :min="1" :max="2000" :step="5" :disabled="!form.unitName" style="width: 140px" />
+            <span class="unit-label">g</span>
+          </div>
+          <div class="unit-tip">设置后用户在记录饮食时可按「个数 / 份数」填写，例如鸡蛋：个 ≈ 50g</div>
+        </el-form-item>
         <el-form-item label="图片URL">
           <el-input v-model="form.imageUrl" placeholder="选填" />
         </el-form-item>
@@ -91,6 +109,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../utils/api'
+import { COMMON_UNIT_NAMES } from '../../utils/foodUnits'
 
 const foods = ref([])
 const categories = ref([])
@@ -112,7 +131,9 @@ const emptyForm = () => ({
   carbohydrate: 0,
   fat: 0,
   fiber: 0,
-  imageUrl: ''
+  imageUrl: '',
+  unitName: '',
+  unitWeight: 100
 })
 const form = reactive(emptyForm())
 
@@ -160,7 +181,9 @@ function openDialog(row) {
       carbohydrate: Number(row.carbohydrate ?? 0),
       fat: Number(row.fat ?? 0),
       fiber: Number(row.fiber ?? 0),
-      imageUrl: row.imageUrl || ''
+      imageUrl: row.imageUrl || '',
+      unitName: row.unitName || '',
+      unitWeight: Number(row.unitWeight) > 0 ? Number(row.unitWeight) : 100
     })
   } else {
     editingId.value = null
@@ -173,11 +196,16 @@ async function saveFood() {
   await formRef.value.validate()
   saving.value = true
   try {
+    const payload = {
+      ...form,
+      unitName: form.unitName || null,
+      unitWeight: form.unitName ? form.unitWeight : null
+    }
     if (editingId.value) {
-      await api.put(`/admin/foods/${editingId.value}`, form)
+      await api.put(`/admin/foods/${editingId.value}`, payload)
       ElMessage.success('保存成功')
     } else {
-      await api.post('/admin/foods', form)
+      await api.post('/admin/foods', payload)
       ElMessage.success('新增成功')
     }
     dialogVisible.value = false
@@ -212,5 +240,21 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.unit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.unit-label {
+  font-size: 13px;
+  color: #606266;
+}
+.unit-tip {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+  margin-top: 2px;
 }
 </style>

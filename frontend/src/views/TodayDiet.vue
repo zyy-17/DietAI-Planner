@@ -176,7 +176,7 @@
       </div>
     </section>
 
-    <el-dialog v-model="addDialogVisible" :title="`添加食物 - ${currentMealName}`" width="620px" top="6vh">
+    <el-dialog v-model="addDialogVisible" :title="`添加食物 - ${currentMealName}`" width="720px" top="6vh">
       <div class="multi-add-header">
         🔍 搜索并选择多种食物，一次性添加到{{ currentMealName }}
       </div>
@@ -224,11 +224,18 @@
         </div>
         <div class="custom-grid">
           <label class="cf-field">
-            <span>本次食用量(g)</span>
-            <el-input-number v-model="customFood.amount" :min="1" :max="5000" :step="10" size="small" controls-position="right" style="width:100%" />
+            <span>常用单位（可选）</span>
+            <el-select v-model="customFood.unitName" placeholder="如：个 / 份 / 盒" clearable filterable allow-create size="small" style="width:100%">
+              <el-option v-for="u in COMMON_UNIT_NAMES" :key="u" :label="u" :value="u" />
+            </el-select>
           </label>
           <div class="custom-preview">🔥 本次约摄入 <b>{{ customPreviewCal }}</b> kcal</div>
         </div>
+        <div class="custom-amount-row">
+          <span class="cf-field-label">本次食用量</span>
+          <FoodQuantity :item="customFood" :calories="Number(customFood.calories) || 0" />
+        </div>
+        <div class="custom-form-tip">设置了常用单位后，以后记录这种食物就能直接按「个数 / 份数」填写，例如 1 个 ≈ 50g</div>
         <div class="custom-form-footer">
           <el-button size="small" @click="showCustomForm = false">取消</el-button>
           <el-button size="small" type="primary" :loading="customSubmitting" @click="submitCustomFood">
@@ -239,15 +246,18 @@
 
       <div class="food-select-list" v-if="dialogSearchResults.length">
         <div v-for="f in dialogSearchResults" :key="f.key" class="food-select-item" :class="{ chosen: isChosen(f.key) }" @click="toggleFood(f)">
-          <div class="food-select-left">
-            <span class="check-box">{{ isChosen(f.key) ? '✅' : '⬜' }}</span>
-            <span class="food-select-name">{{ f.name }}</span>
-            <el-tag v-if="f.custom" size="small" type="warning" effect="plain">自定义</el-tag>
-            <small class="food-select-cal">{{ f.calories }} kcal/100g</small>
+          <div class="food-select-row">
+            <div class="food-select-left">
+              <span class="check-box">{{ isChosen(f.key) ? '✅' : '⬜' }}</span>
+              <span class="food-select-name">{{ f.name }}</span>
+              <el-tag v-if="f.custom" size="small" type="warning" effect="plain">自定义</el-tag>
+              <small class="food-select-cal">{{ f.calories }} kcal/100g</small>
+              <small v-if="f.unitName && f.unitWeight" class="food-select-unit">1{{ f.unitName }} ≈ {{ f.unitWeight }}g</small>
+            </div>
+            <small v-if="!isChosen(f.key)" class="food-select-hint">点击选择</small>
           </div>
-          <div v-if="isChosen(f.key)" class="food-select-amount" @click.stop>
-            <el-input-number v-model="getChosenItem(f.key).amount" :min="1" :max="5000" :step="10" size="small" style="width:120px" />
-            <small>g</small>
+          <div v-if="isChosen(f.key)" class="food-select-panel" @click.stop>
+            <FoodQuantity :item="getChosenItem(f.key)" :calories="Number(f.calories) || 0" />
           </div>
         </div>
       </div>
@@ -258,7 +268,7 @@
         <div class="chosen-preview">
           <div v-for="c in chosenFoods" :key="c.key" class="chosen-item">
             <span>{{ c.foodName }}<em v-if="c.foodSource === 'user'" class="custom-flag">自定义</em></span>
-            <small>{{ c.amount }}g</small>
+            <small>{{ formatPortion(c) }}</small>
             <em>{{ ((c.calories || 0) * c.amount / 100).toFixed(0) }} kcal</em>
             <i @click="removeChosen(c.key)">✕</i>
           </div>
@@ -341,6 +351,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../utils/api'
+import FoodQuantity from '../components/FoodQuantity.vue'
+import { resolveUnit, formatPortion, COMMON_UNIT_NAMES } from '../utils/foodUnits'
 
 const overview = ref({})
 const records = ref([])
@@ -359,7 +371,20 @@ const targetForm = reactive({ calories: 2000, protein: 65, carbohydrate: 250, fa
 const categories = ref([])
 const showCustomForm = ref(false)
 const customSubmitting = ref(false)
-const customFood = reactive({ foodName: '', categoryId: null, calories: 0, protein: 0, carbohydrate: 0, fat: 0, amount: 100 })
+const customFood = reactive({
+  foodName: '',
+  categoryId: null,
+  calories: 0,
+  protein: 0,
+  carbohydrate: 0,
+  fat: 0,
+  // 计量：mode=gram 按克数 / unit 按个数（份数）
+  mode: 'gram',
+  count: 1,
+  unitName: '',
+  unitWeight: 100,
+  amount: 100
+})
 
 const customPreviewCal = computed(() => ((customFood.calories || 0) * (customFood.amount || 0) / 100).toFixed(1))
 
@@ -527,6 +552,10 @@ function resetCustomFood() {
   customFood.protein = 0
   customFood.carbohydrate = 0
   customFood.fat = 0
+  customFood.mode = 'gram'
+  customFood.count = 1
+  customFood.unitName = ''
+  customFood.unitWeight = 100
   customFood.amount = 100
 }
 
@@ -545,6 +574,8 @@ async function submitCustomFood() {
       carbohydrate: customFood.carbohydrate,
       fat: customFood.fat,
       amount: customFood.amount,
+      unitName: customFood.unitName || null,
+      unitWeight: customFood.unitName ? customFood.unitWeight : null,
       mealType: addForm.mealType
     })
     ElMessage.success(`已添加自定义食物「${foodName}」到${currentMealName.value}`)
@@ -592,10 +623,11 @@ function getChosenItem(key) {
   return chosenFoods.value.find(c => c.key === key)
 }
 
-/** 统一食物选择项：系统食物与自定义食物分属两张表、ID 会重复，用 key 区分 */
+/** 统一食物选择项：系统食物与自定义食物分属两张表、ID 会重复，用 key 区分；同时补上计量单位 */
 function toPickerItem(f) {
   const source = f.foodSource || (f.custom ? 'user' : 'system')
-  return { ...f, foodSource: source, key: f.key || (source === 'user' ? 'u' : 's') + f.id }
+  const { unitName, unitWeight } = resolveUnit(f)
+  return { ...f, foodSource: source, unitName, unitWeight, key: f.key || (source === 'user' ? 'u' : 's') + f.id }
 }
 
 function toggleFood(food) {
@@ -609,6 +641,10 @@ function toggleFood(food) {
       foodId: item.id,
       foodSource: item.foodSource,
       foodName: item.name,
+      mode: 'gram',
+      count: 1,
+      unitName: item.unitName || '',
+      unitWeight: item.unitWeight || 100,
       amount: 100,
       calories: item.calories || 0,
       protein: item.protein || 0,
@@ -820,16 +856,21 @@ h1 { font-size: 26px; line-height: 1.25; margin: 0; color: #153d67; }
 .custom-preview { font-size: 12px; color: #8499a8; padding-bottom: 6px; }
 .custom-preview b { color: #e6a23c; font-size: 16px; margin: 0 3px; }
 .custom-form-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
-.food-select-list { max-height: 280px; overflow-y: auto; border: 1px solid #eef2f6; border-radius: 8px; }
-.food-select-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f5f7fa; transition: background 0.15s; }
+.food-select-list { max-height: 320px; overflow-y: auto; border: 1px solid #eef2f6; border-radius: 8px; }
+.food-select-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f5f7fa; transition: background 0.15s; }
 .food-select-item:hover { background: #f5f9ff; }
-.food-select-item.chosen { background: #eef7ff; }
-.food-select-left { display: flex; align-items: center; gap: 8px; }
+.food-select-item.chosen { background: #eef7ff; cursor: default; }
+.food-select-row { display: flex; align-items: center; justify-content: space-between; }
+.food-select-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.food-select-hint { font-size: 11px; color: #b3c2cc; white-space: nowrap; }
 .check-box { font-size: 16px; }
 .food-select-name { font-size: 14px; color: #244b6b; }
 .food-select-cal { font-size: 12px; color: #8ea1af; margin-left: 6px; }
-.food-select-amount { display: flex; align-items: center; gap: 4px; }
-.food-select-amount small { color: #8ea1af; }
+.food-select-unit { font-size: 12px; color: #4aa86d; background: #eefaf2; border-radius: 8px; padding: 1px 7px; }
+.food-select-panel { margin-top: 8px; }
+.custom-amount-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.custom-amount-row .cf-field-label { font-size: 12px; color: #55738d; padding-top: 9px; white-space: nowrap; }
+.custom-amount-row :deep(.fq) { flex: 1; }
 .chosen-summary { margin-top: 14px; border: 1px solid #d9eafa; border-radius: 10px; padding: 12px; background: #f8fbff; }
 .chosen-title { font-size: 13px; font-weight: 600; color: #2589ee; margin-bottom: 8px; }
 .chosen-preview { max-height: 140px; overflow-y: auto; }
