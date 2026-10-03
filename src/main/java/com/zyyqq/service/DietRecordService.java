@@ -1,11 +1,11 @@
 package com.zyyqq.service;
 
+import com.zyyqq.dto.request.AddCustomDietRecordRequest;
 import com.zyyqq.dto.request.AddDietRecordRequest;
 import com.zyyqq.dto.response.TodayDietOverviewResponse;
 import com.zyyqq.entity.DietRecord;
 import com.zyyqq.entity.Food;
 import com.zyyqq.entity.User;
-import com.zyyqq.exception.BusinessException;
 import com.zyyqq.repository.DietRecordRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,34 +23,17 @@ import java.util.Map;
 @Slf4j
 public class DietRecordService {
 
+    private static final BigDecimal HUNDRED = new BigDecimal("100");
+
     private final DietRecordRepository dietRecordRepository;
     private final FoodService foodService;
     private final UserService userService;
 
     @Transactional
     public DietRecord addDietRecord(Long userId, AddDietRecordRequest request) {
-        Food food = foodService.getFoodById(request.getFoodId());
-
-        BigDecimal ratio = request.getAmount().divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
-
-        BigDecimal calories = food.getCalories().multiply(ratio).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal protein = food.getProtein() != null ? food.getProtein().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-        BigDecimal carbohydrate = food.getCarbohydrate() != null ? food.getCarbohydrate().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-        BigDecimal fat = food.getFat() != null ? food.getFat().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-
-        DietRecord record = DietRecord.builder()
-                .userId(userId)
-                .foodId(request.getFoodId())
-                .mealType(request.getMealType())
-                .amount(request.getAmount())
-                .calories(calories)
-                .protein(protein)
-                .carbohydrate(carbohydrate)
-                .fat(fat)
-                .recordDate(LocalDate.now())
-                .build();
-
-        record = dietRecordRepository.save(record);
+        // 校验食物可见性：其他用户的自定义食物不允许被引用
+        Food food = foodService.getVisibleFoodForUser(request.getFoodId(), userId);
+        DietRecord record = buildAndSaveRecord(userId, food, request.getMealType(), request.getAmount());
         record.setFoodName(food.getName());
         return record;
     }
@@ -60,7 +43,7 @@ public class DietRecordService {
         List<Long> foodIds = requests.stream().map(AddDietRecordRequest::getFoodId).distinct().toList();
         Map<Long, Food> foodMap = new java.util.HashMap<>();
         for (Long foodId : foodIds) {
-            foodMap.put(foodId, foodService.getFoodById(foodId));
+            foodMap.put(foodId, foodService.getVisibleFoodForUser(foodId, userId));
         }
 
         List<DietRecord> results = new java.util.ArrayList<>();
@@ -68,29 +51,62 @@ public class DietRecordService {
             Food food = foodMap.get(request.getFoodId());
             if (food == null) continue;
 
-            BigDecimal ratio = request.getAmount().divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
-            BigDecimal calories = food.getCalories().multiply(ratio).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal protein = food.getProtein() != null ? food.getProtein().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-            BigDecimal carbohydrate = food.getCarbohydrate() != null ? food.getCarbohydrate().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-            BigDecimal fat = food.getFat() != null ? food.getFat().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-
-            DietRecord record = DietRecord.builder()
-                    .userId(userId)
-                    .foodId(request.getFoodId())
-                    .mealType(request.getMealType())
-                    .amount(request.getAmount())
-                    .calories(calories)
-                    .protein(protein)
-                    .carbohydrate(carbohydrate)
-                    .fat(fat)
-                    .recordDate(LocalDate.now())
-                    .build();
-            record = dietRecordRepository.save(record);
+            DietRecord record = buildAndSaveRecord(userId, food, request.getMealType(), request.getAmount());
             record.setFoodName(food.getName());
             results.add(record);
         }
         log.info("批量添加饮食记录: userId={}, count={}", userId, results.size());
         return results;
+    }
+
+    /**
+     * 记录饮食时添加自定义食物：创建/复用仅本人可见的私有食物，并写入饮食记录。
+     * 该食物不会进入公开食物库，其他用户无法看到。
+     */
+    @Transactional
+    public DietRecord addCustomDietRecord(Long userId, AddCustomDietRecordRequest request) {
+        Food food = foodService.findOrCreateCustomFood(
+                userId,
+                request.getFoodName(),
+                request.getCategoryId(),
+                request.getCalories(),
+                request.getProtein(),
+                request.getCarbohydrate(),
+                request.getFat(),
+                request.getFiber());
+        DietRecord record = buildAndSaveRecord(userId, food, request.getMealType(), request.getAmount());
+        record.setFoodName(food.getName());
+        log.info("添加自定义食物并记录饮食: userId={}, foodName={}, mealType={}",
+                userId, food.getName(), request.getMealType());
+        return record;
+    }
+
+    /** 按每 100g 营养值换算实际份量并保存饮食记录 */
+    private DietRecord buildAndSaveRecord(Long userId, Food food, String mealType, BigDecimal amount) {
+        BigDecimal ratio = amount.divide(HUNDRED, 4, RoundingMode.HALF_UP);
+
+        BigDecimal calories = food.getCalories() != null
+                ? food.getCalories().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+        BigDecimal protein = food.getProtein() != null
+                ? food.getProtein().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+        BigDecimal carbohydrate = food.getCarbohydrate() != null
+                ? food.getCarbohydrate().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+        BigDecimal fat = food.getFat() != null
+                ? food.getFat().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+
+        DietRecord record = DietRecord.builder()
+                .userId(userId)
+                .foodId(food.getId())
+                .mealType(mealType)
+                .amount(amount)
+                .calories(calories)
+                .protein(protein)
+                .carbohydrate(carbohydrate)
+                .fat(fat)
+                .recordDate(LocalDate.now())
+                .build();
+
+        return dietRecordRepository.save(record);
     }
 
     public List<DietRecord> getTodayRecords(Long userId) {
@@ -203,24 +219,7 @@ public class DietRecordService {
                 continue;
             }
 
-            BigDecimal ratio = amount.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
-            BigDecimal calories = food.getCalories().multiply(ratio).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal protein = food.getProtein() != null ? food.getProtein().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-            BigDecimal carbohydrate = food.getCarbohydrate() != null ? food.getCarbohydrate().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-            BigDecimal fat = food.getFat() != null ? food.getFat().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-
-            DietRecord record = DietRecord.builder()
-                    .userId(userId)
-                    .foodId(food.getId())
-                    .mealType(mealType)
-                    .amount(amount)
-                    .calories(calories)
-                    .protein(protein)
-                    .carbohydrate(carbohydrate)
-                    .fat(fat)
-                    .recordDate(LocalDate.now())
-                    .build();
-            record = dietRecordRepository.save(record);
+            DietRecord record = buildAndSaveRecord(userId, food, mealType, amount);
             record.setFoodName(food.getName());
             results.add(record);
         }

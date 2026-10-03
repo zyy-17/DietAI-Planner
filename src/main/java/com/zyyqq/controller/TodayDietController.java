@@ -1,5 +1,6 @@
 package com.zyyqq.controller;
 
+import com.zyyqq.dto.request.AddCustomDietRecordRequest;
 import com.zyyqq.dto.request.AddDietRecordRequest;
 import com.zyyqq.dto.response.ApiResponse;
 import com.zyyqq.dto.response.TodayDietOverviewResponse;
@@ -49,6 +50,17 @@ public class TodayDietController {
                                                             @RequestBody List<AddDietRecordRequest> requests) {
         Long userId = getUserId(authentication);
         return ApiResponse.success(dietRecordService.addDietRecordBatch(userId, requests));
+    }
+
+    /**
+     * 记录饮食时添加自定义食物。
+     * 自定义食物为私有数据，仅创建者本人可见，不会出现在公开食物库中。
+     */
+    @PostMapping("/today/add-custom")
+    public ApiResponse<DietRecord> addCustomDietRecord(Authentication authentication,
+                                                       @RequestBody AddCustomDietRecordRequest request) {
+        Long userId = getUserId(authentication);
+        return ApiResponse.success(dietRecordService.addCustomDietRecord(userId, request));
     }
 
     @PostMapping("/today/apply-suggestion")

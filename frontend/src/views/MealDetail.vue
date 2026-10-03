@@ -60,6 +60,61 @@
       </div>
       <el-input v-model="searchKeyword" placeholder="输入食物名称搜索，如：鸡蛋、牛奶、米饭..." @input="searchFood" clearable style="margin-bottom:12px" />
 
+      <div class="custom-toggle-row">
+        <el-button text type="primary" size="small" @click="toggleCustomForm">
+          {{ showCustomForm ? '收起自定义食物' : '＋ 找不到？添加自定义食物' }}
+        </el-button>
+        <span v-if="!showCustomForm" class="custom-tip">自己填写营养数据，仅你本人可见，不会进入公共食物库</span>
+      </div>
+
+      <div v-if="showCustomForm" class="custom-food-form">
+        <div class="custom-form-title">🙋 自定义食物 <small>仅自己可见</small></div>
+        <div class="custom-grid">
+          <label class="cf-field">
+            <span>食物名称</span>
+            <el-input v-model="customFood.foodName" placeholder="如：妈妈牌红烧肉" size="small" />
+          </label>
+          <label class="cf-field">
+            <span>分类（可选）</span>
+            <el-select v-model="customFood.categoryId" placeholder="默认归入「其他」" clearable size="small" style="width:100%">
+              <el-option v-for="cat in categories" :key="cat.id" :label="cat.name" :value="cat.id" />
+            </el-select>
+          </label>
+        </div>
+        <div class="custom-form-tip">以下为每 100g 的营养数值，可参考包装上的营养成分表</div>
+        <div class="custom-grid custom-grid-4">
+          <label class="cf-field">
+            <span>热量(kcal)</span>
+            <el-input-number v-model="customFood.calories" :min="0" :max="2000" :precision="1" size="small" controls-position="right" style="width:100%" />
+          </label>
+          <label class="cf-field">
+            <span>蛋白质(g)</span>
+            <el-input-number v-model="customFood.protein" :min="0" :max="200" :precision="1" size="small" controls-position="right" style="width:100%" />
+          </label>
+          <label class="cf-field">
+            <span>碳水(g)</span>
+            <el-input-number v-model="customFood.carbohydrate" :min="0" :max="200" :precision="1" size="small" controls-position="right" style="width:100%" />
+          </label>
+          <label class="cf-field">
+            <span>脂肪(g)</span>
+            <el-input-number v-model="customFood.fat" :min="0" :max="200" :precision="1" size="small" controls-position="right" style="width:100%" />
+          </label>
+        </div>
+        <div class="custom-grid">
+          <label class="cf-field">
+            <span>本次食用量(g)</span>
+            <el-input-number v-model="customFood.amount" :min="1" :max="5000" :step="10" size="small" controls-position="right" style="width:100%" />
+          </label>
+          <div class="custom-preview">🔥 本次约摄入 <b>{{ customPreviewCal }}</b> kcal</div>
+        </div>
+        <div class="custom-form-footer">
+          <el-button size="small" @click="showCustomForm = false">取消</el-button>
+          <el-button size="small" type="primary" :loading="customSubmitting" @click="submitCustomFood">
+            添加并记录到{{ mealInfo.name }}
+          </el-button>
+        </div>
+      </div>
+
       <div class="food-select-list" v-if="filteredFoods.length">
         <div v-for="f in filteredFoods" :key="f.id" class="food-select-item" :class="{ chosen: isChosen(f.id) }" @click="toggleFood(f)">
           <div class="food-select-left">
@@ -138,6 +193,14 @@ const allFoods = ref([])
 const filteredFoods = ref([])
 const chosenFoods = ref([])
 
+// 自定义食物（仅本人可见）
+const categories = ref([])
+const showCustomForm = ref(false)
+const customSubmitting = ref(false)
+const customFood = reactive({ foodName: '', categoryId: null, calories: 0, protein: 0, carbohydrate: 0, fat: 0, amount: 100 })
+
+const customPreviewCal = computed(() => ((customFood.calories || 0) * (customFood.amount || 0) / 100).toFixed(1))
+
 function isChosen(foodId) {
   return chosenFoods.value.some(c => c.foodId === foodId)
 }
@@ -176,13 +239,61 @@ const chosenTotalFat = computed(() => chosenFoods.value.reduce((s, c) => s + (c.
 async function loadData() {
   try { records.value = await api.get('/diet/today/records') } catch (e) {}
   try { allFoods.value = await api.get('/foods/all') } catch (e) {}
+  if (categories.value.length === 0) {
+    try { categories.value = await api.get('/categories') } catch (e) {}
+  }
 }
 
 function openAddDialog() {
   searchKeyword.value = ''
   filteredFoods.value = allFoods.value
   chosenFoods.value = []
+  showCustomForm.value = false
+  resetCustomFood()
   addDialogVisible.value = true
+}
+
+function toggleCustomForm() {
+  showCustomForm.value = !showCustomForm.value
+}
+
+function resetCustomFood() {
+  customFood.foodName = ''
+  customFood.categoryId = null
+  customFood.calories = 0
+  customFood.protein = 0
+  customFood.carbohydrate = 0
+  customFood.fat = 0
+  customFood.amount = 100
+}
+
+/** 提交自定义食物：创建仅本人可见的私有食物并直接计入当前餐次 */
+async function submitCustomFood() {
+  const foodName = (customFood.foodName || '').trim()
+  if (!foodName) return ElMessage.warning('请填写食物名称')
+  if (customFood.calories === null || customFood.calories === undefined) return ElMessage.warning('请填写每100g热量')
+  customSubmitting.value = true
+  try {
+    await api.post('/diet/today/add-custom', {
+      foodName,
+      categoryId: customFood.categoryId || null,
+      calories: customFood.calories,
+      protein: customFood.protein,
+      carbohydrate: customFood.carbohydrate,
+      fat: customFood.fat,
+      amount: customFood.amount,
+      mealType: mealType.value
+    })
+    ElMessage.success(`已添加自定义食物「${foodName}」到${mealInfo.value.name}`)
+    showCustomForm.value = false
+    resetCustomFood()
+    addDialogVisible.value = false
+    await loadData()
+  } catch (e) {
+    ElMessage.error('添加失败，请重试')
+  } finally {
+    customSubmitting.value = false
+  }
 }
 
 function searchFood() {
@@ -237,6 +348,19 @@ onMounted(loadData)
 .empty-card { margin-top: 16px; }
 
 .multi-add-header { font-size: 13px; color: #55738d; margin-bottom: 12px; padding: 8px 12px; background: #f0f7ff; border-radius: 8px; }
+.custom-toggle-row { display: flex; align-items: center; gap: 10px; margin: -4px 0 10px; }
+.custom-tip { font-size: 12px; color: #8ea1af; }
+.custom-food-form { border: 1px dashed #a9d5fb; background: #f8fbff; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+.custom-form-title { font-size: 13px; font-weight: 600; color: #2589ee; margin-bottom: 12px; }
+.custom-form-title small { font-weight: normal; color: #8ea1af; margin-left: 6px; }
+.custom-form-tip { font-size: 12px; color: #8ea1af; margin-bottom: 8px; }
+.custom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 10px; align-items: end; }
+.custom-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.cf-field { display: flex; flex-direction: column; gap: 4px; }
+.cf-field > span { font-size: 12px; color: #55738d; }
+.custom-preview { font-size: 12px; color: #8499a8; padding-bottom: 6px; }
+.custom-preview b { color: #e6a23c; font-size: 16px; margin: 0 3px; }
+.custom-form-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .food-select-list { max-height: 280px; overflow-y: auto; border: 1px solid #eef2f6; border-radius: 8px; }
 .food-select-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f5f7fa; transition: background 0.15s; }
 .food-select-item:hover { background: #f5f9ff; }

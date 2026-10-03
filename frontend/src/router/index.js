@@ -168,12 +168,6 @@ const routes = [
         meta: { title: '食物分类', mode: 'categories' }
       },
       {
-        path: 'foods/add',
-        name: 'FoodAdd',
-        component: () => import('../views/FoodLibrary.vue'),
-        meta: { title: '添加食物', mode: 'add' }
-      },
-      {
         path: 'profile',
         name: 'Profile',
         component: () => import('../views/Profile.vue'),
