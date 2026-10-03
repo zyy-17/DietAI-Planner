@@ -69,7 +69,7 @@ async function handleLogin() {
     const data = await api.post('/auth/login', loginForm)
     userStore.setLogin(data)
     ElMessage.success('登录成功')
-    router.push('/')
+    redirectAfterLogin(data.role)
   } finally {
     loading.value = false
   }
@@ -82,9 +82,18 @@ async function handleRegister() {
     const data = await api.post('/auth/register', registerForm)
     userStore.setLogin(data)
     ElMessage.success('注册成功')
-    router.push('/')
+    redirectAfterLogin(data.role)
   } finally {
     loading.value = false
+  }
+}
+
+/** 管理员登录后直接进入管理后台，普通用户进入用户端首页 */
+function redirectAfterLogin(role) {
+  if (role === 'admin') {
+    router.push('/admin/dashboard')
+  } else {
+    router.push('/')
   }
 }
 </script>

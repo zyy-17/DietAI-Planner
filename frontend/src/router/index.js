@@ -238,8 +238,14 @@ const routes = [
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
-    redirect: '/admin/users',
+    redirect: '/admin/dashboard',
     children: [
+      {
+        path: 'dashboard',
+        name: 'AdminDashboard',
+        component: () => import('../views/admin/Dashboard.vue'),
+        meta: { title: '数据看板' }
+      },
       {
         path: 'users',
         name: 'AdminUsers',
@@ -257,6 +263,18 @@ const routes = [
         name: 'AdminCategories',
         component: () => import('../views/admin/Categories.vue'),
         meta: { title: '分类管理' }
+      },
+      {
+        path: 'diet-records',
+        name: 'AdminDietRecords',
+        component: () => import('../views/admin/DietRecords.vue'),
+        meta: { title: '饮食记录' }
+      },
+      {
+        path: 'nutrition-standards',
+        name: 'AdminNutritionStandards',
+        component: () => import('../views/admin/NutritionStandards.vue'),
+        meta: { title: '营养标准' }
       },
       {
         path: 'ai-logs',
@@ -277,9 +295,14 @@ router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) {
     next('/login')
-  } else {
-    next()
+    return
   }
+  // 管理后台需要 admin 角色
+  if (to.path.startsWith('/admin') && localStorage.getItem('role') !== 'admin') {
+    next('/')
+    return
+  }
+  next()
 })
 
 export default router

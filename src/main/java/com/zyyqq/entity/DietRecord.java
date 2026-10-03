@@ -55,6 +55,10 @@ public class DietRecord {
     @Transient
     private String foodName;
 
+    /** 管理端展示用：所属用户名（非数据库字段） */
+    @Transient
+    private String userName;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();

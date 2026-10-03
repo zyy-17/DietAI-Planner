@@ -62,4 +62,16 @@ public interface FoodRepository extends JpaRepository<Food, Long> {
 
     @Query("SELECT f.id, f.name FROM Food f WHERE f.id IN :ids")
     List<Object[]> findIdAndNameByIds(@Param("ids") List<Long> ids);
+
+    // ==================== 管理端统计 ====================
+
+    /** 统计指定状态的食物数量 */
+    long countByStatus(String status);
+
+    /** 管理端按关键字（名称）模糊分页查询全部食物 */
+    @Query("SELECT f FROM Food f WHERE f.name LIKE %:keyword% ORDER BY f.createdAt DESC")
+    Page<Food> searchAllByKeyword(@Param("keyword") String keyword, Pageable pageable);
+
+    /** 管理端按来源分页查询食物 */
+    Page<Food> findBySource(String source, Pageable pageable);
 }

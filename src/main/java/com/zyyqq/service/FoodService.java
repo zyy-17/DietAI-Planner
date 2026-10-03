@@ -219,4 +219,51 @@ public class FoodService {
         }
         return foodRepository.findAll(pageable);
     }
+
+    /** 管理端分页查询食物，支持状态与关键字筛选 */
+    public Page<Food> getAllFoodsForAdmin(String status, String keyword, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        boolean hasKeyword = keyword != null && !keyword.trim().isEmpty();
+        boolean hasStatus = status != null && !status.isEmpty();
+        if (hasKeyword && hasStatus) {
+            return foodRepository.searchByKeywordAndStatus(keyword.trim(), status, pageable);
+        }
+        if (hasKeyword) {
+            return foodRepository.searchAllByKeyword(keyword.trim(), pageable);
+        }
+        if (hasStatus) {
+            return foodRepository.findByStatus(status, pageable);
+        }
+        return foodRepository.findAll(pageable);
+    }
+
+    /**
+     * 管理端新增系统食物（进入公开食物库，所有用户可见）。
+     * 系统食物 source='system'、status='approved'，createdBy 为空。
+     */
+    @Transactional
+    @CacheEvict(value = "approvedFoods", allEntries = true)
+    public Food createSystemFood(AddFoodRequest request) {
+        if (request.getCategoryId() == null) {
+            throw new BusinessException("分类不能为空");
+        }
+        if (!foodCategoryRepository.existsById(request.getCategoryId())) {
+            throw new BusinessException("所选分类不存在");
+        }
+        Food food = Food.builder()
+                .name(request.getName() == null ? null : request.getName().trim())
+                .categoryId(request.getCategoryId())
+                .calories(request.getCalories())
+                .protein(request.getProtein())
+                .carbohydrate(request.getCarbohydrate())
+                .fat(request.getFat())
+                .fiber(request.getFiber())
+                .imageUrl(request.getImageUrl())
+                .source("system")
+                .status(STATUS_APPROVED)
+                .build();
+        Food saved = foodRepository.save(food);
+        log.info("管理端新增系统食物: id={}, name={}", saved.getId(), saved.getName());
+        return saved;
+    }
 }
