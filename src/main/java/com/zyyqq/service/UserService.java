@@ -9,7 +9,6 @@ import com.zyyqq.exception.BusinessException;
 import com.zyyqq.repository.UserRepository;
 import com.zyyqq.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,10 +23,6 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
-    /** 管理员注册邀请码，可在 application.yml 的 app.admin.invite-code 中覆盖 */
-    @Value("${app.admin.invite-code:DIETAI-ADMIN-2026}")
-    private String adminInviteCode;
-
     /** 注册，校验用户名和邮箱唯一性后创建账户并签发Token */
     @Transactional
     public LoginResponse register(RegisterRequest request) {
@@ -39,14 +34,8 @@ public class UserService {
             throw new BusinessException("邮箱已被注册");
         }
 
-        // 身份判定：默认注册为普通用户；选择管理员必须提供正确的邀请码
+        // 身份判定：按注册时选择的身份创建账号，缺省为普通用户
         String role = normalizeRole(request.getRole());
-        if ("admin".equals(role)) {
-            String code = request.getAdminInviteCode() == null ? "" : request.getAdminInviteCode().trim();
-            if (code.isEmpty() || !adminInviteCode.equals(code)) {
-                throw new BusinessException("管理员邀请码不正确，无法注册为管理员");
-            }
-        }
 
         User user = User.builder()
                 .username(request.getUsername())

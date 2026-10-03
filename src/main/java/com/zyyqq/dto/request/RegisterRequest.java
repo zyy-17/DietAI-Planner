@@ -19,7 +19,4 @@ public class RegisterRequest {
 
     /** 注册身份：user-普通用户 / admin-管理员，不传默认为 user */
     private String role;
-
-    /** 以管理员身份注册时需要提供的邀请码 */
-    private String adminInviteCode;
 }

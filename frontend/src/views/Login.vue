@@ -34,9 +34,6 @@
         <el-form-item prop="password">
           <el-input v-model="registerForm.password" type="password" placeholder="密码（6位以上）" prefix-icon="Lock" size="large" show-password />
         </el-form-item>
-        <el-form-item v-if="identity === 'admin'" prop="adminInviteCode">
-          <el-input v-model="registerForm.adminInviteCode" placeholder="管理员邀请码" prefix-icon="Key" size="large" show-password />
-        </el-form-item>
         <el-button type="primary" size="large" :loading="loading" style="width:100%" @click="handleRegister">注 册</el-button>
       </el-form>
 
@@ -49,7 +46,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { ref, reactive, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { ElMessage } from 'element-plus'
@@ -68,15 +65,14 @@ const identityOptions = [
 ]
 
 const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive({ username: '', email: '', password: '', adminInviteCode: '' })
+const registerForm = reactive({ username: '', email: '', password: '' })
 
 const loginRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
-/** 注册校验规则：选择管理员身份时，邀请码必填 */
-const registerRules = computed(() => ({
+const registerRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 3, max: 50, message: '3-50个字符', trigger: 'blur' }
@@ -84,18 +80,14 @@ const registerRules = computed(() => ({
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '至少6位', trigger: 'blur' }
-  ],
-  adminInviteCode: identity.value === 'admin'
-    ? [{ required: true, message: '请输入管理员邀请码', trigger: 'blur' }]
-    : []
-}))
+  ]
+}
 
 const loginFormRef = ref()
 const registerFormRef = ref()
 
 // 切换身份后清掉上一个身份的校验提示
 watch(identity, () => {
-  if (identity.value !== 'admin') registerForm.adminInviteCode = ''
   nextTick(() => {
     loginFormRef.value?.clearValidate()
     registerFormRef.value?.clearValidate()
