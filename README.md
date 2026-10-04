@@ -914,22 +914,28 @@ cp .env.example .env      # Windows: copy .env.example .env
 LLM_BACKEND=auto          # auto = 填了 key 就用云端，没填就用 Ollama
 
 API_KEY=sk-你的密钥
-API_BASE_URL=https://api.deepseek.com/v1
-API_MODEL=deepseek-chat
+API_BASE_URL=https://api.deepseek.com
+API_MODEL=deepseek-flash
 ```
 
 **各家厂商怎么填**（任选一家，其它 OpenAI 兼容接口同理）：
 
 | 厂商 | API_BASE_URL | API_MODEL 示例 | Key 获取地址 |
 |------|--------------|----------------|--------------|
-| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` | platform.deepseek.com |
-| 火山方舟（豆包） | `https://ark.cn-beijing.volces.com/api/v3` | `doubao-seed-1-6-250615` | console.volcengine.com/ark |
+| DeepSeek | `https://api.deepseek.com` | `deepseek-flash` | platform.deepseek.com |
+| 火山方舟（豆包） | `https://ark.cn-beijing.volces.com/api/v3` | `doubao-seed-2-1-pro-260628` | console.volcengine.com/ark |
 | 阿里云百炼（通义） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` | bailian.console.aliyun.com |
-| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` | open.bigmodel.cn |
-| Kimi（月之暗面） | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` | platform.moonshot.cn |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-5` | open.bigmodel.cn |
+| Kimi（月之暗面） | `https://api.moonshot.cn/v1` | `kimi-k3` | platform.moonshot.cn |
 
-> ⚠️ 注意 `API_BASE_URL` 要填到 **`/v1`（或厂商规定的版本段）为止**，程序会自动拼 `/chat/completions`。
-> 火山方舟和智谱用的是 `/api/v3`、`/api/paas/v4`，不是 `/v1`，照上表填。
+> ⚠️ `API_BASE_URL` 填到**版本段为止**即可，程序会自动拼 `/chat/completions`。
+> DeepSeek 用 `https://api.deepseek.com`（官方规范写法，加 `/v1` 也兼容）；
+> 火山方舟和智谱分别是 `/api/v3`、`/api/paas/v4`，不是 `/v1`，照上表填。
+>
+> ⚠️ **模型名会随厂商版本更新而变**。例如 DeepSeek 的 `deepseek-chat` 已于 2026-07 下线，
+> 现在要用 `deepseek-flash`。若报 404「模型不存在」，去厂商控制台的模型列表复制当前
+> 可用的模型 ID 替换 `API_MODEL` 即可。价格差异可能很大（DeepSeek 的 `deepseek-v4-pro`
+> 约为 `deepseek-flash` 的 3 倍），换模型前先看下计费。
 
 #### 方式二：用本机 Ollama
 
@@ -1061,7 +1067,7 @@ AI 服务启动后运行在：`http://localhost:8000`
 
 接云端 API 时会看到：
 ```
-INFO: 启动 AI 服务 v5.1 | 后端=云端API | 接口=https://api.deepseek.com/v1 | 模型=deepseek-chat
+INFO: 启动 AI 服务 v5.1 | 后端=云端API | 接口=https://api.deepseek.com | 模型=deepseek-flash
 INFO: 监听地址 http://127.0.0.1:8000
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 ```
@@ -1074,7 +1080,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 浏览器访问 `http://localhost:8000/api/health`，会直接告诉你当前生效的后端和模型：
 
 ```json
-{ "status": "ok", "backend": "api", "model": "deepseek-chat", "api_base_url": "https://api.deepseek.com/v1" }
+{ "status": "ok", "backend": "api", "model": "deepseek-flash", "api_base_url": "https://api.deepseek.com" }
 ```
 
 也可以访问 `http://localhost:8000/docs` 查看 FastAPI 自动生成的 API 文档页面。
