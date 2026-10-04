@@ -19,10 +19,12 @@ app.add_middleware(
 from api.chat import router as chat_router
 from api.diet_plan import router as diet_plan_router
 from api.health import router as health_router
+from api.meal_plan import router as meal_plan_router
 
 app.include_router(chat_router)
 app.include_router(diet_plan_router)
 app.include_router(health_router)
+app.include_router(meal_plan_router)
 
 
 if __name__ == "__main__":

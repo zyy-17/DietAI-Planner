@@ -80,6 +80,7 @@ const userStore = useUserStore()
 
 const topMenus = [
   { key: 'today', name: '今日饮食', icon: '🏠', path: '/today' },
+  { key: 'mealplan', name: '膳食方案', icon: '🍱', path: '/meal-plan' },
   { key: 'records', name: '饮食记录', icon: '📋', path: '/records' },
   { key: 'nutrition', name: '营养分析', icon: '📊', path: '/nutrition' },
   { key: 'chat', name: 'AI饮食助手', icon: '🤖', path: '/chat' }
@@ -93,6 +94,10 @@ const sideMenusMap = {
     { name: '晚餐', path: '/today/dinner', icon: '🍗' },
     { name: '加餐', path: '/today/snack', icon: '🍎' },
     { name: 'AI今日建议', path: '/today/ai-suggest', icon: '🤖' }
+  ],
+  mealplan: [
+    { name: '我的方案', path: '/meal-plan', icon: '🍱' },
+    { name: '历史方案', path: '/meal-plan/history', icon: '🗂️' }
   ],
   records: [
     { name: '历史记录', path: '/records', icon: '📅' },
@@ -116,6 +121,7 @@ const sideMenusMap = {
 
 const moduleTitleMap = {
   today: '🏠 今日饮食',
+  mealplan: '🍱 膳食方案',
   records: '📋 饮食记录',
   nutrition: '📊 营养分析',
   chat: '🤖 AI饮食助手'
@@ -130,6 +136,7 @@ const auxLinks = [
 const activeTopModule = computed(() => {
   const path = route.path
   if (path.startsWith('/today')) return 'today'
+  if (path.startsWith('/meal-plan')) return 'mealplan'
   if (path.startsWith('/records')) return 'records'
   if (path.startsWith('/nutrition')) return 'nutrition'
   if (path.startsWith('/chat')) return 'chat'
