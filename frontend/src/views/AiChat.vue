@@ -21,7 +21,7 @@
       <el-main class="chat-main">
         <div class="messages" ref="messagesRef">
           <!-- 首次进入（新会话）的欢迎卡片 -->
-          <div v-if="messages.length === 0 && !sending" class="welcome">
+          <div v-if="messages.length === 0 && !thinkingHere" class="welcome">
             <div class="welcome-avatar">🤖</div>
             <div class="welcome-body">
               <div class="welcome-text">
@@ -33,7 +33,7 @@
               </div>
               <div class="welcome-chips">
                 <button v-for="q in welcomeQuestions" :key="q" class="chip"
-                  :disabled="sending" @click="sendMessage(q)">{{ q }}</button>
+                  :disabled="thinkingHere" @click="sendMessage(q)">{{ q }}</button>
               </div>
             </div>
           </div>
@@ -55,7 +55,7 @@
           </div>
 
           <!-- AI正在思考中的提示 -->
-          <div v-if="sending" class="message assistant thinking">
+          <div v-if="thinkingHere" class="message assistant thinking">
             <div class="msg-avatar-ai">🤖</div>
             <div class="msg-content">
               <div class="msg-text thinking-text">
@@ -77,16 +77,16 @@
         <!-- 底部快捷操作 -->
         <div class="quick-actions">
           <button v-for="a in quickActions" :key="a.label" class="qa-btn"
-            :disabled="sending" @click="sendMessage(a.prompt)">
+            :disabled="thinkingHere" @click="sendMessage(a.prompt)">
             <span class="qa-icon">{{ a.icon }}</span>
             <span>{{ a.label }}</span>
           </button>
         </div>
 
         <div class="chat-input">
-          <el-input v-model="inputText" :placeholder="inputPlaceholder" @keyup.enter="onEnter" :disabled="sending">
+          <el-input v-model="inputText" :placeholder="inputPlaceholder" @keyup.enter="onEnter" :disabled="thinkingHere">
             <template #append>
-              <el-button type="primary" @click="sendMessage()" :loading="sending">发送</el-button>
+              <el-button type="primary" @click="sendMessage()" :loading="thinkingHere">发送</el-button>
             </template>
           </el-input>
         </div>
@@ -144,7 +144,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, UserFilled } from '@element-plus/icons-vue'
@@ -191,12 +191,22 @@ const quickActions = [
   }
 ]
 
+// 新会话在拿到后端 id 之前的哨兵标识
+const NEW_SESSION = '__new_session__'
+
 const sessions = ref([])
 const messages = ref([])
 const currentSessionId = ref(null)
 const inputText = ref('')
 const sending = ref(false)
 const messagesRef = ref(null)
+
+// 「正在等待 AI 回复」的那个会话：切换会话时据此判断思考态归属，避免状态串台
+const pendingSessionId = ref(null)
+const currentTag = computed(() => currentSessionId.value ?? NEW_SESSION)
+const thinkingHere = computed(() =>
+  sending.value && pendingSessionId.value !== null && pendingSessionId.value === currentTag.value
+)
 
 // 第三栏：今日营养数据
 const overview = ref(null)
@@ -423,6 +433,11 @@ async function sendMessage(overrideText) {
   abortController = new AbortController()
   requestStartTime = Date.now()
 
+  // 锁定这条问题属于哪个会话：后续 UI 状态和回复插入都以它为准，
+  // 期间用户若切走，回复只能回到原会话，不能插进当前视图
+  const targetSessionId = currentSessionId.value
+  pendingSessionId.value = targetSessionId ?? NEW_SESSION
+
   sending.value = true
   inputText.value = ''
 
@@ -435,26 +450,40 @@ async function sendMessage(overrideText) {
 
   try {
     const res = await api.post('/chat/send', {
-      sessionId: currentSessionId.value,
+      sessionId: targetSessionId,
       content
     }, {
       signal: abortController.signal
     })
 
     const duration = Math.round((Date.now() - requestStartTime) / 1000)
+    const returnedSessionId = res.sessionId ?? targetSessionId
 
-    if (!currentSessionId.value) {
-      currentSessionId.value = res.sessionId
+    // 原本是没 id 的新会话，拿到 id 后同步标记，这样中途切回来也能恢复思考态
+    if (targetSessionId === null && returnedSessionId) {
+      pendingSessionId.value = returnedSessionId
     }
 
-    messages.value.push({ ...res, duration })
+    // 期间用户可能切到了别的会话 / 新建了会话 / 删除了原会话
+    const stillHere = targetSessionId !== null
+      ? currentSessionId.value === targetSessionId
+      : (currentSessionId.value === null || currentSessionId.value === returnedSessionId)
 
-    if (currentSessionId.value && res.id) {
-      saveDurationToStorage(currentSessionId.value, res.id, duration)
+    if (stillHere) {
+      currentSessionId.value = returnedSessionId
+      pendingSessionId.value = returnedSessionId
+      messages.value.push({ ...res, duration })
+
+      if (returnedSessionId && res.id) {
+        saveDurationToStorage(returnedSessionId, res.id, duration)
+      }
+
+      await nextTick()
+      scrollToBottom()
+    } else {
+      ElMessage.info('上一个问题的回复已生成，请回到原来的会话查看')
     }
 
-    await nextTick()
-    scrollToBottom()
     loadSessions()
   } catch (error) {
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
@@ -464,6 +493,7 @@ async function sendMessage(overrideText) {
     }
   } finally {
     sending.value = false
+    pendingSessionId.value = null
     abortController = null
     requestStartTime = null
     stopTypewriter()
