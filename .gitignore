@@ -57,3 +57,8 @@ uploads/
 
 ### Misc ###
 ai-service/package-lock.json
+
+### AI 工具与本地工作区 ###
+# 编辑器/助手的本地目录，不属于项目源码
+.trae/
+.workbuddy/
