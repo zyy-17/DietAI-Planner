@@ -46,6 +46,21 @@ public class User {
     @Column(precision = 5, scale = 1)
     private BigDecimal weight;
 
+    /**
+     * 目标体重（kg）。减重/增重时设定后，目标热量会结合它与当前体重的差距来计算，
+     * 比固定系数准得多。为空则沿用按 diet_goal 取 0.8/1.15 系数的旧算法。
+     */
+    @Column(name = "target_weight_kg", precision = 5, scale = 1)
+    private BigDecimal targetWeightKg;
+
+    /** 目标体脂率（%），可选。体脂是比体重更准确的努力方向，但多数人测不了 */
+    @Column(name = "target_body_fat_percent", precision = 5, scale = 1)
+    private BigDecimal targetBodyFatPercent;
+
+    /** 期望达成目标日期，用于估算"还需多久"并提示是否过快 */
+    @Column(name = "target_deadline")
+    private java.time.LocalDate targetDeadline;
+
     @Column(name = "activity_level")
     private Integer activityLevel;
 

@@ -104,6 +104,7 @@ const sideMenusMap = {
   nutrition: [
     { name: '今日营养', path: '/nutrition', icon: '📊' },
     { name: '营养趋势', path: '/nutrition/trend', icon: '📈' },
+    { name: '体重体脂', path: '/nutrition/body-metrics', icon: '⚖️' },
     { name: '营养素分析', path: '/nutrition/nutrients', icon: '🥩' },
     { name: '热量分析', path: '/nutrition/calorie', icon: '🔥' },
     { name: '目标完成度', path: '/nutrition/goal', icon: '🎯' },

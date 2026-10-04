@@ -1,6 +1,7 @@
 package com.zyyqq.service;
 
 import com.zyyqq.dto.request.ChatRequest;
+import com.zyyqq.dto.response.WeightTrendVO;
 import com.zyyqq.entity.*;
 import com.zyyqq.exception.BusinessException;
 import com.zyyqq.repository.AiChatMessageRepository;
@@ -49,6 +50,7 @@ public class AiChatService {
     private final TransactionTemplate transactionTemplate;
     private final RestTemplate aiRestTemplate;
     private final ProfileOptionService profileOptionService;
+    private final WeightRecordService weightRecordService;
 
     @Value("${ai-service.url}")
     private String aiServiceUrl;
@@ -150,6 +152,74 @@ public class AiChatService {
         sessionRepository.deleteById(sessionId);
     }
 
+    /**
+     * 注入体重/体脂趋势与身体目标。
+     *
+     * <p>让 AI 能回答"我最近瘦了多少""照这个速度还要多久""体重没掉是不是没效果"
+     * 这类问题——只看单一体重是答不出来的。趋势取近 90 天，
+     * 逐条列出有变化的关键点即可，不必把每天的都塞进去。</p>
+     */
+    private void appendBodyMetrics(Long userId, StringBuilder sb) {
+        WeightTrendVO trend;
+        try {
+            trend = weightRecordService.trend(userId, 90);
+        } catch (Exception e) {
+            // 趋势查不到不该影响正常对话
+            return;
+        }
+        if (trend == null || trend.getSummary() == null || trend.getSummary().getRecordCount() == 0) {
+            return;
+        }
+
+        WeightTrendVO.Summary s = trend.getSummary();
+        sb.append("\n【体重体脂记录】共").append(s.getRecordCount()).append("次，");
+        sb.append(s.getFirstDate()).append(" 至 ").append(s.getLastDate()).append("\n");
+        sb.append("  区间起始体重=").append(s.getStartWeight()).append("kg");
+        sb.append(", 最新体重=").append(s.getLatestWeight()).append("kg");
+        sb.append(", 净变化=").append(s.getChangeKg()).append("kg");
+        if (s.getAvgChangePerWeek() != null) {
+            sb.append(", 平均每周").append(s.getAvgChangePerWeek()).append("kg");
+        }
+        if (s.getLatestBodyFat() != null) {
+            sb.append("\n  最新体脂率=").append(s.getLatestBodyFat()).append("%");
+            if (s.getChangeBodyFat() != null) {
+                sb.append(", 较区间首次变化=").append(s.getChangeBodyFat()).append("%");
+            }
+        }
+
+        WeightTrendVO.Target t = trend.getTarget();
+        if (t != null && t.getTargetValue() != null) {
+            sb.append("\n【身体目标】");
+            if (t.getTargetWeightKg() != null) {
+                sb.append("目标体重=").append(t.getTargetWeightKg()).append("kg");
+            }
+            if (t.getTargetBodyFatPercent() != null) {
+                sb.append(", 目标体脂率=").append(t.getTargetBodyFatPercent()).append("%");
+            }
+            if (t.getTargetDeadline() != null) {
+                sb.append(", 期望达成=").append(t.getTargetDeadline());
+            }
+            if (t.getCurrentValue() != null) {
+                sb.append("\n  当前").append(t.getCurrentValue()).append(t.getUnit());
+                if (t.getRemaining() != null) {
+                    sb.append(", 距目标还差").append(t.getRemaining().abs()).append(t.getUnit());
+                }
+                if (t.getProgressPercent() != null) {
+                    sb.append(", 已完成").append(t.getProgressPercent()).append("%");
+                }
+            }
+            if (t.getEstimatedDate() != null) {
+                sb.append("\n  按近 90 天平均速度，预计 ").append(t.getEstimatedDate()).append(" 达成");
+            }
+            if (Boolean.TRUE.equals(t.getPaceTooFast())) {
+                sb.append("\n  注意：近期变化速度偏快，建议放缓");
+            }
+            if (t.getCurrentValue() == null && t.getTargetValue() != null) {
+                sb.append("\n  尚未记录足够的体脂/体重数据，无法评估进度");
+            }
+        }
+    }
+
     private String buildContextSnapshot(Long userId) {
         User user = userService.getUserById(userId);
         StringBuilder sb = new StringBuilder();
@@ -196,6 +266,8 @@ public class AiChatService {
 
         BigDecimal targetCal = userService.calculateTargetCalories(user);
         sb.append(", 每日目标热量=").append(targetCal).append("kcal");
+
+        appendBodyMetrics(userId, sb);
 
         BigDecimal proteinTarget = resolveTarget(user.getTargetProtein(), targetCal, new BigDecimal("0.20"), new BigDecimal("4"));
         BigDecimal carbTarget = resolveTarget(user.getTargetCarbohydrate(), targetCal, new BigDecimal("0.50"), new BigDecimal("4"));

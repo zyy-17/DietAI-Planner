@@ -97,6 +97,64 @@ public class UserService {
     }
 
     /** 根据ID获取未删除的用户 */
+    /**
+     * 设定身体目标（目标体重 / 目标体脂 / 期望达成日期）。
+     *
+     * <p>校验要点：
+     * <ul>
+     *   <li>目标体重不能与当前体重完全相同，否则没有追踪意义</li>
+     *   <li>期望日期不能早于今天</li>
+     *   <li>目标与饮食目标方向冲突时给出提示但不强拒——用户可能规划分阶段</li>
+     * </ul>
+     */
+    @Transactional
+    public User updateBodyGoal(Long userId, java.math.BigDecimal targetWeightKg,
+                               java.math.BigDecimal targetBodyFatPercent,
+                               java.time.LocalDate targetDeadline) {
+        User user = getUserById(userId);
+
+        if (targetWeightKg != null) {
+            if (targetWeightKg.compareTo(new java.math.BigDecimal("20")) < 0
+                    || targetWeightKg.compareTo(new java.math.BigDecimal("300")) > 0) {
+                throw new BusinessException("目标体重需在 20 ~ 300 kg 之间");
+            }
+            if (user.getWeight() != null
+                    && targetWeightKg.subtract(user.getWeight()).abs()
+                        .compareTo(new java.math.BigDecimal("0.1")) < 0) {
+                throw new BusinessException("目标体重与当前体重相同，请确认是否填错");
+            }
+            user.setTargetWeightKg(targetWeightKg);
+        }
+        if (targetBodyFatPercent != null) {
+            if (targetBodyFatPercent.compareTo(java.math.BigDecimal.ZERO) <= 0
+                    || targetBodyFatPercent.compareTo(new java.math.BigDecimal("70")) > 0) {
+                throw new BusinessException("目标体脂率需在 0 ~ 70 % 之间");
+            }
+            user.setTargetBodyFatPercent(targetBodyFatPercent);
+        }
+        if (targetDeadline != null) {
+            if (targetDeadline.isBefore(java.time.LocalDate.now())) {
+                throw new BusinessException("期望达成日期不能早于今天");
+            }
+            user.setTargetDeadline(targetDeadline);
+        }
+
+        // 目标与饮食目标方向相反时提醒——热量会算反，导致越努力越糟
+        if (user.getTargetWeightKg() != null && user.getWeight() != null
+                && user.getDietGoal() != null) {
+            java.math.BigDecimal diff = user.getTargetWeightKg().subtract(user.getWeight());
+            boolean needLower = diff.compareTo(java.math.BigDecimal.ZERO) < 0;
+            if (needLower && "gain".equals(user.getDietGoal())) {
+                throw new BusinessException("你设置的目标体重比当前轻，但饮食目标是「增肌」。请先到个人中心调整饮食目标");
+            }
+            if (!needLower && diff.compareTo(java.math.BigDecimal.ZERO) > 0 && "lose".equals(user.getDietGoal())) {
+                throw new BusinessException("你设置的目标体重比当前重，但饮食目标是「减脂」。请先到个人中心调整饮食目标");
+            }
+        }
+
+        return userRepository.save(user);
+    }
+
     public User getUserById(Long userId) {
         return userRepository.findById(userId)
                 .filter(u -> u.getDeleted() == 0)
@@ -164,7 +222,19 @@ public class UserService {
         return bmr.multiply(activityFactor);
     }
 
-    /** 根据饮食目标计算每日目标热量（优先使用用户手动设置值，否则按TDEE×目标系数计算） */
+    /**
+     * 根据饮食目标计算每日目标热量。
+     *
+     * <p>优先级：用户手动设置值 &gt; 按目标体重与期限推算 &gt; 按固定系数。</p>
+     *
+     * <p>固定系数（减脂 0.8 / 增肌 1.15）对所有人一样，但"离目标差 5kg"和"差 30kg"
+     * 该用的热量完全不同。设了 {@code targetWeightKg} 后改用体重差距推算：</p>
+     * <pre>
+     *   7700 kcal ≈ 1kg 脂肪；按每天 0.1kg（每周 0.7kg，稳妥速率）折算每日热量差
+     *   目标系数 = 1 ± (差距kg × 7700 × 0.1) / TDEE
+     * </pre>
+     * 结果夹在安全区间内，避免算出过低的热量。
+     */
     public java.math.BigDecimal calculateTargetCalories(User user) {
         if (user.getTargetCalories() != null && user.getTargetCalories().compareTo(java.math.BigDecimal.ZERO) > 0) {
             return user.getTargetCalories();
@@ -173,6 +243,13 @@ public class UserService {
         if (tdee.compareTo(java.math.BigDecimal.ZERO) == 0) return java.math.BigDecimal.ZERO;
 
         String goal = user.getDietGoal() != null ? user.getDietGoal() : "maintain";
+
+        // 优先用目标体重推算
+        java.math.BigDecimal byTarget = calcCaloriesByTargetWeight(user, tdee, goal);
+        if (byTarget != null) {
+            return byTarget.setScale(0, java.math.RoundingMode.HALF_UP);
+        }
+
         java.math.BigDecimal goalFactor;
         switch (goal) {
             case "lose": goalFactor = new java.math.BigDecimal("0.8"); break;
@@ -180,6 +257,63 @@ public class UserService {
             default: goalFactor = java.math.BigDecimal.ONE;
         }
         return tdee.multiply(goalFactor).setScale(0, java.math.RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 按目标体重与预计达成时间推算目标热量。
+     * 缺少必要信息（当前体重 / 目标体重 / 期限）时返回 null，交给固定系数兜底。
+     */
+    private java.math.BigDecimal calcCaloriesByTargetWeight(User user, java.math.BigDecimal tdee, String goal) {
+        java.math.BigDecimal current = user.getWeight();
+        java.math.BigDecimal target = user.getTargetWeightKg();
+        if (current == null || target == null) return null;
+        if (current.compareTo(java.math.BigDecimal.ZERO) <= 0) return null;
+
+        java.math.BigDecimal diffKg = target.subtract(current);
+        if (diffKg.abs().compareTo(new java.math.BigDecimal("0.1")) < 0) return null;
+
+        // 计划天数：用户填了期限就用，否则按每周 0.5kg 的温和速率倒推
+        long days;
+        if (user.getTargetDeadline() != null) {
+            days = java.time.temporal.ChronoUnit.DAYS.between(
+                    java.time.LocalDate.now(), user.getTargetDeadline());
+            if (days < 7) {
+                // 期限太近（<1 周）不参与推算，避免算出极端热量
+                return null;
+            }
+        } else {
+            java.math.BigDecimal weeks = diffKg.abs()
+                    .divide(new java.math.BigDecimal("0.5"), 0, java.math.RoundingMode.CEILING);
+            if (weeks.compareTo(java.math.BigDecimal.ZERO) <= 0) return null;
+            days = weeks.multiply(java.math.BigDecimal.valueOf(7)).longValueExact();
+        }
+
+        // 1kg 脂肪约 7700 kcal
+        java.math.BigDecimal totalKcalGap = diffKg.abs().multiply(new java.math.BigDecimal("7700"));
+        java.math.BigDecimal dailyGap = totalKcalGap.divide(java.math.BigDecimal.valueOf(days), 2, java.math.RoundingMode.HALF_UP);
+
+        java.math.BigDecimal factor;
+        if (diffKg.compareTo(java.math.BigDecimal.ZERO) < 0) {
+            // 目标更轻：制造热量缺口
+            factor = java.math.BigDecimal.ONE.subtract(
+                    dailyGap.divide(tdee, 4, java.math.RoundingMode.HALF_UP));
+        } else {
+            factor = java.math.BigDecimal.ONE.add(
+                    dailyGap.divide(tdee, 4, java.math.RoundingMode.HALF_UP));
+        }
+
+        // 安全夹取：减重不低于 TDEE 的 60%，增重不高于 130%
+        java.math.BigDecimal lower = new java.math.BigDecimal("0.6");
+        java.math.BigDecimal upper = new java.math.BigDecimal("1.3");
+        if (factor.compareTo(lower) < 0) factor = lower;
+        if (factor.compareTo(upper) > 0) factor = upper;
+
+        // 目标方向与饮食目标矛盾时不用它算（updateBodyGoal 已拦截，这里兜底历史脏数据）
+        boolean needLower = diffKg.compareTo(java.math.BigDecimal.ZERO) < 0;
+        if (needLower && "gain".equals(goal)) return null;
+        if (!needLower && diffKg.compareTo(java.math.BigDecimal.ZERO) > 0 && "lose".equals(goal)) return null;
+
+        return tdee.multiply(factor);
     }
 
     /** 更新用户营养目标（热量/蛋白质/碳水/脂肪） */

@@ -90,6 +90,12 @@ const routes = [
         meta: { title: '营养趋势', mode: 'trend' }
       },
       {
+        path: 'nutrition/body-metrics',
+        name: 'BodyMetrics',
+        component: () => import('../views/BodyMetrics.vue'),
+        meta: { title: '体重体脂' }
+      },
+      {
         path: 'nutrition/nutrients',
         name: 'NutritionNutrients',
         component: () => import('../views/NutritionAnalysis.vue'),
