@@ -53,6 +53,13 @@ API_TIMEOUT = int(os.getenv("API_TIMEOUT", "120"))
 # ── Ollama 配置 ───────────────────────────────────────────────────
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
+# ── 服务监听地址 ──────────────────────────────────────────────────
+# 默认只听本机 127.0.0.1：本服务没有鉴权，若监听 0.0.0.0，
+# 同一局域网/WiFi 下的其他人可以直接调用你的 AI 接口，消耗你的 API 额度。
+# 确实需要从别的机器访问时，才改成 0.0.0.0（并自行做好网络隔离）。
+AI_SERVICE_HOST = os.getenv("AI_SERVICE_HOST", "127.0.0.1").strip()
+AI_SERVICE_PORT = int(os.getenv("AI_SERVICE_PORT", "8000"))
+
 PREFERRED_MODELS = [
     "qwen2.5:7b",
     "qwen2.5:latest",

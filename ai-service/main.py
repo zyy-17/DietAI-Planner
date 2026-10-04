@@ -27,7 +27,12 @@ app.include_router(health_router)
 
 if __name__ == "__main__":
     from service.llm_service import get_model, get_backend
-    from config.settings import API_BASE_URL, API_KEY
+    from config.settings import (
+        API_BASE_URL,
+        API_KEY,
+        AI_SERVICE_HOST,
+        AI_SERVICE_PORT,
+    )
 
     backend = get_backend()
     model = get_model()
@@ -39,4 +44,5 @@ if __name__ == "__main__":
     else:
         logger.info(f"启动 AI 服务 v5.1 | 后端=本机Ollama | 模型={model}")
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    logger.info(f"监听地址 http://{AI_SERVICE_HOST}:{AI_SERVICE_PORT}")
+    uvicorn.run(app, host=AI_SERVICE_HOST, port=AI_SERVICE_PORT)

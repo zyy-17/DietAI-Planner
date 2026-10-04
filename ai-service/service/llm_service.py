@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 from typing import Optional
 
@@ -112,6 +113,20 @@ def _build_api_payload(messages: list, stream: bool = False, fmt: Optional[str] 
     return payload
 
 
+def _redact(text: str) -> str:
+    """
+    脱敏：把可能出现在第三方返回内容里的密钥擦掉。
+    云端厂商正常不会回显 Authorization，但错误体是不可控的外部输入，
+    多一层保险，避免 key 通过错误提示流进日志或数据库。
+    """
+    if not text:
+        return text
+    if API_KEY and len(API_KEY) >= 8:
+        text = text.replace(API_KEY, "***REDACTED***")
+    # 兜底擦掉 sk-xxxx 形态的令牌
+    return re.sub(r"sk-[A-Za-z0-9_\-]{8,}", "***REDACTED***", text)
+
+
 def _api_error_hint(status_code: int, body: str) -> str:
     """把常见 HTTP 错误翻译成人话，方便用户自己排查 key / 模型名填错。"""
     if status_code == 401:
@@ -124,7 +139,7 @@ def _api_error_hint(status_code: int, body: str) -> str:
         return "请求过于频繁或额度不足(429)：稍后重试，或检查账户余额"
     if status_code >= 500:
         return f"服务端错误({status_code})：云端服务暂时不可用，稍后重试"
-    return f"HTTP {status_code}: {body[:300]}"
+    return f"HTTP {status_code}: {_redact(body)[:300]}"
 
 
 def _call_api_text(messages: list, fmt: Optional[str] = None) -> str:

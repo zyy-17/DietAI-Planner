@@ -573,7 +573,7 @@ DietAI-Planner/
 |------|------|------|
 | Python | 3.10+ | 运行环境 |
 | FastAPI | 0.115.0 | 高性能异步 Web 框架 |
-| Uvicorn | 0.30.6 | ASGI 服务器，监听 `0.0.0.0:8000` |
+| Uvicorn | 0.30.6 | ASGI 服务器，默认监听 `127.0.0.1:8000`（仅本机，可用 `AI_SERVICE_HOST` 调整） |
 | Pydantic | 2.9.2 | 请求/响应数据校验 |
 | HTTPX | 0.28+ | 调用云端 OpenAI 兼容 API（非流式 + SSE 流式） |
 | Ollama Python SDK | latest | 调用本地 Ollama 推理服务（可选后端） |
@@ -1062,8 +1062,12 @@ AI 服务启动后运行在：`http://localhost:8000`
 接云端 API 时会看到：
 ```
 INFO: 启动 AI 服务 v5.1 | 后端=云端API | 接口=https://api.deepseek.com/v1 | 模型=deepseek-chat
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO: 监听地址 http://127.0.0.1:8000
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 ```
+
+> 🔒 默认只监听 **127.0.0.1**（仅本机可访问）。本服务没有鉴权接口，
+> 若改成 `0.0.0.0`，同一局域网下的其他人也能调用你的 AI 接口并消耗你的 API 额度。
 
 **第三步：验证 AI 服务是否正常**
 
