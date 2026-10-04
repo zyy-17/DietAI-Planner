@@ -258,6 +258,12 @@ const routes = [
         meta: { title: '营养标准' }
       },
       {
+        path: 'profile-options',
+        name: 'AdminProfileOptions',
+        component: () => import('../views/admin/ProfileOptions.vue'),
+        meta: { title: '档案选项' }
+      },
+      {
         path: 'ai-logs',
         name: 'AdminAiLogs',
         component: () => import('../views/admin/AiLogs.vue'),

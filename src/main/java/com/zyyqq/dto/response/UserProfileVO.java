@@ -22,6 +22,9 @@ public class UserProfileVO {
     private Integer activityLevel;
     private String dietGoal;
     private String dietPreference;
+    private String allergyNote;
+    private String disease;
+    private String medication;
     private String avatarUrl;
     private String role;
     private LocalDateTime createdAt;

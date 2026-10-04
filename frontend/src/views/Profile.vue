@@ -47,11 +47,7 @@
         <template v-if="section === 'activity'">
           <el-form-item label="活动水平">
             <el-select v-model="form.activityLevel" placeholder="请选择">
-              <el-option :value="1" label="久坐（几乎不运动）" />
-              <el-option :value="2" label="轻度活动（每周1-3次）" />
-              <el-option :value="3" label="中度活动（每周3-5次）" />
-              <el-option :value="4" label="高度活动（每周6-7次）" />
-              <el-option :value="5" label="极高活动（体力劳动）" />
+              <el-option v-for="o in options.activity_level" :key="o.code" :value="Number(o.code)" :label="o.label" />
             </el-select>
           </el-form-item>
         </template>
@@ -59,9 +55,7 @@
         <template v-if="section === 'goal'">
           <el-form-item label="饮食目标">
             <el-select v-model="form.dietGoal" placeholder="请选择">
-              <el-option value="lose" label="减脂" />
-              <el-option value="maintain" label="维持" />
-              <el-option value="gain" label="增肌" />
+              <el-option v-for="o in options.diet_goal" :key="o.code" :value="o.code" :label="o.label" />
             </el-select>
           </el-form-item>
         </template>
@@ -69,16 +63,7 @@
         <template v-if="section === 'preference'">
           <el-form-item label="饮食偏好">
             <el-select v-model="selectedPreferences" multiple placeholder="选择饮食偏好" style="width:100%" @change="onPreferenceChange">
-              <el-option value="清淡" label="清淡" />
-              <el-option value="中式" label="中式" />
-              <el-option value="西式" label="西式" />
-              <el-option value="素食" label="素食" />
-              <el-option value="低糖" label="低糖" />
-              <el-option value="低脂" label="低脂" />
-              <el-option value="高蛋白" label="高蛋白" />
-              <el-option value="无辣" label="无辣" />
-              <el-option value="地中海" label="地中海饮食" />
-              <el-option value="生酮" label="生酮" />
+              <el-option v-for="o in options.diet_preference" :key="o.code" :value="o.code" :label="o.label" />
             </el-select>
           </el-form-item>
           <el-form-item label="">
@@ -88,14 +73,8 @@
 
         <template v-if="section === 'allergy'">
           <el-form-item label="忌口食物">
-            <el-select v-model="selectedAllergies" multiple placeholder="选择忌口食物" style="width:100%">
-              <el-option value="海鲜" label="海鲜" />
-              <el-option value="牛奶" label="牛奶" />
-              <el-option value="鸡蛋" label="鸡蛋" />
-              <el-option value="花生" label="花生" />
-              <el-option value="大豆" label="大豆" />
-              <el-option value="麸质" label="麸质" />
-              <el-option value="坚果" label="坚果" />
+            <el-select v-model="selectedAllergies" multiple placeholder="选择忌口食物" style="width:100%" @change="onAllergyChange">
+              <el-option v-for="o in options.allergy" :key="o.code" :value="o.code" :label="o.label" />
             </el-select>
           </el-form-item>
           <el-form-item label="">
@@ -105,12 +84,8 @@
 
         <template v-if="section === 'health'">
           <el-form-item label="慢性疾病">
-            <el-select v-model="selectedDiseases" multiple placeholder="选择相关疾病" style="width:100%">
-              <el-option value="糖尿病" label="糖尿病" />
-              <el-option value="高血压" label="高血压" />
-              <el-option value="高血脂" label="高血脂" />
-              <el-option value="痛风" label="痛风" />
-              <el-option value="脂肪肝" label="脂肪肝" />
+            <el-select v-model="selectedDiseases" multiple placeholder="选择相关疾病" style="width:100%" @change="onDiseaseChange">
+              <el-option v-for="o in options.disease" :key="o.code" :value="o.code" :label="o.label" />
             </el-select>
           </el-form-item>
           <el-form-item label="用药情况">
@@ -168,6 +143,35 @@ const saving = ref(false)
 const selectedPreferences = ref([])
 const selectedAllergies = ref([])
 const selectedDiseases = ref([])
+
+// 下拉选项由后端 /user/options 下发，管理员在后台改动后刷新即生效
+const options = ref({
+  diet_goal: [],
+  activity_level: [],
+  diet_preference: [],
+  allergy: [],
+  disease: []
+})
+
+// 兜底选项：接口异常时页面仍可正常使用（不白屏、不报错）
+const FALLBACK_OPTIONS = {
+  diet_goal: [
+    { code: 'lose', label: '减脂' },
+    { code: 'maintain', label: '维持' },
+    { code: 'gain', label: '增肌' }
+  ],
+  activity_level: [
+    { code: '1', label: '久坐（几乎不运动）' },
+    { code: '2', label: '轻度活动（每周1-3次）' },
+    { code: '3', label: '中度活动（每周3-5次）' },
+    { code: '4', label: '高度活动（每周6-7次）' },
+    { code: '5', label: '极高活动（体力劳动）' }
+  ],
+  diet_preference: [],
+  allergy: [],
+  disease: []
+}
+
 const form = reactive({
   realName: '',
   gender: null,
@@ -178,6 +182,7 @@ const form = reactive({
   dietGoal: null,
   dietPreference: '',
   allergyNote: '',
+  disease: '',
   medication: '',
   avatarUrl: ''
 })
@@ -211,6 +216,31 @@ function onPreferenceChange(values) {
   form.dietPreference = values.join('、')
 }
 
+/** 多选值以「、」分隔存库，与后端 labelsOf 的解析规则保持一致 */
+function onAllergyChange(values) {
+  form.allergyNote = values.join('、')
+}
+
+function onDiseaseChange(values) {
+  form.disease = values.join('、')
+}
+
+async function loadOptions() {
+  try {
+    const data = await api.get('/user/options')
+    if (data) {
+      // 逐项合并：某分组为空时保留兜底，避免管理员清空后页面无选项可选
+      const merged = {}
+      for (const key of Object.keys(FALLBACK_OPTIONS)) {
+        merged[key] = (data[key] && data[key].length) ? data[key] : FALLBACK_OPTIONS[key]
+      }
+      options.value = merged
+    }
+  } catch (e) {
+    options.value = JSON.parse(JSON.stringify(FALLBACK_OPTIONS))
+  }
+}
+
 async function loadProfile() {
   try {
     const data = await api.get('/user/profile')
@@ -219,11 +249,22 @@ async function loadProfile() {
       if (form.dietPreference) {
         selectedPreferences.value = form.dietPreference.split('、').filter(Boolean)
       }
+      if (form.allergyNote) {
+        selectedAllergies.value = form.allergyNote.split('、').filter(Boolean)
+      }
+      if (form.disease) {
+        selectedDiseases.value = form.disease.split('、').filter(Boolean)
+      }
     }
   } catch (e) {}
 }
 
 async function saveProfile() {
+  // 下拉多选与自由文本可能不一致：以下拉选中项为准同步回字符串字段
+  if (selectedPreferences.value.length) form.dietPreference = selectedPreferences.value.join('、')
+  if (selectedAllergies.value.length) form.allergyNote = selectedAllergies.value.join('、')
+  if (selectedDiseases.value.length) form.disease = selectedDiseases.value.join('、')
+
   saving.value = true
   try {
     await api.put('/user/profile', form)
@@ -233,7 +274,9 @@ async function saveProfile() {
   }
 }
 
-onMounted(loadProfile)
+onMounted(async () => {
+  await Promise.all([loadOptions(), loadProfile()])
+})
 </script>
 
 <style scoped>

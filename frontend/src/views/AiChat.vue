@@ -213,7 +213,8 @@ const overview = ref(null)
 const dietGoalLabel = ref('未设置')
 // 欢迎卡片展示"AI 已读到多少天数据"，让用户直观感知个性化来源
 const readDays = ref(null)
-const GOAL_LABELS = { lose: '减脂', maintain: '维持体重', gain: '增肌' }
+// 饮食目标文案：由后端 /user/options 下发，管理员改文案后这里自动跟随
+const goalLabels = ref({ lose: '减脂', maintain: '维持体重', gain: '增肌' })
 
 // 打字机效果、等待时间、取消请求相关状态
 const typewriterDisplay = ref('')
@@ -371,9 +372,17 @@ async function loadNutrition() {
   try {
     overview.value = await api.get('/diet/today')
   } catch (e) {}
+  // 先取选项文案，再取档案，保证 dietGoalLabel 能翻译出正确中文
+  try {
+    const opts = await api.get('/user/options')
+    const goals = opts?.diet_goal
+    if (Array.isArray(goals) && goals.length) {
+      goalLabels.value = Object.fromEntries(goals.map(o => [o.code, o.label]))
+    }
+  } catch (e) {}
   try {
     const profile = await api.get('/user/profile')
-    dietGoalLabel.value = GOAL_LABELS[profile?.dietGoal] || profile?.dietGoal || '未设置'
+    dietGoalLabel.value = goalLabels.value[profile?.dietGoal] || profile?.dietGoal || '未设置'
   } catch (e) {}
   try {
     const stats = await api.get('/diet/stats?period=week')

@@ -40,6 +40,7 @@ const menus = [
   { path: '/admin/categories', icon: '🗂️', title: '分类管理' },
   { path: '/admin/diet-records', icon: '🍽️', title: '饮食记录' },
   { path: '/admin/nutrition-standards', icon: '📐', title: '营养标准' },
+  { path: '/admin/profile-options', icon: '📋', title: '档案选项' },
   { path: '/admin/ai-logs', icon: '🤖', title: 'AI记录' }
 ]
 

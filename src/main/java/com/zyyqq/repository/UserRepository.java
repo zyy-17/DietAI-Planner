@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -46,4 +47,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** 统计指定时间之后注册的用户数量（用于今日新增） */
     long countByCreatedAtAfter(LocalDateTime time);
+
+    // ==================== 档案选项引用统计 ====================
+    // 用于判断某个选项能否删除：已有用户使用时禁止物理删除，引导改为停用
+
+    List<User> findByDietGoal(String dietGoal);
+
+    List<User> findByActivityLevel(Integer activityLevel);
+
+    List<User> findByDietPreferenceIsNotNull();
+
+    List<User> findByAllergyNoteIsNotNull();
+
+    List<User> findByDiseaseIsNotNull();
 }

@@ -153,12 +153,13 @@ const applying = ref(false)
 const recommendation = ref(null)
 const structuredPlan = ref(null)
 
+// 饮食目标文案：由后端 /user/options 下发，管理员改文案后这里自动跟随
+const goalLabels = ref({ lose: '减脂', maintain: '维持', gain: '增肌' })
+
 const goalLabel = computed(() => {
   if (!recommendation.value) return ''
   const goal = recommendation.value.dietGoal
-  if (goal === 'lose') return '减脂'
-  if (goal === 'gain') return '增肌'
-  return '维持'
+  return goalLabels.value[goal] || goal || ''
 })
 
 function getRankClass(score) {
@@ -172,6 +173,19 @@ function getScoreColor(score) {
   if (score >= 80) return '#409eff'
   if (score >= 70) return '#e6a23c'
   return '#f56c6c'
+}
+
+/** 拉取后台配置的目标文案，管理员改动后自动跟随 */
+async function loadGoalLabels() {
+  try {
+    const opts = await api.get('/user/options')
+    const goals = opts?.diet_goal
+    if (Array.isArray(goals) && goals.length) {
+      goalLabels.value = Object.fromEntries(goals.map(o => [o.code, o.label]))
+    }
+  } catch (e) {
+    console.warn('加载目标选项失败', e)
+  }
 }
 
 async function loadRecommendation() {
@@ -262,6 +276,7 @@ async function applySuggestion(s) {
 }
 
 onMounted(async () => {
+  await loadGoalLabels()
   await loadRecommendation()
   if (recommendation.value) {
     loadStructuredPlan()

@@ -55,6 +55,18 @@ public class User {
     @Column(name = "diet_preference", length = 200)
     private String dietPreference;
 
+    /** 忌口食物，多个以「、」分隔，取值来自 profile_option 表 allergy 分组 */
+    @Column(name = "allergy_note", length = 200)
+    private String allergyNote;
+
+    /** 慢性疾病，多个以「、」分隔，取值来自 profile_option 表 disease 分组 */
+    @Column(name = "disease", length = 200)
+    private String disease;
+
+    /** 用药情况，自由文本 */
+    @Column(name = "medication", length = 500)
+    private String medication;
+
     @Column(name = "target_calories", precision = 7, scale = 2)
     private BigDecimal targetCalories;
 

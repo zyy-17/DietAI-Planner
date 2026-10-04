@@ -115,6 +115,9 @@ public class UserService {
         if (request.getActivityLevel() != null) user.setActivityLevel(request.getActivityLevel());
         if (request.getDietGoal() != null) user.setDietGoal(request.getDietGoal());
         if (request.getDietPreference() != null) user.setDietPreference(request.getDietPreference());
+        if (request.getAllergyNote() != null) user.setAllergyNote(request.getAllergyNote());
+        if (request.getDisease() != null) user.setDisease(request.getDisease());
+        if (request.getMedication() != null) user.setMedication(request.getMedication());
         if (request.getAvatarUrl() != null) user.setAvatarUrl(request.getAvatarUrl());
         return userRepository.save(user);
     }

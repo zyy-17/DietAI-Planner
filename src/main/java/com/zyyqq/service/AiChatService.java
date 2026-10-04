@@ -48,6 +48,7 @@ public class AiChatService {
     private final RecommendationService recommendationService;
     private final TransactionTemplate transactionTemplate;
     private final RestTemplate aiRestTemplate;
+    private final ProfileOptionService profileOptionService;
 
     @Value("${ai-service.url}")
     private String aiServiceUrl;
@@ -162,28 +163,35 @@ public class AiChatService {
         if (user.getHeight() != null) sb.append(", 身高=").append(user.getHeight()).append("cm");
         if (user.getWeight() != null) sb.append(", 体重=").append(user.getWeight()).append("kg");
 
-        String activityDesc = switch (user.getActivityLevel() != null ? user.getActivityLevel() : 0) {
-            case 1 -> "久坐(几乎不运动)";
-            case 2 -> "轻度活动(每周1-3次)";
-            case 3 -> "中度活动(每周3-5次)";
-            case 4 -> "高度活动(每周6-7次)";
-            case 5 -> "极高活动(体力劳动)";
-            default -> "未知";
-        };
+        // 活动水平与饮食目标的文案从 profile_option 表取，
+        // 这样管理员在后台新增/改名选项后，AI 也能立刻读懂，不必改代码重新发版
+        String activityDesc = profileOptionService.labelOf(
+                ProfileOptionType.ACTIVITY_LEVEL,
+                user.getActivityLevel() != null ? String.valueOf(user.getActivityLevel()) : null);
+        if (activityDesc == null) activityDesc = "未知";
         sb.append(", 活动水平=").append(activityDesc);
 
-        if (user.getDietGoal() != null) {
-            String goalDesc = switch (user.getDietGoal()) {
-                case "lose" -> "减脂";
-                case "maintain" -> "维持体重";
-                case "gain" -> "增肌";
-                default -> user.getDietGoal();
-            };
+        String goalDesc = profileOptionService.labelOf(ProfileOptionType.DIET_GOAL, user.getDietGoal());
+        if (goalDesc != null && !goalDesc.isBlank()) {
             sb.append(", 饮食目标=").append(goalDesc);
         }
 
-        if (user.getDietPreference() != null && !user.getDietPreference().isEmpty()) {
-            sb.append(", 饮食偏好=").append(user.getDietPreference());
+        String prefDesc = profileOptionService.labelsOf(ProfileOptionType.DIET_PREFERENCE, user.getDietPreference());
+        if (prefDesc != null && !prefDesc.isBlank()) {
+            sb.append(", 饮食偏好=").append(prefDesc);
+        }
+
+        // 忌口与疾病对推荐同样关键（过敏原必须避开），之前完全没进上下文
+        String allergyDesc = profileOptionService.labelsOf(ProfileOptionType.ALLERGY, user.getAllergyNote());
+        if (allergyDesc != null && !allergyDesc.isBlank()) {
+            sb.append(", 忌口（绝对不能吃）=").append(allergyDesc);
+        }
+        String diseaseDesc = profileOptionService.labelsOf(ProfileOptionType.DISEASE, user.getDisease());
+        if (diseaseDesc != null && !diseaseDesc.isBlank()) {
+            sb.append(", 慢性疾病=").append(diseaseDesc);
+        }
+        if (user.getMedication() != null && !user.getMedication().isBlank()) {
+            sb.append(", 用药=").append(user.getMedication());
         }
 
         BigDecimal targetCal = userService.calculateTargetCalories(user);
