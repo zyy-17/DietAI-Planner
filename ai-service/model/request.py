@@ -58,22 +58,6 @@ class StructuredDietPlan(BaseModel):
     ai_plan: Optional[str] = None
 
 
-class MealPlanGenerateRequest(BaseModel):
-    """多天膳食方案生成请求（Java 侧组装好用户档案与食物库候选后传入）。"""
-
-    user_id: int
-    goal: str = "maintain"                      # lose / gain / maintain
-    days: int = 7                               # 3 / 7 / 14
-    meals: List[str] = ["breakfast", "lunch", "dinner"]
-    daily_calories: Optional[float] = None
-    preferences: List[str] = []
-    dislikes: List[str] = []
-    extra_requirement: Optional[str] = None
-    context: Optional[str] = None               # 用户档案文本快照
-    # 候选食物字符串，格式「名称|每100g热量|蛋白/碳水/脂肪」
-    candidate_foods: List[str] = []
-
-
 class FoodReplaceRequest(BaseModel):
     """单项食物替换请求：让模型在候选里挑最合适的替代品。"""
 

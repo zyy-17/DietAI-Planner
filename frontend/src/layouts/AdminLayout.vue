@@ -39,6 +39,7 @@ const menus = [
   { path: '/admin/foods', icon: '🍎', title: '食物管理' },
   { path: '/admin/categories', icon: '🗂️', title: '分类管理' },
   { path: '/admin/diet-records', icon: '🍽️', title: '饮食记录' },
+  { path: '/admin/meal-plans', icon: '🍲', title: '食谱审核' },
   { path: '/admin/nutrition-standards', icon: '📐', title: '营养标准' },
   { path: '/admin/profile-options', icon: '📋', title: '档案选项' },
   { path: '/admin/ai-logs', icon: '🤖', title: 'AI记录' }

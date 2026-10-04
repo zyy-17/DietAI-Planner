@@ -13,11 +13,18 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Value("${app.upload.avatar-dir:uploads/avatars}")
     private String avatarDir;
 
-    /** 配置静态资源映射，将头像目录映射到/avatars/**路径 */
+    @Value("${app.upload.meal-plan-cover-dir:uploads/meal-plan-covers}")
+    private String coverDir;
+
+    /** 配置静态资源映射：头像 → /avatars/**，食谱封面 → /covers/** */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String absolutePath = Paths.get(avatarDir).toAbsolutePath().toString();
+        String avatarPath = Paths.get(avatarDir).toAbsolutePath().toString();
         registry.addResourceHandler("/avatars/**")
-                .addResourceLocations("file:" + absolutePath + "/");
+                .addResourceLocations("file:" + avatarPath + "/");
+
+        String coverPath = Paths.get(coverDir).toAbsolutePath().toString();
+        registry.addResourceHandler("/covers/**")
+                .addResourceLocations("file:" + coverPath + "/");
     }
 }

@@ -137,24 +137,17 @@ const routes = [
         meta: { title: '历史对话' }
       },
       {
-        // 膳食方案：主页面只负责「看当前方案 / 看今天吃什么 / 创建与调整」
+        // 食谱：主页面负责「我的食谱」（自己写 + 正在执行），广场在同级路由
         path: 'meal-plan',
         name: 'MealPlan',
         component: () => import('../views/MealPlan.vue'),
-        meta: { title: '膳食方案' }
+        meta: { title: '食谱' }
       },
       {
-        path: 'meal-plan/history',
-        name: 'MealPlanHistory',
+        path: 'meal-plan/square',
+        name: 'MealPlanSquare',
         component: () => import('../views/MealPlan.vue'),
-        meta: { title: '历史方案' }
-      },
-      {
-        // 必须放在 meal-plan/history 之后，且限定为数字，避免把 history 当成方案 id
-        path: 'meal-plan/:id(\\d+)',
-        name: 'MealPlanDetail',
-        component: () => import('../views/MealPlanDetail.vue'),
-        meta: { title: '方案详情' }
+        meta: { title: '食谱广场' }
       },
       {
         path: 'foods',
@@ -288,6 +281,12 @@ const routes = [
         name: 'AdminProfileOptions',
         component: () => import('../views/admin/ProfileOptions.vue'),
         meta: { title: '档案选项' }
+      },
+      {
+        path: 'meal-plans',
+        name: 'AdminMealPlans',
+        component: () => import('../views/admin/MealPlans.vue'),
+        meta: { title: '食谱审核' }
       },
       {
         path: 'ai-logs',

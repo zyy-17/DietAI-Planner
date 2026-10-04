@@ -61,6 +61,10 @@ public class MealPlanItem {
     @Column(name = "food_name", nullable = false, length = 100)
     private String foodName;
 
+    /** 食物图片快照：列表里要显示缩略图，快照下来省得每次回查食物库 */
+    @Column(name = "image_url", length = 255)
+    private String imageUrl;
+
     /** 克数 */
     @Column(nullable = false, precision = 8, scale = 2)
     private BigDecimal amount;

@@ -1,26 +1,26 @@
-"""多天膳食方案生成 & 单项食物替换。
+"""单项食物替换（AI 辅助）。
+
+食谱本身由用户在 App 里自己编写，「AI 生成整份食谱」那条路径已经撤掉，
+这里只保留一个可选能力：用户在编辑食谱时点「AI 智能推荐」，
+由模型在系统挑好的同类候选中排序并给出理由。
 
 设计要点：
-1. **分批编排**：一次要 14 天会让模型输出超出 max_tokens 而被截断，
-   所以按 BATCH_DAYS 天一批调用，每批都是完整的小 JSON，再拼起来。
-   思维链模型（如 deepseek-reasoner / deepseek-flash）的「思考过程」同样占用
-   max_tokens，用 .env 默认的 2048 时思考会占满预算、正式内容为空，
-   因此这里单独放宽到 GENERATE_MAX_TOKENS。
-2. **只管食物名与克数**：热量与三大营养素由 Java 侧按食物库精确换算，
-   模型只负责「搭配」，不负责算数——避免模型编造热量污染数据。
-3. **失败要说失败**：模型不可用或多次重试仍拿不到合法内容时直接抛错，
-   由上层返回明确提示，不返回看起来像正常方案的假数据。
-4. **「重试」覆盖到校验之后**：模型少排了一天、或某天食物全是空项，也算这次生成失败，
-   会连同调用一起重试，而不是把残缺方案返回给用户。
+1. **模型只排序，不造数据**：候选食物由 Java 侧从食物库筛好（同类目 + 热量接近），
+   模型不许自己发明食物；它给出的名字还要回 Java 侧按食物库再核一遍。
+2. **只管名字与克数**：热量与三大营养素一律回 Java 侧按食物库换算。
+3. **失败要说失败**：模型不可用或连续拿不到合法内容时抛错，由 Java 侧退化成
+   「同类目 + 热量接近」的算法排序，并在响应里标明 aiUsed=false。
+4. **预算要留够**：思维链模型的「思考过程」同样占用 max_tokens，
+   用 .env 默认的 2048 容易思考占满预算、正式内容为空，所以这里单独放宽。
 """
 
 import json
 import logging
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-from model.request import FoodReplaceRequest, MealPlanGenerateRequest
-from prompt.system_prompt import FOOD_REPLACE_PROMPT, MEAL_PLAN_PROMPT
+from model.request import FoodReplaceRequest
+from prompt.system_prompt import FOOD_REPLACE_PROMPT
 from service.llm_service import call_llm_text, get_model
 
 logger = logging.getLogger("dietai")
@@ -28,23 +28,13 @@ logger = logging.getLogger("dietai")
 GOAL_DESC = {"lose": "减脂", "gain": "增重", "maintain": "维持体重"}
 MEAL_DESC = {"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐", "snack": "加餐"}
 
-# 单次让模型编排的天数
-BATCH_DAYS = 3
-
-# 每个食物名在「避免重复」提示里最多列出这么多，控制上下文长度
-MAX_USED_HINT = 40
-
-# 一批最多尝试几次：前两次强制 JSON 模式，最后一次放开限制。
+# 最多尝试几次：前两次强制 JSON 模式，最后一次放开限制。
 # 不再叠加更深的重试——底层 call_llm_text 自己已经对网络错误做了重试，
 # 两层都开满会让一次失败放大成十几次调用（云端 API 是按量计费的）。
-BATCH_ATTEMPTS = 3
+REPLACE_ATTEMPTS = 3
 
-# 生成一批 3 天方案的 token 预算。思维链模型的「思考过程」也吃这个预算：
-# 用 .env 里的默认值（2048）时，思考很容易占满预算导致正式内容为空，
-# 所以这里单独放宽。max_tokens 只是上限，模型没用到那么多不会多计费。
-GENERATE_MAX_TOKENS = 8192
-
-# 单项替换的任务比排方案简单得多，但也留出思考余量
+# 单项替换的任务不复杂，但要给思维链模型留出思考余量。
+# max_tokens 只是上限，模型没用到那么多不会多计费。
 REPLACE_MAX_TOKENS = 4096
 
 
@@ -82,123 +72,6 @@ def _fmt_float(value) -> Optional[float]:
         return None
 
 
-def _normalize_meals(raw_meals: dict, meal_keys: List[str]) -> dict:
-    """只保留要求的那几餐，丢弃空项与非正数克数。"""
-    meals_out = {}
-    for key in meal_keys:
-        items = (raw_meals or {}).get(key) or []
-        cleaned = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            name = str(item.get("food") or "").strip()
-            amount = _fmt_float(item.get("amount"))
-            if not name or amount is None or amount <= 0:
-                continue
-            cleaned.append({"food": name, "amount": amount})
-        if cleaned:
-            meals_out[key] = cleaned
-    return meals_out
-
-
-def _parse_batch(data: dict, start_day: int, end_day: int,
-                 meal_keys: List[str]) -> Tuple[List[dict], str]:
-    """把模型输出规整成 [{day, meals}]；缺任何一天都算这批失败。"""
-    by_day = {}
-    for raw_day in (data.get("days") or []):
-        if not isinstance(raw_day, dict):
-            continue
-        day_no = _fmt_float(raw_day.get("day"))
-        if day_no is None:
-            continue
-        by_day[int(day_no)] = _normalize_meals(raw_day.get("meals") or {}, meal_keys)
-
-    missing = [d for d in range(start_day, end_day + 1) if not by_day.get(d)]
-    if missing:
-        raise ValueError("模型漏排了第 %s 天" % "、".join(str(d) for d in missing))
-
-    days = [{"day": d, "meals": by_day[d]} for d in range(start_day, end_day + 1)]
-    return days, str(data.get("summary") or "").strip()
-
-
-def _generate_batch(request: MealPlanGenerateRequest, start_day: int, end_day: int,
-                    used_foods: List[str]) -> Tuple[List[dict], str]:
-    """编排第 start_day ~ end_day 天。调用失败或内容不合规都会重试整批。"""
-    seen: List[str] = []
-    for name in used_foods:
-        if name not in seen:
-            seen.append(name)
-
-    history_hint = ""
-    if seen:
-        history_hint = ("\n【已经安排过的食物（这几天不要重复出现）】"
-                        + "、".join(seen[:MAX_USED_HINT]) + "\n")
-
-    prompt = MEAL_PLAN_PROMPT.format(
-        start_day=start_day,
-        end_day=end_day,
-        user_context=request.context or "无额外用户信息",
-        goal_desc=GOAL_DESC.get(request.goal, "维持体重"),
-        meal_desc="、".join(MEAL_DESC.get(m, m) for m in request.meals) or "早餐、午餐、晚餐",
-        daily_calories=round(request.daily_calories or 2000),
-        preferences="、".join(request.preferences) if request.preferences else "无特别偏好",
-        dislikes="、".join(request.dislikes) if request.dislikes else "无",
-        extra=request.extra_requirement or "无",
-        history_hint=history_hint,
-        candidate_section="\n".join(request.candidate_foods) or "（食物库为空）",
-    )
-
-    tag = f"膳食方案第{start_day}-{end_day}天"
-    last_error = None
-    for attempt in range(BATCH_ATTEMPTS):
-        # 前两轮强制 JSON 模式；最后一次放开限制，靠正则从自由文本里抠 JSON
-        fmt = "json" if attempt < 2 else None
-        try:
-            data = _call_once(prompt, fmt, GENERATE_MAX_TOKENS)
-            days, summary = _parse_batch(data, start_day, end_day, request.meals)
-            logger.info(f"{tag} 解析成功(尝试{attempt + 1})")
-            return days, summary
-        except json.JSONDecodeError as e:
-            last_error = f"JSON解析失败: {e}"
-            logger.warning(f"{tag} {last_error}(尝试{attempt + 1}/{BATCH_ATTEMPTS})")
-        except Exception as e:
-            last_error = e
-            logger.warning(f"{tag} 失败(尝试{attempt + 1}/{BATCH_ATTEMPTS}): {e}")
-            # 预算被思维链占满属于「同一条件下必然重演」，再问几次只是白花钱
-            if "被 max_tokens 截断" in str(e):
-                raise RuntimeError(f"{tag}失败：{e}")
-
-    raise RuntimeError(f"{tag}失败：{last_error}")
-
-
-def generate_meal_plan(request: MealPlanGenerateRequest) -> dict:
-    """按天分批生成完整方案，返回 {summary, days:[{day, meals:{...}}]}。"""
-    if get_model() == "none":
-        raise RuntimeError(
-            "AI 模型不可用：请在 ai-service/.env 里配置 API_KEY，或确认本机 Ollama 已启动"
-        )
-
-    total_days = max(1, int(request.days or 7))
-    days: List[dict] = []
-    used_foods: List[str] = []
-    summary = ""
-    start = 1
-    while start <= total_days:
-        end = min(start + BATCH_DAYS - 1, total_days)
-        batch, batch_summary = _generate_batch(request, start, end, used_foods)
-        if not summary and batch_summary:
-            summary = batch_summary
-        for day in batch:
-            days.append(day)
-            for items in day["meals"].values():
-                used_foods.extend(i["food"] for i in items)
-        start = end + 1
-
-    item_count = sum(len(v) for d in days for v in d["meals"].values())
-    logger.info(f"膳食方案生成完成：{total_days} 天，共 {item_count} 条食物")
-    return {"summary": summary, "days": days}
-
-
 def recommend_replacements(request: FoodReplaceRequest) -> dict:
     """在候选食物里挑替代项，返回 {recommendations:[{food, amount, reason}]}。"""
     if get_model() == "none":
@@ -219,11 +92,11 @@ def recommend_replacements(request: FoodReplaceRequest) -> dict:
 
     tag = f"替换「{request.food_name}」"
     last_error = None
-    for attempt in range(BATCH_ATTEMPTS):
+    for attempt in range(REPLACE_ATTEMPTS):
         fmt = "json" if attempt < 2 else None
         try:
             data = _call_once(prompt, fmt, REPLACE_MAX_TOKENS)
-            recommendations = []
+            recommendations: List[dict] = []
             for item in (data.get("recommendations") or [])[:4]:
                 if not isinstance(item, dict):
                     continue
@@ -241,6 +114,7 @@ def recommend_replacements(request: FoodReplaceRequest) -> dict:
         except Exception as e:
             last_error = e
             logger.warning(f"{tag} 失败(尝试{attempt + 1}): {e}")
+            # 预算被思维链占满属于「同一条件下必然重演」，再问几次只是白花钱
             if "被 max_tokens 截断" in str(e):
                 raise RuntimeError(f"{tag}失败：{e}")
 

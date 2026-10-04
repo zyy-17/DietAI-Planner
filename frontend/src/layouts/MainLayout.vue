@@ -80,7 +80,7 @@ const userStore = useUserStore()
 
 const topMenus = [
   { key: 'today', name: '今日饮食', icon: '🏠', path: '/today' },
-  { key: 'mealplan', name: '膳食方案', icon: '🍱', path: '/meal-plan' },
+  { key: 'mealplan', name: '食谱', icon: '🍲', path: '/meal-plan' },
   { key: 'records', name: '饮食记录', icon: '📋', path: '/records' },
   { key: 'nutrition', name: '营养分析', icon: '📊', path: '/nutrition' },
   { key: 'chat', name: 'AI饮食助手', icon: '🤖', path: '/chat' }
@@ -96,8 +96,8 @@ const sideMenusMap = {
     { name: 'AI今日建议', path: '/today/ai-suggest', icon: '🤖' }
   ],
   mealplan: [
-    { name: '我的方案', path: '/meal-plan', icon: '🍱' },
-    { name: '历史方案', path: '/meal-plan/history', icon: '🗂️' }
+    { name: '我的食谱', path: '/meal-plan', icon: '🍲' },
+    { name: '食谱广场', path: '/meal-plan/square', icon: '🏛️' }
   ],
   records: [
     { name: '历史记录', path: '/records', icon: '📅' },
@@ -121,7 +121,7 @@ const sideMenusMap = {
 
 const moduleTitleMap = {
   today: '🏠 今日饮食',
-  mealplan: '🍱 膳食方案',
+  mealplan: '🍲 食谱',
   records: '📋 饮食记录',
   nutrition: '📊 营养分析',
   chat: '🤖 AI饮食助手'

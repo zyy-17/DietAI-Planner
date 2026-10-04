@@ -18,6 +18,8 @@ public class MealPlanItemVO {
     private Long foodId;
     private String foodSource;
     private String foodName;
+    /** 食物图片（食物库快照，可能为空） */
+    private String imageUrl;
     private BigDecimal amount;
     /** 展示用份量，如「1个」「250ml」，没有单位信息时退化成「50g」 */
     private String amountText;

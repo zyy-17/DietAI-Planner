@@ -17,6 +17,8 @@ public class FoodAlternativeVO {
     private Long foodId;
     private String foodSource;
     private String foodName;
+    /** 食物图片（可能为空） */
+    private String imageUrl;
     /** 建议克数（沿用原条目的克数，或模型建议的克数） */
     private BigDecimal amount;
     private String amountText;
