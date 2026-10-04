@@ -3,6 +3,9 @@
 设计要点：
 1. **分批编排**：一次要 14 天会让模型输出超出 max_tokens 而被截断，
    所以按 BATCH_DAYS 天一批调用，每批都是完整的小 JSON，再拼起来。
+   思维链模型（如 deepseek-reasoner / deepseek-flash）的「思考过程」同样占用
+   max_tokens，用 .env 默认的 2048 时思考会占满预算、正式内容为空，
+   因此这里单独放宽到 GENERATE_MAX_TOKENS。
 2. **只管食物名与克数**：热量与三大营养素由 Java 侧按食物库精确换算，
    模型只负责「搭配」，不负责算数——避免模型编造热量污染数据。
 3. **失败要说失败**：模型不可用或多次重试仍拿不到合法内容时直接抛错，
@@ -36,6 +39,14 @@ MAX_USED_HINT = 40
 # 两层都开满会让一次失败放大成十几次调用（云端 API 是按量计费的）。
 BATCH_ATTEMPTS = 3
 
+# 生成一批 3 天方案的 token 预算。思维链模型的「思考过程」也吃这个预算：
+# 用 .env 里的默认值（2048）时，思考很容易占满预算导致正式内容为空，
+# 所以这里单独放宽。max_tokens 只是上限，模型没用到那么多不会多计费。
+GENERATE_MAX_TOKENS = 8192
+
+# 单项替换的任务比排方案简单得多，但也留出思考余量
+REPLACE_MAX_TOKENS = 4096
+
 
 def _clean_json(raw: str) -> str:
     """剥掉 ``` 代码块围栏，并从夹杂解释文字的输出里抠出 JSON 主体。"""
@@ -50,9 +61,11 @@ def _clean_json(raw: str) -> str:
     return cleaned
 
 
-def _call_once(prompt: str, fmt: Optional[str]) -> dict:
+def _call_once(prompt: str, fmt: Optional[str], max_tokens: int) -> dict:
     """单次调用模型并把返回解析成 dict；任何问题都抛异常，由调用方决定是否重试。"""
-    raw = call_llm_text([{"role": "user", "content": prompt}], fmt=fmt)
+    raw = call_llm_text(
+        [{"role": "user", "content": prompt}], fmt=fmt, max_tokens=max_tokens
+    )
     cleaned = _clean_json(raw)
     if not cleaned:
         raise ValueError("模型返回空内容")
@@ -141,7 +154,7 @@ def _generate_batch(request: MealPlanGenerateRequest, start_day: int, end_day: i
         # 前两轮强制 JSON 模式；最后一次放开限制，靠正则从自由文本里抠 JSON
         fmt = "json" if attempt < 2 else None
         try:
-            data = _call_once(prompt, fmt)
+            data = _call_once(prompt, fmt, GENERATE_MAX_TOKENS)
             days, summary = _parse_batch(data, start_day, end_day, request.meals)
             logger.info(f"{tag} 解析成功(尝试{attempt + 1})")
             return days, summary
@@ -151,6 +164,9 @@ def _generate_batch(request: MealPlanGenerateRequest, start_day: int, end_day: i
         except Exception as e:
             last_error = e
             logger.warning(f"{tag} 失败(尝试{attempt + 1}/{BATCH_ATTEMPTS}): {e}")
+            # 预算被思维链占满属于「同一条件下必然重演」，再问几次只是白花钱
+            if "被 max_tokens 截断" in str(e):
+                raise RuntimeError(f"{tag}失败：{e}")
 
     raise RuntimeError(f"{tag}失败：{last_error}")
 
@@ -206,7 +222,7 @@ def recommend_replacements(request: FoodReplaceRequest) -> dict:
     for attempt in range(BATCH_ATTEMPTS):
         fmt = "json" if attempt < 2 else None
         try:
-            data = _call_once(prompt, fmt)
+            data = _call_once(prompt, fmt, REPLACE_MAX_TOKENS)
             recommendations = []
             for item in (data.get("recommendations") or [])[:4]:
                 if not isinstance(item, dict):
@@ -225,5 +241,7 @@ def recommend_replacements(request: FoodReplaceRequest) -> dict:
         except Exception as e:
             last_error = e
             logger.warning(f"{tag} 失败(尝试{attempt + 1}): {e}")
+            if "被 max_tokens 截断" in str(e):
+                raise RuntimeError(f"{tag}失败：{e}")
 
     raise RuntimeError(f"{tag}失败：{last_error}")

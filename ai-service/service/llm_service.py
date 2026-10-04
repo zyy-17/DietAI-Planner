@@ -100,12 +100,18 @@ def _api_endpoint() -> str:
     return f"{API_BASE_URL}/chat/completions"
 
 
-def _build_api_payload(messages: list, stream: bool = False, fmt: Optional[str] = None) -> dict:
+def _build_api_payload(
+    messages: list,
+    stream: bool = False,
+    fmt: Optional[str] = None,
+    max_tokens: Optional[int] = None,
+) -> dict:
     payload = {
         "model": API_MODEL,
         "messages": messages,
         "temperature": API_TEMPERATURE,
-        "max_tokens": API_MAX_TOKENS,
+        # max_tokens 只是上限，不写满不额外计费；调用方可以按任务复杂度单独放宽
+        "max_tokens": max_tokens or API_MAX_TOKENS,
         "stream": stream,
     }
     if fmt == "json":
@@ -142,8 +148,8 @@ def _api_error_hint(status_code: int, body: str) -> str:
     return f"HTTP {status_code}: {_redact(body)[:300]}"
 
 
-def _call_api_text(messages: list, fmt: Optional[str] = None) -> str:
-    payload = _build_api_payload(messages, stream=False, fmt=fmt)
+def _call_api_text(messages: list, fmt: Optional[str] = None, max_tokens: Optional[int] = None) -> str:
+    payload = _build_api_payload(messages, stream=False, fmt=fmt, max_tokens=max_tokens)
     with httpx.Client(timeout=API_TIMEOUT) as client:
         resp = client.post(_api_endpoint(), headers=_api_headers(), json=payload)
     if resp.status_code != 200:
@@ -153,7 +159,24 @@ def _call_api_text(messages: list, fmt: Optional[str] = None) -> str:
     choices = data.get("choices") or []
     if not choices:
         raise RuntimeError(f"云端返回内容为空: {str(data)[:300]}")
-    return (choices[0].get("message") or {}).get("content") or ""
+
+    choice = choices[0]
+    message = choice.get("message") or {}
+    content = message.get("content") or ""
+
+    # 思维链模型（deepseek-reasoner 等）会先输出 thinking，再输出正式内容。
+    # 思考过程把 max_tokens 吃满时 finish_reason=length、content 为空，
+    # 这时必须明确报「被截断」，否则上层只会看到「空内容」而查不出原因。
+    if not content.strip() and choice.get("finish_reason") == "length":
+        usage = data.get("usage") or {}
+        detail = usage.get("completion_tokens_details") or {}
+        raise RuntimeError(
+            f"输出被 max_tokens 截断：本次 {payload['max_tokens']} token 预算被思维链占满"
+            f"（completion={usage.get('completion_tokens')}, "
+            f"reasoning={detail.get('reasoning_tokens')}），正式内容为空。"
+            f"请调大 max_tokens 或改用非思维链模型"
+        )
+    return content
 
 
 def _call_api_stream(messages: list):
@@ -205,14 +228,23 @@ def get_model() -> str:
     return _OLLAMA_MODEL
 
 
-def call_llm_text(messages: list, fmt: Optional[str] = None, retries: int = 3) -> str:
-    """统一的「非流式」调用，带重试。业务层用它即可。"""
+def call_llm_text(
+    messages: list,
+    fmt: Optional[str] = None,
+    retries: int = 3,
+    max_tokens: Optional[int] = None,
+) -> str:
+    """统一的「非流式」调用，带重试。业务层用它即可。
+
+    max_tokens 不传则用 API_MAX_TOKENS；需要长输出的任务可单独放宽
+    （思维链模型的思考过程同样占用这个预算）。
+    """
     last_error = None
     for attempt in range(retries):
         start = time.time()
         try:
             if get_backend() == "api":
-                content = _call_api_text(messages, fmt=fmt)
+                content = _call_api_text(messages, fmt=fmt, max_tokens=max_tokens)
             else:
                 content = _call_ollama_text(messages, fmt=fmt)
             elapsed = time.time() - start
@@ -227,9 +259,10 @@ def call_llm_text(messages: list, fmt: Optional[str] = None, retries: int = 3) -
         except Exception as e:
             last_error = e
             logger.warning(f"LLM调用失败(尝试{attempt + 1}/{retries}): {e}")
-            # key / 模型名这类配置错误重试没有意义，直接抛出
+            # key / 模型名这类配置错误重试没有意义，直接抛出；
+            # 被 max_tokens 截断同样重试无用——预算不变，再问一次还是会重蹈覆辙
             if isinstance(e, RuntimeError) and any(
-                tag in str(e) for tag in ("401", "403", "404")
+                tag in str(e) for tag in ("401", "403", "404", "被 max_tokens 截断")
             ):
                 break
             if attempt < retries - 1:
