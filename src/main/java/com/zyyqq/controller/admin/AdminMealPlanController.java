@@ -58,4 +58,11 @@ public class AdminMealPlanController {
         mealPlanService.reject(id, request == null ? null : request.getReason());
         return ApiResponse.success("已驳回", null);
     }
+
+    /** 管理员下架已上架的食谱 */
+    @PostMapping("/{id}/takedown")
+    public ApiResponse<Void> takeDown(@PathVariable Long id) {
+        mealPlanService.adminTakeDown(id);
+        return ApiResponse.success("已下架", null);
+    }
 }

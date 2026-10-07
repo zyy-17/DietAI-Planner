@@ -4,7 +4,7 @@
       <div class="welcome-text">
         <span class="greeting-icon">{{ greetingIcon }}</span>
         <div>
-          <h1>{{ greetingText }}，{{ userName }}，<br>今天也要好好吃饭！</h1>
+          <h1>{{ greetingText }}，{{ userName }}<br>今天也要好好吃饭！</h1>
           <p>合理膳食 · 科学营养 · 健康生活</p>
         </div>
       </div>

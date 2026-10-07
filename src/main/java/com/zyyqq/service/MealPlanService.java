@@ -680,6 +680,20 @@ public class MealPlanService {
         return planRepository.countByPublishStatus(MealPlan.PUBLISH_PENDING);
     }
 
+    /** 管理员强制下架已上架的食谱 */
+    @Transactional
+    public void adminTakeDown(Long planId) {
+        MealPlan plan = planRepository.findById(planId)
+                .orElseThrow(() -> new BusinessException("食谱不存在"));
+        if (!MealPlan.PUBLISH_APPROVED.equals(plan.getPublishStatus())) {
+            throw new BusinessException("只有已上架的食谱才能下架");
+        }
+        plan.setPublishStatus(MealPlan.PUBLISH_NONE);
+        plan.setPublishedAt(null);
+        planRepository.save(plan);
+        log.info("管理员下架食谱: planId={}", planId);
+    }
+
     // ══════════════════════════════════════════════════════════════
     //  单项替换
     // ══════════════════════════════════════════════════════════════
