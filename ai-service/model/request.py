@@ -56,3 +56,18 @@ class StructuredDietPlan(BaseModel):
     meal_plan: Optional[MealPlan] = None
     suggestions: Optional[List[str]] = []
     ai_plan: Optional[str] = None
+
+
+class FoodReplaceRequest(BaseModel):
+    """单项食物替换请求：让模型在候选里挑最合适的替代品。"""
+
+    user_id: int
+    food_name: str
+    amount: float = 0
+    reason: Optional[str] = None                # 用户不想吃的原因（可空）
+    goal: Optional[str] = "maintain"
+    meal_type: Optional[str] = None
+    meal_desc: Optional[str] = None             # 这一餐已有哪些食物（帮模型选搭配）
+    preferences: List[str] = []
+    dislikes: List[str] = []
+    candidates: List[str] = []

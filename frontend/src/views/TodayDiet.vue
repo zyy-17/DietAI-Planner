@@ -176,22 +176,88 @@
       </div>
     </section>
 
-    <el-dialog v-model="addDialogVisible" :title="`添加食物 - ${currentMealName}`" width="620px" top="6vh">
+    <el-dialog v-model="addDialogVisible" :title="`添加食物 - ${currentMealName}`" width="720px" top="6vh">
       <div class="multi-add-header">
         🔍 搜索并选择多种食物，一次性添加到{{ currentMealName }}
       </div>
       <el-input v-model="dialogSearchKeyword" placeholder="输入食物名称搜索，如：鸡蛋、牛奶、米饭..." @input="dialogSearchFood" clearable style="margin-bottom:12px" />
 
+      <div class="custom-toggle-row">
+        <el-button text type="primary" size="small" @click="toggleCustomForm">
+          {{ showCustomForm ? '收起自定义食物' : '＋ 找不到？添加自定义食物' }}
+        </el-button>
+        <span v-if="!showCustomForm" class="custom-tip">自己填写营养数据，仅你本人可见，不会进入公共食物库</span>
+      </div>
+
+      <div v-if="showCustomForm" class="custom-food-form">
+        <div class="custom-form-title">🙋 自定义食物 <small>仅自己可见</small></div>
+        <div class="custom-grid">
+          <label class="cf-field">
+            <span>食物名称</span>
+            <el-input v-model="customFood.foodName" placeholder="如：妈妈牌红烧肉" size="small" />
+          </label>
+          <label class="cf-field">
+            <span>分类（可选）</span>
+            <el-select v-model="customFood.categoryId" placeholder="默认归入「其他」" clearable size="small" style="width:100%">
+              <el-option v-for="cat in categories" :key="cat.id" :label="cat.name" :value="cat.id" />
+            </el-select>
+          </label>
+        </div>
+        <div class="custom-form-tip">以下为每 100g 的营养数值，可参考包装上的营养成分表</div>
+        <div class="custom-grid custom-grid-4">
+          <label class="cf-field">
+            <span>热量(kcal)</span>
+            <el-input-number v-model="customFood.calories" :min="0" :max="2000" :precision="1" size="small" controls-position="right" style="width:100%" />
+          </label>
+          <label class="cf-field">
+            <span>蛋白质(g)</span>
+            <el-input-number v-model="customFood.protein" :min="0" :max="200" :precision="1" size="small" controls-position="right" style="width:100%" />
+          </label>
+          <label class="cf-field">
+            <span>碳水(g)</span>
+            <el-input-number v-model="customFood.carbohydrate" :min="0" :max="200" :precision="1" size="small" controls-position="right" style="width:100%" />
+          </label>
+          <label class="cf-field">
+            <span>脂肪(g)</span>
+            <el-input-number v-model="customFood.fat" :min="0" :max="200" :precision="1" size="small" controls-position="right" style="width:100%" />
+          </label>
+        </div>
+        <div class="custom-grid">
+          <label class="cf-field">
+            <span>常用单位（可选）</span>
+            <el-select v-model="customFood.unitName" placeholder="如：个 / 份 / 盒" clearable filterable allow-create size="small" style="width:100%">
+              <el-option v-for="u in COMMON_UNIT_NAMES" :key="u" :label="u" :value="u" />
+            </el-select>
+          </label>
+          <div class="custom-preview">🔥 本次约摄入 <b>{{ customPreviewCal }}</b> kcal</div>
+        </div>
+        <div class="custom-amount-row">
+          <span class="cf-field-label">本次食用量</span>
+          <FoodQuantity :item="customFood" :calories="Number(customFood.calories) || 0" />
+        </div>
+        <div class="custom-form-tip">设置了常用单位后，以后记录这种食物就能直接按「个数 / 份数」填写，例如 1 个 ≈ 50g</div>
+        <div class="custom-form-footer">
+          <el-button size="small" @click="showCustomForm = false">取消</el-button>
+          <el-button size="small" type="primary" :loading="customSubmitting" @click="submitCustomFood">
+            添加并记录到{{ currentMealName }}
+          </el-button>
+        </div>
+      </div>
+
       <div class="food-select-list" v-if="dialogSearchResults.length">
-        <div v-for="f in dialogSearchResults" :key="f.id" class="food-select-item" :class="{ chosen: isChosen(f.id) }" @click="toggleFood(f)">
-          <div class="food-select-left">
-            <span class="check-box">{{ isChosen(f.id) ? '✅' : '⬜' }}</span>
-            <span class="food-select-name">{{ f.name }}</span>
-            <small class="food-select-cal">{{ f.calories }} kcal/100g</small>
+        <div v-for="f in dialogSearchResults" :key="f.key" class="food-select-item" :class="{ chosen: isChosen(f.key) }" @click="toggleFood(f)">
+          <div class="food-select-row">
+            <div class="food-select-left">
+              <span class="check-box">{{ isChosen(f.key) ? '✅' : '⬜' }}</span>
+              <span class="food-select-name">{{ f.name }}</span>
+              <el-tag v-if="f.custom" size="small" type="warning" effect="plain">自定义</el-tag>
+              <small class="food-select-cal">{{ f.calories }} kcal/100g</small>
+              <small v-if="f.unitName && f.unitWeight" class="food-select-unit">1{{ f.unitName }} ≈ {{ f.unitWeight }}g</small>
+            </div>
+            <small v-if="!isChosen(f.key)" class="food-select-hint">点击选择</small>
           </div>
-          <div v-if="isChosen(f.id)" class="food-select-amount" @click.stop>
-            <el-input-number v-model="getChosenItem(f.id).amount" :min="1" :max="5000" :step="10" size="small" style="width:120px" />
-            <small>g</small>
+          <div v-if="isChosen(f.key)" class="food-select-panel" @click.stop>
+            <FoodQuantity :item="getChosenItem(f.key)" :calories="Number(f.calories) || 0" />
           </div>
         </div>
       </div>
@@ -200,11 +266,11 @@
       <div v-if="chosenFoods.length" class="chosen-summary">
         <div class="chosen-title">已选择 {{ chosenFoods.length }} 种食物</div>
         <div class="chosen-preview">
-          <div v-for="c in chosenFoods" :key="c.foodId" class="chosen-item">
-            <span>{{ c.foodName }}</span>
-            <small>{{ c.amount }}g</small>
+          <div v-for="c in chosenFoods" :key="c.key" class="chosen-item">
+            <span>{{ c.foodName }}<em v-if="c.foodSource === 'user'" class="custom-flag">自定义</em></span>
+            <small>{{ formatPortion(c) }}</small>
             <em>{{ ((c.calories || 0) * c.amount / 100).toFixed(0) }} kcal</em>
-            <i @click="removeChosen(c.foodId)">✕</i>
+            <i @click="removeChosen(c.key)">✕</i>
           </div>
         </div>
         <div class="chosen-total">
@@ -285,6 +351,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../utils/api'
+import FoodQuantity from '../components/FoodQuantity.vue'
+import { resolveUnit, formatPortion, COMMON_UNIT_NAMES } from '../utils/foodUnits'
 
 const overview = ref({})
 const records = ref([])
@@ -298,6 +366,27 @@ const addForm = reactive({ foodId: null, amount: 100, mealType: 'breakfast' })
 const chosenFoods = ref([])
 const showTargetDialog = ref(false)
 const targetForm = reactive({ calories: 2000, protein: 65, carbohydrate: 250, fat: 55 })
+
+// 自定义食物（仅本人可见）
+const categories = ref([])
+const showCustomForm = ref(false)
+const customSubmitting = ref(false)
+const customFood = reactive({
+  foodName: '',
+  categoryId: null,
+  calories: 0,
+  protein: 0,
+  carbohydrate: 0,
+  fat: 0,
+  // 计量：mode=gram 按克数 / unit 按个数（份数）
+  mode: 'gram',
+  count: 1,
+  unitName: '',
+  unitWeight: 100,
+  amount: 100
+})
+
+const customPreviewCal = computed(() => ((customFood.calories || 0) * (customFood.amount || 0) / 100).toFixed(1))
 
 const meals = [
   { type: 'breakfast', name: '早餐', icon: '🍳', time: '07:00 - 09:00' },
@@ -419,9 +508,13 @@ async function loadData() {
     computeFrequentFoods()
   } catch (e) {}
   try {
-    allFoods.value = await api.get('/foods/all')
+    const foods = await api.get('/foods/all')
+    allFoods.value = (foods || []).map(toPickerItem)
     dialogSearchResults.value = allFoods.value
   } catch (e) {}
+  if (categories.value.length === 0) {
+    try { categories.value = await api.get('/categories') } catch (e) {}
+  }
 }
 
 function computeFrequentFoods() {
@@ -443,7 +536,58 @@ function openAddDialog(mealType) {
   dialogSearchKeyword.value = ''
   dialogSearchResults.value = allFoods.value
   chosenFoods.value = []
+  showCustomForm.value = false
+  resetCustomFood()
   addDialogVisible.value = true
+}
+
+function toggleCustomForm() {
+  showCustomForm.value = !showCustomForm.value
+}
+
+function resetCustomFood() {
+  customFood.foodName = ''
+  customFood.categoryId = null
+  customFood.calories = 0
+  customFood.protein = 0
+  customFood.carbohydrate = 0
+  customFood.fat = 0
+  customFood.mode = 'gram'
+  customFood.count = 1
+  customFood.unitName = ''
+  customFood.unitWeight = 100
+  customFood.amount = 100
+}
+
+/** 提交自定义食物：创建仅本人可见的私有食物并直接计入当前餐次 */
+async function submitCustomFood() {
+  const foodName = (customFood.foodName || '').trim()
+  if (!foodName) return ElMessage.warning('请填写食物名称')
+  if (customFood.calories === null || customFood.calories === undefined) return ElMessage.warning('请填写每100g热量')
+  customSubmitting.value = true
+  try {
+    await api.post('/diet/today/add-custom', {
+      foodName,
+      categoryId: customFood.categoryId || null,
+      calories: customFood.calories,
+      protein: customFood.protein,
+      carbohydrate: customFood.carbohydrate,
+      fat: customFood.fat,
+      amount: customFood.amount,
+      unitName: customFood.unitName || null,
+      unitWeight: customFood.unitName ? customFood.unitWeight : null,
+      mealType: addForm.mealType
+    })
+    ElMessage.success(`已添加自定义食物「${foodName}」到${currentMealName.value}`)
+    showCustomForm.value = false
+    resetCustomFood()
+    addDialogVisible.value = false
+    await loadData()
+  } catch (e) {
+    ElMessage.error('添加失败，请重试')
+  } finally {
+    customSubmitting.value = false
+  }
 }
 
 async function searchFood() {
@@ -465,37 +609,53 @@ function selectFood(food) {
   dialogSearchKeyword.value = ''
   dialogSearchResults.value = allFoods.value
   chosenFoods.value = []
+  showCustomForm.value = false
+  resetCustomFood()
   toggleFood(food)
   addDialogVisible.value = true
 }
 
-function isChosen(foodId) {
-  return chosenFoods.value.some(c => c.foodId === foodId)
+function isChosen(key) {
+  return chosenFoods.value.some(c => c.key === key)
 }
 
-function getChosenItem(foodId) {
-  return chosenFoods.value.find(c => c.foodId === foodId)
+function getChosenItem(key) {
+  return chosenFoods.value.find(c => c.key === key)
+}
+
+/** 统一食物选择项：系统食物与自定义食物分属两张表、ID 会重复，用 key 区分；同时补上计量单位 */
+function toPickerItem(f) {
+  const source = f.foodSource || (f.custom ? 'user' : 'system')
+  const { unitName, unitWeight } = resolveUnit(f)
+  return { ...f, foodSource: source, unitName, unitWeight, key: f.key || (source === 'user' ? 'u' : 's') + f.id }
 }
 
 function toggleFood(food) {
-  const idx = chosenFoods.value.findIndex(c => c.foodId === food.id)
+  const item = toPickerItem(food)
+  const idx = chosenFoods.value.findIndex(c => c.key === item.key)
   if (idx >= 0) {
     chosenFoods.value.splice(idx, 1)
   } else {
     chosenFoods.value.push({
-      foodId: food.id,
-      foodName: food.name,
+      key: item.key,
+      foodId: item.id,
+      foodSource: item.foodSource,
+      foodName: item.name,
+      mode: 'gram',
+      count: 1,
+      unitName: item.unitName || '',
+      unitWeight: item.unitWeight || 100,
       amount: 100,
-      calories: food.calories || 0,
-      protein: food.protein || 0,
-      carbohydrate: food.carbohydrate || 0,
-      fat: food.fat || 0
+      calories: item.calories || 0,
+      protein: item.protein || 0,
+      carbohydrate: item.carbohydrate || 0,
+      fat: item.fat || 0
     })
   }
 }
 
-function removeChosen(foodId) {
-  const idx = chosenFoods.value.findIndex(c => c.foodId === foodId)
+function removeChosen(key) {
+  const idx = chosenFoods.value.findIndex(c => c.key === key)
   if (idx >= 0) chosenFoods.value.splice(idx, 1)
 }
 
@@ -509,6 +669,7 @@ async function addDietRecords() {
   try {
     const payload = chosenFoods.value.map(c => ({
       foodId: c.foodId,
+      foodSource: c.foodSource,
       amount: c.amount,
       mealType: addForm.mealType
     }))
@@ -682,16 +843,34 @@ h1 { font-size: 26px; line-height: 1.25; margin: 0; color: #153d67; }
 }
 
 .multi-add-header { font-size: 13px; color: #55738d; margin-bottom: 12px; padding: 8px 12px; background: #f0f7ff; border-radius: 8px; }
-.food-select-list { max-height: 280px; overflow-y: auto; border: 1px solid #eef2f6; border-radius: 8px; }
-.food-select-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f5f7fa; transition: background 0.15s; }
+.custom-toggle-row { display: flex; align-items: center; gap: 10px; margin: -4px 0 10px; }
+.custom-tip { font-size: 12px; color: #8ea1af; }
+.custom-food-form { border: 1px dashed #a9d5fb; background: #f8fbff; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+.custom-form-title { font-size: 13px; font-weight: 600; color: #2589ee; margin-bottom: 12px; }
+.custom-form-title small { font-weight: normal; color: #8ea1af; margin-left: 6px; }
+.custom-form-tip { font-size: 12px; color: #8ea1af; margin-bottom: 8px; }
+.custom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 10px; align-items: end; }
+.custom-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.cf-field { display: flex; flex-direction: column; gap: 4px; }
+.cf-field > span { font-size: 12px; color: #55738d; }
+.custom-preview { font-size: 12px; color: #8499a8; padding-bottom: 6px; }
+.custom-preview b { color: #e6a23c; font-size: 16px; margin: 0 3px; }
+.custom-form-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.food-select-list { max-height: 320px; overflow-y: auto; border: 1px solid #eef2f6; border-radius: 8px; }
+.food-select-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f5f7fa; transition: background 0.15s; }
 .food-select-item:hover { background: #f5f9ff; }
-.food-select-item.chosen { background: #eef7ff; }
-.food-select-left { display: flex; align-items: center; gap: 8px; }
+.food-select-item.chosen { background: #eef7ff; cursor: default; }
+.food-select-row { display: flex; align-items: center; justify-content: space-between; }
+.food-select-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.food-select-hint { font-size: 11px; color: #b3c2cc; white-space: nowrap; }
 .check-box { font-size: 16px; }
 .food-select-name { font-size: 14px; color: #244b6b; }
 .food-select-cal { font-size: 12px; color: #8ea1af; margin-left: 6px; }
-.food-select-amount { display: flex; align-items: center; gap: 4px; }
-.food-select-amount small { color: #8ea1af; }
+.food-select-unit { font-size: 12px; color: #4aa86d; background: #eefaf2; border-radius: 8px; padding: 1px 7px; }
+.food-select-panel { margin-top: 8px; }
+.custom-amount-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.custom-amount-row .cf-field-label { font-size: 12px; color: #55738d; padding-top: 9px; white-space: nowrap; }
+.custom-amount-row :deep(.fq) { flex: 1; }
 .chosen-summary { margin-top: 14px; border: 1px solid #d9eafa; border-radius: 10px; padding: 12px; background: #f8fbff; }
 .chosen-title { font-size: 13px; font-weight: 600; color: #2589ee; margin-bottom: 8px; }
 .chosen-preview { max-height: 140px; overflow-y: auto; }
@@ -699,6 +878,7 @@ h1 { font-size: 26px; line-height: 1.25; margin: 0; color: #153d67; }
 .chosen-item span { flex: 1; color: #244b6b; }
 .chosen-item small { color: #8499a8; }
 .chosen-item em { color: #e6a23c; font-style: normal; }
+.chosen-item em.custom-flag { color: #d48806; background: #fff5e6; border-radius: 4px; padding: 0 4px; font-size: 11px; margin-left: 6px; }
 .chosen-item i { color: #c0c4cc; cursor: pointer; font-style: normal; }
 .chosen-item i:hover { color: #f56c6c; }
 .chosen-total { margin-top: 8px; font-size: 12px; color: #55738d; padding-top: 8px; border-top: 1px solid #eef2f6; }

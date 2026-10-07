@@ -55,7 +55,9 @@ CREATE TABLE IF NOT EXISTS `food_category` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='食品分类表';
 
 -- ============================================================
--- 3. 食物表 (food)
+-- 3. 食物表 (food) —— 公共食物库
+-- 只存放系统食物（source='system'），由管理员维护。
+-- 用户自己填写的自定义食物不写入本表，见 user_custom_food 表。
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `food` (
     `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
@@ -67,6 +69,8 @@ CREATE TABLE IF NOT EXISTS `food` (
     `fat`           DECIMAL(8,2)  DEFAULT NULL COMMENT '脂肪(g/100g)',
     `fiber`         DECIMAL(8,2)  DEFAULT NULL COMMENT '膳食纤维(g/100g)',
     `image_url`     VARCHAR(255)  DEFAULT NULL COMMENT '食物图片',
+    `unit_name`     VARCHAR(20)   DEFAULT NULL COMMENT '常用计量单位名称，如 个/份/盒（为空表示只能按克数记录）',
+    `unit_weight`   DECIMAL(8,2)  DEFAULT NULL COMMENT '每个/每份约多少克，配合 unit_name 做按个数换算',
     `source`        VARCHAR(20)   NOT NULL DEFAULT 'system' COMMENT '来源：system/user',
     `status`        VARCHAR(20)   NOT NULL DEFAULT 'approved' COMMENT 'pending/approved/rejected',
     `created_by`    BIGINT        DEFAULT NULL COMMENT '提交用户ID',
@@ -84,7 +88,8 @@ CREATE TABLE IF NOT EXISTS `food` (
 CREATE TABLE IF NOT EXISTS `diet_record` (
     `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
     `user_id`       BIGINT        NOT NULL COMMENT '用户ID',
-    `food_id`       BIGINT        NOT NULL COMMENT '食物ID',
+    `food_id`       BIGINT        NOT NULL COMMENT '食物ID：food_source=system 时指向 food.id，=user 时指向 user_custom_food.id',
+    `food_source`   VARCHAR(20)   NOT NULL DEFAULT 'system' COMMENT '食物来源：system公共食物库/user用户自定义食物',
     `meal_type`     VARCHAR(20)   NOT NULL COMMENT 'breakfast/lunch/dinner/snack',
     `amount`        DECIMAL(8,2)  NOT NULL COMMENT '食用份量(克)',
     `calories`      DECIMAL(8,2)  NOT NULL COMMENT '本条记录热量',
@@ -97,6 +102,31 @@ CREATE TABLE IF NOT EXISTS `diet_record` (
     KEY `idx_user_date` (`user_id`, `record_date`),
     KEY `idx_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='饮食记录表';
+
+-- ============================================================
+-- 4.1 用户自定义食物表 (user_custom_food)
+-- 与公共食物库（food 表）物理隔离：用户自己填写的食物只存在这里，
+-- 仅创建者本人可见可用，不会出现在食物库、食物搜索与食物推荐中。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `user_custom_food` (
+    `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`       BIGINT        NOT NULL COMMENT '所属用户ID',
+    `name`          VARCHAR(100)  NOT NULL COMMENT '食物名称',
+    `category_id`   BIGINT        NOT NULL COMMENT '关联分类ID',
+    `calories`      DECIMAL(8,2)  NOT NULL COMMENT '热量(kcal/100g)',
+    `protein`       DECIMAL(8,2)  DEFAULT NULL COMMENT '蛋白质(g/100g)',
+    `carbohydrate`  DECIMAL(8,2)  DEFAULT NULL COMMENT '碳水(g/100g)',
+    `fat`           DECIMAL(8,2)  DEFAULT NULL COMMENT '脂肪(g/100g)',
+    `fiber`         DECIMAL(8,2)  DEFAULT NULL COMMENT '膳食纤维(g/100g)',
+    `unit_name`     VARCHAR(20)   DEFAULT NULL COMMENT '常用计量单位名称，如 个/份（为空表示只能按克数记录）',
+    `unit_weight`   DECIMAL(8,2)  DEFAULT NULL COMMENT '每个/每份约多少克',
+    `created_at`    DATETIME      NOT NULL COMMENT '创建时间',
+    `updated_at`    DATETIME      NOT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_user` (`user_id`),
+    KEY `idx_user_name` (`user_id`, `name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户自定义食物表（私有，不进公共食物库）';
+
 
 -- ============================================================
 -- 5. AI对话会话表 (ai_chat_session)

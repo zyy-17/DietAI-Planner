@@ -24,5 +24,14 @@ public class UpdateProfileRequest {
 
     private String dietPreference;
 
+    /** 忌口食物，多个以「、」分隔 */
+    private String allergyNote;
+
+    /** 慢性疾病，多个以「、」分隔 */
+    private String disease;
+
+    /** 用药情况，自由文本 */
+    private String medication;
+
     private String avatarUrl;
 }

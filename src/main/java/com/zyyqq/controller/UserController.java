@@ -45,48 +45,14 @@ public class UserController {
     @GetMapping("/profile")
     public ApiResponse<UserProfileVO> getProfile(Authentication authentication) {
         Long userId = getUserId(authentication);
-        User user = userService.getUserById(userId);
-        UserProfileVO vo = UserProfileVO.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .realName(user.getRealName())
-                .gender(user.getGender())
-                .birthDate(user.getBirthDate())
-                .height(user.getHeight())
-                .weight(user.getWeight())
-                .activityLevel(user.getActivityLevel())
-                .dietGoal(user.getDietGoal())
-                .dietPreference(user.getDietPreference())
-                .avatarUrl(user.getAvatarUrl())
-                .role(user.getRole())
-                .createdAt(user.getCreatedAt())
-                .build();
-        return ApiResponse.success(vo);
+        return ApiResponse.success(toProfileVO(userService.getUserById(userId)));
     }
 
     @PutMapping("/profile")
     public ApiResponse<UserProfileVO> updateProfile(Authentication authentication,
                                                     @RequestBody UpdateProfileRequest request) {
         Long userId = getUserId(authentication);
-        User user = userService.updateProfile(userId, request);
-        UserProfileVO vo = UserProfileVO.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .realName(user.getRealName())
-                .gender(user.getGender())
-                .birthDate(user.getBirthDate())
-                .height(user.getHeight())
-                .weight(user.getWeight())
-                .activityLevel(user.getActivityLevel())
-                .dietGoal(user.getDietGoal())
-                .dietPreference(user.getDietPreference())
-                .avatarUrl(user.getAvatarUrl())
-                .role(user.getRole())
-                .createdAt(user.getCreatedAt())
-                .build();
-        return ApiResponse.success(vo);
+        return ApiResponse.success(toProfileVO(userService.updateProfile(userId, request)));
     }
 
     @PostMapping("/avatar")
@@ -170,5 +136,28 @@ public class UserController {
     /** 从认证信息中提取用户ID */
     private Long getUserId(Authentication authentication) {
         return (Long) authentication.getPrincipal();
+    }
+
+    /** User → VO 的统一转换，避免查询与更新两处各写一遍而漏字段 */
+    private UserProfileVO toProfileVO(User user) {
+        return UserProfileVO.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .realName(user.getRealName())
+                .gender(user.getGender())
+                .birthDate(user.getBirthDate())
+                .height(user.getHeight())
+                .weight(user.getWeight())
+                .activityLevel(user.getActivityLevel())
+                .dietGoal(user.getDietGoal())
+                .dietPreference(user.getDietPreference())
+                .allergyNote(user.getAllergyNote())
+                .disease(user.getDisease())
+                .medication(user.getMedication())
+                .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole())
+                .createdAt(user.getCreatedAt())
+                .build();
     }
 }

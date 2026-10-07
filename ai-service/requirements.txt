@@ -1,4 +1,6 @@
 fastapi>=0.135.0
 uvicorn>=0.30.6
 pydantic>=2.12.0
+httpx>=0.27.0
+# 仅在 LLM_BACKEND=ollama 或 auto 且未配置 API_KEY 时需要
 ollama

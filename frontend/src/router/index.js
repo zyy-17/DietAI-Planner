@@ -90,6 +90,12 @@ const routes = [
         meta: { title: '营养趋势', mode: 'trend' }
       },
       {
+        path: 'nutrition/body-metrics',
+        name: 'BodyMetrics',
+        component: () => import('../views/BodyMetrics.vue'),
+        meta: { title: '体重体脂' }
+      },
+      {
         path: 'nutrition/nutrients',
         name: 'NutritionNutrients',
         component: () => import('../views/NutritionAnalysis.vue'),
@@ -117,37 +123,31 @@ const routes = [
         path: 'chat',
         name: 'AiChat',
         component: () => import('../views/AiChat.vue'),
-        meta: { title: '新建对话' }
+        meta: { title: 'AI饮食助手' }
       },
       {
-        path: 'chat/diet-plan',
-        name: 'AiDietPlan',
-        component: () => import('../views/AiChat.vue'),
-        meta: { title: '膳食规划', preset: 'diet-plan' }
-      },
-      {
-        path: 'chat/fat-loss',
-        name: 'AiFatLoss',
-        component: () => import('../views/AiChat.vue'),
-        meta: { title: '减脂方案', preset: 'fat-loss' }
-      },
-      {
-        path: 'chat/muscle-gain',
-        name: 'AiMuscleGain',
-        component: () => import('../views/AiChat.vue'),
-        meta: { title: '增肌方案', preset: 'muscle-gain' }
-      },
-      {
-        path: 'chat/consult',
-        name: 'AiConsult',
-        component: () => import('../views/AiChat.vue'),
-        meta: { title: '饮食咨询', preset: 'consult' }
+        // 旧的预设方案入口已下线，统一跳转到 AI 饮食助手
+        path: 'chat/:legacy(diet-plan|fat-loss|muscle-gain|consult)',
+        redirect: '/chat'
       },
       {
         path: 'chat/history',
         name: 'AiHistory',
         component: () => import('../views/AiChatHistory.vue'),
         meta: { title: '历史对话' }
+      },
+      {
+        // 食谱：主页面负责「我的食谱」（自己写 + 正在执行），广场在同级路由
+        path: 'meal-plan',
+        name: 'MealPlan',
+        component: () => import('../views/MealPlan.vue'),
+        meta: { title: '食谱' }
+      },
+      {
+        path: 'meal-plan/square',
+        name: 'MealPlanSquare',
+        component: () => import('../views/MealPlan.vue'),
+        meta: { title: '食谱广场' }
       },
       {
         path: 'foods',
@@ -166,12 +166,6 @@ const routes = [
         name: 'FoodCategories',
         component: () => import('../views/FoodLibrary.vue'),
         meta: { title: '食物分类', mode: 'categories' }
-      },
-      {
-        path: 'foods/add',
-        name: 'FoodAdd',
-        component: () => import('../views/FoodLibrary.vue'),
-        meta: { title: '添加食物', mode: 'add' }
       },
       {
         path: 'profile',
@@ -244,8 +238,14 @@ const routes = [
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
-    redirect: '/admin/users',
+    redirect: '/admin/dashboard',
     children: [
+      {
+        path: 'dashboard',
+        name: 'AdminDashboard',
+        component: () => import('../views/admin/Dashboard.vue'),
+        meta: { title: '数据看板' }
+      },
       {
         path: 'users',
         name: 'AdminUsers',
@@ -263,6 +263,30 @@ const routes = [
         name: 'AdminCategories',
         component: () => import('../views/admin/Categories.vue'),
         meta: { title: '分类管理' }
+      },
+      {
+        path: 'diet-records',
+        name: 'AdminDietRecords',
+        component: () => import('../views/admin/DietRecords.vue'),
+        meta: { title: '饮食记录' }
+      },
+      {
+        path: 'nutrition-standards',
+        name: 'AdminNutritionStandards',
+        component: () => import('../views/admin/NutritionStandards.vue'),
+        meta: { title: '营养标准' }
+      },
+      {
+        path: 'profile-options',
+        name: 'AdminProfileOptions',
+        component: () => import('../views/admin/ProfileOptions.vue'),
+        meta: { title: '档案选项' }
+      },
+      {
+        path: 'meal-plans',
+        name: 'AdminMealPlans',
+        component: () => import('../views/admin/MealPlans.vue'),
+        meta: { title: '食谱审核' }
       },
       {
         path: 'ai-logs',
@@ -283,9 +307,14 @@ router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) {
     next('/login')
-  } else {
-    next()
+    return
   }
+  // 管理后台需要 admin 角色
+  if (to.path.startsWith('/admin') && localStorage.getItem('role') !== 'admin') {
+    next('/')
+    return
+  }
+  next()
 })
 
 export default router

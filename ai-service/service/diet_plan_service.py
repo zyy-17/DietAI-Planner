@@ -2,7 +2,7 @@ import json
 import re
 import logging
 from typing import Optional, List
-from service.llm_service import call_ollama_text, get_model
+from service.llm_service import call_llm_text, get_model
 from prompt.system_prompt import DIET_PLAN_PROMPT_TEMPLATE, STRUCTURED_DIET_PLAN_PROMPT
 from model.request import DietPlanRequest, StructuredDietPlan
 from config.settings import MAX_RETRIES
@@ -64,7 +64,7 @@ def generate_diet_plan(request: DietPlanRequest) -> dict:
 
         if get_model() != "none":
             try:
-                ai_plan = call_ollama_text([{"role": "user", "content": prompt}])
+                ai_plan = call_llm_text([{"role": "user", "content": prompt}])
                 plan["ai_plan"] = ai_plan
             except Exception as e:
                 logger.error(f"膳食规划AI生成失败: {e}")
@@ -103,9 +103,9 @@ def generate_structured_suggestion(remaining_calories: float, protein_gap: float
     for attempt in range(MAX_RETRIES + 1):
         try:
             if attempt < 3 and use_json_mode:
-                raw = call_ollama_text([{"role": "user", "content": prompt}], fmt="json")
+                raw = call_llm_text([{"role": "user", "content": prompt}], fmt="json")
             else:
-                raw = call_ollama_text([{"role": "user", "content": prompt}])
+                raw = call_llm_text([{"role": "user", "content": prompt}])
 
             if not raw or not raw.strip():
                 logger.warning(f"AI返回空响应(尝试{attempt + 1})")

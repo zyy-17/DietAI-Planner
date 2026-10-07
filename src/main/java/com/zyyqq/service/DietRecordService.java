@@ -1,11 +1,12 @@
 package com.zyyqq.service;
 
+import com.zyyqq.dto.request.AddCustomDietRecordRequest;
 import com.zyyqq.dto.request.AddDietRecordRequest;
 import com.zyyqq.dto.response.TodayDietOverviewResponse;
 import com.zyyqq.entity.DietRecord;
 import com.zyyqq.entity.Food;
 import com.zyyqq.entity.User;
-import com.zyyqq.exception.BusinessException;
+import com.zyyqq.entity.UserCustomFood;
 import com.zyyqq.repository.DietRecordRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -23,74 +25,99 @@ import java.util.Map;
 @Slf4j
 public class DietRecordService {
 
+    private static final BigDecimal HUNDRED = new BigDecimal("100");
+
+    /** 食物来源：公共食物库 */
+    private static final String SOURCE_SYSTEM = "system";
+    /** 食物来源：用户自定义食物 */
+    private static final String SOURCE_USER = "user";
+
     private final DietRecordRepository dietRecordRepository;
     private final FoodService foodService;
+    private final UserCustomFoodService userCustomFoodService;
     private final UserService userService;
 
     @Transactional
     public DietRecord addDietRecord(Long userId, AddDietRecordRequest request) {
+        if (isCustom(request.getFoodSource())) {
+            // 自定义食物：校验归属后直接从 user_custom_food 取数
+            UserCustomFood custom = userCustomFoodService.getOwned(request.getFoodId(), userId);
+            return saveRecord(userId, custom.getId(), SOURCE_USER, custom.getName(),
+                    custom.getCalories(), custom.getProtein(), custom.getCarbohydrate(), custom.getFat(),
+                    request.getMealType(), request.getAmount());
+        }
         Food food = foodService.getFoodById(request.getFoodId());
-
-        BigDecimal ratio = request.getAmount().divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
-
-        BigDecimal calories = food.getCalories().multiply(ratio).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal protein = food.getProtein() != null ? food.getProtein().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-        BigDecimal carbohydrate = food.getCarbohydrate() != null ? food.getCarbohydrate().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-        BigDecimal fat = food.getFat() != null ? food.getFat().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-
-        DietRecord record = DietRecord.builder()
-                .userId(userId)
-                .foodId(request.getFoodId())
-                .mealType(request.getMealType())
-                .amount(request.getAmount())
-                .calories(calories)
-                .protein(protein)
-                .carbohydrate(carbohydrate)
-                .fat(fat)
-                .recordDate(LocalDate.now())
-                .build();
-
-        record = dietRecordRepository.save(record);
-        record.setFoodName(food.getName());
-        return record;
+        return saveRecord(userId, food.getId(), SOURCE_SYSTEM, food.getName(),
+                food.getCalories(), food.getProtein(), food.getCarbohydrate(), food.getFat(),
+                request.getMealType(), request.getAmount());
     }
 
     @Transactional
     public List<DietRecord> addDietRecordBatch(Long userId, List<AddDietRecordRequest> requests) {
-        List<Long> foodIds = requests.stream().map(AddDietRecordRequest::getFoodId).distinct().toList();
-        Map<Long, Food> foodMap = new java.util.HashMap<>();
-        for (Long foodId : foodIds) {
-            foodMap.put(foodId, foodService.getFoodById(foodId));
-        }
-
-        List<DietRecord> results = new java.util.ArrayList<>();
+        List<DietRecord> results = new ArrayList<>();
         for (AddDietRecordRequest request : requests) {
-            Food food = foodMap.get(request.getFoodId());
-            if (food == null) continue;
-
-            BigDecimal ratio = request.getAmount().divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
-            BigDecimal calories = food.getCalories().multiply(ratio).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal protein = food.getProtein() != null ? food.getProtein().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-            BigDecimal carbohydrate = food.getCarbohydrate() != null ? food.getCarbohydrate().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-            BigDecimal fat = food.getFat() != null ? food.getFat().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-
-            DietRecord record = DietRecord.builder()
-                    .userId(userId)
-                    .foodId(request.getFoodId())
-                    .mealType(request.getMealType())
-                    .amount(request.getAmount())
-                    .calories(calories)
-                    .protein(protein)
-                    .carbohydrate(carbohydrate)
-                    .fat(fat)
-                    .recordDate(LocalDate.now())
-                    .build();
-            record = dietRecordRepository.save(record);
-            record.setFoodName(food.getName());
-            results.add(record);
+            results.add(addDietRecord(userId, request));
         }
         log.info("批量添加饮食记录: userId={}, count={}", userId, results.size());
         return results;
+    }
+
+    /**
+     * 记录饮食时添加自定义食物：写入用户的私有自定义食物表并计入当前餐次。
+     * 该食物不会进入公共食物库（food 表），其他用户无法看到。
+     */
+    @Transactional
+    public DietRecord addCustomDietRecord(Long userId, AddCustomDietRecordRequest request) {
+        UserCustomFood custom = userCustomFoodService.findOrCreate(
+                userId,
+                request.getFoodName(),
+                request.getCategoryId(),
+                request.getCalories(),
+                request.getProtein(),
+                request.getCarbohydrate(),
+                request.getFat(),
+                request.getFiber(),
+                request.getUnitName(),
+                request.getUnitWeight());
+        DietRecord record = saveRecord(userId, custom.getId(), SOURCE_USER, custom.getName(),
+                custom.getCalories(), custom.getProtein(), custom.getCarbohydrate(), custom.getFat(),
+                request.getMealType(), request.getAmount());
+        log.info("添加自定义食物并记录饮食: userId={}, foodName={}, mealType={}",
+                userId, custom.getName(), request.getMealType());
+        return record;
+    }
+
+    /** 按每 100g 营养值换算实际份量并保存饮食记录 */
+    private DietRecord saveRecord(Long userId, Long foodId, String foodSource, String foodName,
+                                  BigDecimal caloriesPer100, BigDecimal proteinPer100,
+                                  BigDecimal carbohydratePer100, BigDecimal fatPer100,
+                                  String mealType, BigDecimal amount) {
+        BigDecimal ratio = amount.divide(HUNDRED, 4, RoundingMode.HALF_UP);
+
+        DietRecord record = DietRecord.builder()
+                .userId(userId)
+                .foodId(foodId)
+                .foodSource(foodSource)
+                .mealType(mealType)
+                .amount(amount)
+                .calories(scaleByAmount(caloriesPer100, ratio))
+                .protein(scaleByAmount(proteinPer100, ratio))
+                .carbohydrate(scaleByAmount(carbohydratePer100, ratio))
+                .fat(scaleByAmount(fatPer100, ratio))
+                .recordDate(LocalDate.now())
+                .build();
+
+        DietRecord saved = dietRecordRepository.save(record);
+        saved.setFoodName(foodName);
+        return saved;
+    }
+
+    private BigDecimal scaleByAmount(BigDecimal per100, BigDecimal ratio) {
+        return per100 != null ? per100.multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+    }
+
+    private boolean isCustom(String foodSource) {
+        return SOURCE_USER.equals(foodSource);
     }
 
     public List<DietRecord> getTodayRecords(Long userId) {
@@ -167,12 +194,29 @@ public class DietRecordService {
         return dietRecordRepository.sumCaloriesByUserId(userId);
     }
 
+    /**
+     * 填充食物名称。
+     * 系统食物与自定义食物分属两张表、ID 各自独立，必须按 food_source 分别查询。
+     */
     private void enrichFoodNames(List<DietRecord> records) {
-        if (records.isEmpty()) return;
-        List<Long> foodIds = records.stream().map(DietRecord::getFoodId).distinct().toList();
-        Map<Long, String> foodNameMap = foodService.getFoodNamesByIds(foodIds);
+        if (records.isEmpty()) {
+            return;
+        }
+        List<Long> systemIds = new ArrayList<>();
+        List<Long> customIds = new ArrayList<>();
         for (DietRecord record : records) {
-            record.setFoodName(foodNameMap.getOrDefault(record.getFoodId(), "未知食物"));
+            if (isCustom(record.getFoodSource())) {
+                customIds.add(record.getFoodId());
+            } else {
+                systemIds.add(record.getFoodId());
+            }
+        }
+        Map<Long, String> systemNames = foodService.getFoodNamesByIds(systemIds.stream().distinct().toList());
+        Map<Long, String> customNames = userCustomFoodService.getNamesByIds(customIds.stream().distinct().toList());
+
+        for (DietRecord record : records) {
+            Map<Long, String> names = isCustom(record.getFoodSource()) ? customNames : systemNames;
+            record.setFoodName(names.getOrDefault(record.getFoodId(), "未知食物"));
         }
     }
 
@@ -203,26 +247,9 @@ public class DietRecordService {
                 continue;
             }
 
-            BigDecimal ratio = amount.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
-            BigDecimal calories = food.getCalories().multiply(ratio).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal protein = food.getProtein() != null ? food.getProtein().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-            BigDecimal carbohydrate = food.getCarbohydrate() != null ? food.getCarbohydrate().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-            BigDecimal fat = food.getFat() != null ? food.getFat().multiply(ratio).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-
-            DietRecord record = DietRecord.builder()
-                    .userId(userId)
-                    .foodId(food.getId())
-                    .mealType(mealType)
-                    .amount(amount)
-                    .calories(calories)
-                    .protein(protein)
-                    .carbohydrate(carbohydrate)
-                    .fat(fat)
-                    .recordDate(LocalDate.now())
-                    .build();
-            record = dietRecordRepository.save(record);
-            record.setFoodName(food.getName());
-            results.add(record);
+            results.add(saveRecord(userId, food.getId(), SOURCE_SYSTEM, food.getName(),
+                    food.getCalories(), food.getProtein(), food.getCarbohydrate(), food.getFat(),
+                    mealType, amount));
         }
         log.info("AI建议应用饮食记录: userId={}, mealType={}, count={}", userId, mealType, results.size());
         return results;

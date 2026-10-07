@@ -27,4 +27,10 @@ public class AddFoodRequest {
     private BigDecimal fiber;
 
     private String imageUrl;
+
+    /** 常用计量单位名称，如 个/份/盒/片（可选） */
+    private String unitName;
+
+    /** 每个/每份约多少克（可选，配合 unitName 使用） */
+    private BigDecimal unitWeight;
 }

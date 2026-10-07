@@ -30,7 +30,7 @@ DietAI-Planner 是一个面向个人用户的 **AI 驱动饮食健康管理平�
 
 - 📊 **记录每日饮食**：早餐 / 午餐 / 晚餐 / 加餐，支持一次添加多种食物
 - 🎯 **自定义营养目标**：热量、蛋白质、碳水、脂肪四项目标自由设定，修改即时同步
-- 🤖 **AI 膳食建议**：基于 Ollama 本地大模型，结合用户画像生成个性化建议，4种套餐方案一键切换
+- 🤖 **AI 膳食建议**：支持 **云端大模型 API**（豆包/DeepSeek/通义/Kimi 等，填个 key 就能用）与 **本机 Ollama** 双后端，结合用户画像生成个性化建议，4种套餐方案一键切换
 - 📈 **营养分析**：今日营养、趋势图、营养素分析、热量分析、目标完成度、营养报告，六大维度差异化展示
 - 🧬 **智能营养评估**：BMI/BMR/TDEE自动计算 + 营养评分 + 状态判定 + 改进建议
 - 🍱 **食物库管理**：内置 30+ 常见食物，支持搜索、分类、用户添加，点击食物直接添加到今日饮食
@@ -91,7 +91,9 @@ DietAI-Planner 是一个面向个人用户的 **AI 驱动饮食健康管理平�
 | FastAPI | 0.115.0 | 高性能 Web 框架 |
 | Uvicorn | 0.30.6 | ASGI 服务器 |
 | Pydantic | 2.9.2 | 数据校验 |
-| Ollama | — | 本地大模型推理（默认 qwen2.5-coder:7b） |
+| HTTPX | 0.28+ | 调用云端大模型 API（OpenAI 兼容） |
+| 云端 API | — | **默认推荐**，任选一家 OpenAI 兼容接口（豆包/DeepSeek/通义/Kimi） |
+| Ollama | — | 可选后端，本地大模型推理（默认 qwen2.5:3b） |
 
 ---
 
@@ -123,13 +125,19 @@ DietAI-Planner 是一个面向个人用户的 **AI 驱动饮食健康管理平�
    ├─ 🎯 目标完成度      四项环形进度条 + 综合完成度 + 改进建议
    └─ 📄 营养报告        综合评分 + 各项评价 + 关键发现 + 改善建议 + 供能比例
 
-🤖 AI对话
-   ├─ 💬 新建对话        自由对话
-   ├─ 🥗 膳食规划        预设：膳食规划
-   ├─ 🔥 减脂方案        预设：减脂方案
-   ├─ 💪 增肌方案        预设：增肌方案
-   ├─ 🍎 饮食咨询        预设：饮食咨询
-   └─ 🕘 历史对话        查看历史会话
+🤖 AI饮食助手（页面自带三栏，不显示外层左侧导航）
+   ├─ 第一栏 会话列表     新建对话 + 历史会话（标题由 AI 自动概括，如「晚餐推荐」）
+   ├─ 第二栏 对话区       首次进入自动欢迎语 + 4 个引导问题；底部常驻快捷操作
+   │                      🍱 推荐晚餐 / 📊 分析今日饮食 / 🔄 替换食物 / 🥗 推荐健康食物
+   └─ 第三栏 今日营养数据 热量 / 蛋白质 / 碳水 / 脂肪 进度条 + 今日目标
+
+   每次提问都会自动携带当前登录用户的数据（无需用户手动提供）：
+   · 健康档案（性别/年龄/身高/体重/活动水平）+ 饮食目标（减脂/维持/增肌）+ 饮食偏好
+   · 每日营养目标（热量 + 三大营养素）
+   · 今日已摄入与「还差多少」
+   · 今日饮食明细（按早/午/晚/加餐列出食物名、克重、热量）
+   · 近 7 天逐日饮食明细（每天合计 + 各餐食物）与趋势（日均热量/三大营养素）
+   · 算法评分 Top5 候选食物
 
 🍱 食物库（侧边栏辅助）
    ├─ 🍎 全部食物        浏览所有食物，点击可添加到今日饮食
@@ -351,7 +359,7 @@ DietAI-Planner/
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  顶部导航栏：🏠今日饮食  📋饮食记录  📊营养分析  🤖AI对话  │
+│  顶部导航栏：🏠今日饮食  📋饮食记录  📊营养分析  🤖AI饮食助手  │
 ├──────────┬──────────────────────────────────────────────┤
 │ 左侧边栏  │  主内容区                                     │
 │          │                                              │
@@ -541,7 +549,7 @@ DietAI-Planner/
 | POST | `/api/chat/history` | 多轮对话（带历史上下文） |
 | POST | `/api/diet-plan` | 生成膳食规划 |
 | POST | `/api/diet-plan/structured` | 生成结构化膳食方案（Pydantic校验） |
-| GET | `/api/health` | 健康检查 |
+| GET | `/api/health` | 健康检查（返回当前后端 backend / 模型 model / 接口地址） |
 
 ---
 
@@ -550,10 +558,10 @@ DietAI-Planner/
 ### 架构概览
 
 ```
-用户提问 → Spring Boot 后端 → FastAPI AI 服务 → Ollama 本地模型 → 返回结果
+用户提问 → Spring Boot 后端 → FastAPI AI 服务 → 云端大模型 API / 本机 Ollama → 返回结果
                 │                    │
                 │                    ├─ 成功：返回 AI 生成内容
-                │                    └─ 失败：返回 fallback 预设回复
+                │                    └─ 失败：返回 fallback 提示
                 │
                 ├─ 保存会话和消息到数据库
                 └─ 记录 AI 生成日志（token 消耗、异常标记）
@@ -565,11 +573,12 @@ DietAI-Planner/
 |------|------|------|
 | Python | 3.10+ | 运行环境 |
 | FastAPI | 0.115.0 | 高性能异步 Web 框架 |
-| Uvicorn | 0.30.6 | ASGI 服务器，监听 `0.0.0.0:8000` |
+| Uvicorn | 0.30.6 | ASGI 服务器，默认监听 `127.0.0.1:8000`（仅本机，可用 `AI_SERVICE_HOST` 调整） |
 | Pydantic | 2.9.2 | 请求/响应数据校验 |
-| Ollama Python SDK | latest | 调用本地 Ollama 推理服务 |
-| Ollama | 最新 | 本地大模型运行时 |
-| 默认模型 | qwen2.5-coder:7b | 通义千问 2.5 编码版 7B 参数 |
+| HTTPX | 0.28+ | 调用云端 OpenAI 兼容 API（非流式 + SSE 流式） |
+| Ollama Python SDK | latest | 调用本地 Ollama 推理服务（可选后端） |
+| 云端后端 | — | **默认**，OpenAI 兼容接口，模型名在 `.env` 里配 |
+| Ollama | 最新 | 可选后端，本地大模型运行时 |
 
 ### AI 服务文件结构
 
@@ -577,12 +586,14 @@ DietAI-Planner/
 ai-service/
 ├── main.py              # FastAPI 主程序（路由注册、启动入口）
 ├── requirements.txt     # Python 依赖清单
+├── .env.example         # ⭐ 配置模板（复制为 .env 后填自己的 API_KEY）
+├── .env                 # 本地实际配置（含密钥，已被 gitignore，不会提交）
 ├── api/                 # API 路由层
 │   ├── chat.py          # 对话接口（单轮/多轮）
 │   ├── diet_plan.py     # 膳食规划接口（普通/结构化）
-│   └── health.py        # 健康检查接口
+│   └── health.py        # 健康检查接口（显示当前后端与模型）
 ├── config/              # 配置层
-│   └── settings.py      # 全局配置（模型名、超时等）
+│   └── settings.py      # 全局配置（.env 读取、后端选择、模型名、超时等）
 ├── model/               # 数据模型层
 │   ├── request.py       # 请求模型（Pydantic）
 │   └── response.py      # 响应模型（Pydantic）
@@ -591,7 +602,7 @@ ai-service/
 └── service/             # 业务逻辑层
     ├── chat_service.py  # 对话服务（上下文构建、历史管理）
     ├── diet_plan_service.py # 膳食规划服务
-    └── llm_service.py   # LLM 调用服务（Ollama SDK）
+    └── llm_service.py   # LLM 调用服务（云端 API + Ollama 双后端）
 ```
 
 ### 核心 System Prompt
@@ -855,17 +866,21 @@ function formatDuration(seconds) {
 
 ### Fallback 降级机制
 
-当 Ollama 服务不可用或调用失败时，AI 服务会自动降级到 **预设回复**：
-
-| 用户消息关键词 | 降级回复内容 |
-|---------------|-------------|
-| 吃什么/推荐/食谱 | 通用膳食搭配建议 |
-| 热量/卡路里 | BMR/TDEE 计算公式说明 |
-| 减脂/减肥/瘦 | 减脂核心原则 |
-| 增肌/肌肉 | 增肌核心原则 |
-| 其他 | 通用欢迎语 |
+当云端 API 调用失败（key 错误、欠费、超时）或本机 Ollama 未就绪时，AI 服务会返回一条**明确的失败提示**，而不会伪造一条营养建议——这样用户能立刻分辨「模型真的回答了」还是「调用降级了」，排查问题不会被误导。
 
 > 降级响应中会附带 `"fallback": true` 和 `"error": "异常信息"` 字段
+
+常见的错误会翻译成人话提示，方便自己定位：
+
+| 现象 | 提示 |
+|------|------|
+| 401 | 认证失败：`API_KEY` 填错了或已失效 |
+| 403 | 无权限：这个 key 没开通该模型，或未完成开通流程 |
+| 404 | 接口/模型不存在：检查 `API_BASE_URL` 与 `API_MODEL` 是否匹配 |
+| 429 | 请求过于频繁或额度不足 |
+| 500+ | 云端服务暂时不可用，稍后重试 |
+
+> 401/403/404 属于配置错误，会**立即失败不重试**，避免让你白等；网络抖动类错误会自动重试。
 
 ### 后端调用 AI 服务的流程
 
@@ -880,25 +895,66 @@ AiChatService.send(userId, message)
   └─ 6. 返回 AI 回复给前端
 ```
 
-### 如何更换 AI 模型
+### 如何切换 AI 后端 / 更换模型
 
-编辑 `ai-service/main.py` 第 16 行：
+所有 AI 配置都集中在 **`ai-service/.env`** 一个文件里，改完重启 AI 服务即可，**不用改代码**。
 
-```python
-OLLAMA_MODEL = "qwen2.5-coder:7b"  # 改为你想用的模型
+#### 方式一：接云端 API（推荐）
+
+复制模板文件，填入自己的 key：
+
+```bash
+cd ai-service
+cp .env.example .env      # Windows: copy .env.example .env
 ```
 
-常用可选模型：
+然后编辑 `.env`，把 `API_KEY` 换成自己的：
+
+```ini
+LLM_BACKEND=auto          # auto = 填了 key 就用云端，没填就用 Ollama
+
+API_KEY=sk-你的密钥
+API_BASE_URL=https://api.deepseek.com
+API_MODEL=deepseek-flash
+```
+
+**各家厂商怎么填**（任选一家，其它 OpenAI 兼容接口同理）：
+
+| 厂商 | API_BASE_URL | API_MODEL 示例 | Key 获取地址 |
+|------|--------------|----------------|--------------|
+| DeepSeek | `https://api.deepseek.com` | `deepseek-flash` | platform.deepseek.com |
+| 火山方舟（豆包） | `https://ark.cn-beijing.volces.com/api/v3` | `doubao-seed-2-1-pro-260628` | console.volcengine.com/ark |
+| 阿里云百炼（通义） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` | bailian.console.aliyun.com |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-5` | open.bigmodel.cn |
+| Kimi（月之暗面） | `https://api.moonshot.cn/v1` | `kimi-k3` | platform.moonshot.cn |
+
+> ⚠️ `API_BASE_URL` 填到**版本段为止**即可，程序会自动拼 `/chat/completions`。
+> DeepSeek 用 `https://api.deepseek.com`（官方规范写法，加 `/v1` 也兼容）；
+> 火山方舟和智谱分别是 `/api/v3`、`/api/paas/v4`，不是 `/v1`，照上表填。
+>
+> ⚠️ **模型名会随厂商版本更新而变**。例如 DeepSeek 的 `deepseek-chat` 已于 2026-07 下线，
+> 现在要用 `deepseek-flash`。若报 404「模型不存在」，去厂商控制台的模型列表复制当前
+> 可用的模型 ID 替换 `API_MODEL` 即可。价格差异可能很大（DeepSeek 的 `deepseek-v4-pro`
+> 约为 `deepseek-flash` 的 3 倍），换模型前先看下计费。
+
+#### 方式二：用本机 Ollama
+
+```ini
+LLM_BACKEND=ollama
+```
+
+先拉取模型，再把想用的模型名写进 `PREFERRED_MODELS`（`ai-service/config/settings.py`）：
 
 | 模型 | 参数量 | 说明 | 拉取命令 |
 |------|--------|------|---------|
-| qwen2.5-coder:7b | 7B | 默认，中文优秀 | `ollama pull qwen2.5-coder:7b` |
-| qwen2.5:7b | 7B | 通义千问通用版 | `ollama pull qwen2.5:7b` |
+| qwen2.5:7b | 7B | 通义千问通用版，中文好 | `ollama pull qwen2.5:7b` |
+| qwen2.5:3b | 3B | 体积小、速度快，精度一般 | `ollama pull qwen2.5:3b` |
 | llama3.1:8b | 8B | Meta Llama 3.1 | `ollama pull llama3.1:8b` |
 | mistral:7b | 7B | Mistral 7B | `ollama pull mistral:7b` |
 | glm4:9b | 9B | 智谱 GLM-4 | `ollama pull glm4:9b` |
 
-> 更换模型后需重启 AI 服务：`python main.py`
+> 改完 `.env` 或模型后需重启 AI 服务：`python main.py`
+> 验证当前生效的后端与模型：浏览器打开 `http://localhost:8000/api/health`
 
 ---
 
@@ -914,7 +970,7 @@ OLLAMA_MODEL = "qwen2.5-coder:7b"  # 改为你想用的模型
 | npm | 9+ | 随 Node.js 安装 |
 | MySQL | 8.0+ | [dev.mysql.com](https://dev.mysql.com/downloads/) |
 | Python | 3.10+ | [python.org](https://www.python.org/) |
-| Ollama | 最新 | [ollama.com](https://ollama.com/) |
+| Ollama | 最新（可选） | [ollama.com](https://ollama.com/) — 仅在用本机模型时需要 |
 
 ### 第一步：克隆项目
 
@@ -973,7 +1029,7 @@ npm run dev
 
 > Vite 开发服务器已配置代理：`/api` → `localhost:8080`，无需额外配置跨域
 
-### 第六步：启动 AI 服务（可选）
+### 第六步：启动 AI 服务
 
 > ⚠️ **重要提示**：AI 对话功能依赖以下三个服务同时运行：
 > - Spring Boot 后端（端口 `8080`）
@@ -982,13 +1038,24 @@ npm run dev
 >
 > 缺少任一服务，AI 对话功能将无法正常工作
 
-1. 安装 Ollama 并拉取模型：
+**第一步：配置大模型**（只需做一次）
+
+AI 服务支持两种后端，**二选一**即可，配置都写在 `ai-service/.env`：
 
 ```bash
-ollama pull qwen2.5-coder:7b
+cd ai-service
+cp .env.example .env      # Windows: copy .env.example .env
 ```
 
-2. 启动 AI 服务：
+- **【推荐】接云端 API**：打开 `.env`，把 `API_KEY` 填成自己的密钥（DeepSeek / 豆包 / 通义 / Kimi 任选一家）。
+  详细的 `API_BASE_URL` + `API_MODEL` 对照表见下方 **「如何切换 AI 后端 / 更换模型」**。
+- **用本机 Ollama**：`.env` 里设 `LLM_BACKEND=ollama`，并先拉模型：
+
+```bash
+ollama pull qwen2.5:7b
+```
+
+**第二步：启动 AI 服务**
 
 ```bash
 cd ai-service
@@ -998,24 +1065,35 @@ python main.py
 
 AI 服务启动后运行在：`http://localhost:8000`
 
-启动成功后会看到：
+接云端 API 时会看到：
 ```
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     模型已检测到: qwen2.5-coder:7b
+INFO: 启动 AI 服务 v5.1 | 后端=云端API | 接口=https://api.deepseek.com | 模型=deepseek-flash
+INFO: 监听地址 http://127.0.0.1:8000
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 ```
 
-3. **验证 AI 服务是否正常**：
+> 🔒 默认只监听 **127.0.0.1**（仅本机可访问）。本服务没有鉴权接口，
+> 若改成 `0.0.0.0`，同一局域网下的其他人也能调用你的 AI 接口并消耗你的 API 额度。
 
-打开浏览器访问 `http://localhost:8000/docs`，应能看到 FastAPI 自动生成的 API 文档页面。
+**第三步：验证 AI 服务是否正常**
+
+浏览器访问 `http://localhost:8000/api/health`，会直接告诉你当前生效的后端和模型：
+
+```json
+{ "status": "ok", "backend": "api", "model": "deepseek-flash", "api_base_url": "https://api.deepseek.com" }
+```
+
+也可以访问 `http://localhost:8000/docs` 查看 FastAPI 自动生成的 API 文档页面。
 
 > **AI 响应时间说明**：
-> - 简单问题（如"你好"）：**2-5 秒**
-> - 复杂问题（如"制定一周减脂餐"）：**10-30 秒**
-> - 首次调用（模型冷启动）：**30-60 秒**
-> - 超长回复或复杂分析：**60-180 秒**
+> - 接云端 API：**2-15 秒**（取决于厂商与网络）
+> - 本机 Ollama：简单问题 2-5 秒，复杂分析 60-180 秒（CPU 推理慢）
 > - 系统已配置 **300 秒（5分钟）超时保护**，超过此时间将自动显示错误提示
 >
+> ⚠️ 改了 `.env` 或模型后**必须重启 AI 服务**才会生效
+>
 > 如果不启动 AI 服务，AI 对话功能将不可用，但其他功能正常使用
+
 
 ### 第七步：登录系统
 

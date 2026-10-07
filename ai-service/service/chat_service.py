@@ -1,13 +1,13 @@
 import logging
 from typing import Optional, List
-from service.llm_service import call_ollama_text, call_ollama_stream, get_model
+from service.llm_service import call_llm_text, call_llm_stream, get_model, get_backend
 from prompt.system_prompt import SYSTEM_PROMPT
 from model.request import ChatHistoryItem
 from config.settings import MAX_HISTORY_ROUNDS
 
 logger = logging.getLogger("dietai")
 
-FALLBACK_MSG = "⚠️ AI 服务暂时不可用，请稍后重试。您可以检查 Ollama 是否正在运行，以及模型是否已正确安装。"
+FALLBACK_MSG = "⚠️ AI 服务暂时不可用，请稍后重试。请检查 ai-service/.env 中的 API_KEY 是否填写正确，或本机 Ollama 是否正在运行。"
 
 
 def build_messages(message: str, context: Optional[str] = None,
@@ -32,19 +32,21 @@ def build_messages(message: str, context: Optional[str] = None,
 
 def chat(message: str, context: str, session_id: int,
          history: Optional[List[ChatHistoryItem]] = None) -> dict:
-    if get_model() == "none":
+    model = get_model()
+    if model == "none":
+        logger.error("没有可用的 LLM：后端=%s", get_backend())
         return {"response": FALLBACK_MSG, "session_id": session_id, "fallback": True, "error": "no_model"}
 
     try:
         messages = build_messages(message, context, history)
-        response = call_ollama_text(messages)
+        response = call_llm_text(messages)
         return {"response": response, "session_id": session_id}
     except Exception as e:
-        logger.error(f"Ollama 调用失败: {e}")
+        logger.error(f"LLM 调用失败: {e}")
         return {"response": FALLBACK_MSG, "session_id": session_id, "fallback": True, "error": str(e)}
 
 
 def chat_stream(message: str, context: str, session_id: int,
                 history: Optional[List[ChatHistoryItem]] = None):
     messages = build_messages(message, context, history)
-    return call_ollama_stream(messages)
+    return call_llm_stream(messages)

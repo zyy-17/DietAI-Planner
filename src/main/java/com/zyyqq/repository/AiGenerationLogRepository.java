@@ -14,4 +14,7 @@ public interface AiGenerationLogRepository extends JpaRepository<AiGenerationLog
     Page<AiGenerationLog> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     Page<AiGenerationLog> findByTypeOrderByCreatedAtDesc(String type, Pageable pageable);
+
+    /** 统计标记为异常的AI生成记录数量 */
+    long countByIsAbnormal(Integer isAbnormal);
 }

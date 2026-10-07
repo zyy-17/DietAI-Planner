@@ -29,8 +29,8 @@
     </header>
 
     <div class="layout">
-      <aside :class="{ collapsed: sidebarCollapsed }">
-        <div class="side-section">
+      <aside v-if="!hideSidebar" :class="{ collapsed: sidebarCollapsed }">
+        <div class="side-section" v-if="currentSideMenus.length > 0">
           <div v-if="!sidebarCollapsed" class="section-title">{{ currentModuleTitle }}</div>
           <div v-for="m in currentSideMenus" :key="m.path"
             class="side-item"
@@ -80,9 +80,10 @@ const userStore = useUserStore()
 
 const topMenus = [
   { key: 'today', name: '今日饮食', icon: '🏠', path: '/today' },
+  { key: 'mealplan', name: '食谱', icon: '🍲', path: '/meal-plan' },
   { key: 'records', name: '饮食记录', icon: '📋', path: '/records' },
   { key: 'nutrition', name: '营养分析', icon: '📊', path: '/nutrition' },
-  { key: 'chat', name: 'AI对话', icon: '🤖', path: '/chat' }
+  { key: 'chat', name: 'AI饮食助手', icon: '🤖', path: '/chat' }
 ]
 
 const sideMenusMap = {
@@ -94,6 +95,10 @@ const sideMenusMap = {
     { name: '加餐', path: '/today/snack', icon: '🍎' },
     { name: 'AI今日建议', path: '/today/ai-suggest', icon: '🤖' }
   ],
+  mealplan: [
+    { name: '我的食谱', path: '/meal-plan', icon: '🍲' },
+    { name: '食谱广场', path: '/meal-plan/square', icon: '🏛️' }
+  ],
   records: [
     { name: '历史记录', path: '/records', icon: '📅' },
     { name: '周记录', path: '/records/week', icon: '📆' },
@@ -104,25 +109,22 @@ const sideMenusMap = {
   nutrition: [
     { name: '今日营养', path: '/nutrition', icon: '📊' },
     { name: '营养趋势', path: '/nutrition/trend', icon: '📈' },
+    { name: '体重体脂', path: '/nutrition/body-metrics', icon: '⚖️' },
     { name: '营养素分析', path: '/nutrition/nutrients', icon: '🥩' },
     { name: '热量分析', path: '/nutrition/calorie', icon: '🔥' },
     { name: '目标完成度', path: '/nutrition/goal', icon: '🎯' },
     { name: '营养报告', path: '/nutrition/report', icon: '📄' }
   ],
-  chat: [
-    { name: '新建对话', path: '/chat', icon: '💬' },
-    { name: '膳食规划', path: '/chat/diet-plan', icon: '🥗' },
-    { name: '减脂方案', path: '/chat/fat-loss', icon: '🔥' },
-    { name: '增肌方案', path: '/chat/muscle-gain', icon: '💪' },
-    { name: '饮食咨询', path: '/chat/consult', icon: '🍎' }
-  ]
+  // AI 饮食助手：所有模式共用同一个模型，不再提供预设方案入口
+  chat: []
 }
 
 const moduleTitleMap = {
   today: '🏠 今日饮食',
+  mealplan: '🍲 食谱',
   records: '📋 饮食记录',
   nutrition: '📊 营养分析',
-  chat: '🤖 AI对话'
+  chat: '🤖 AI饮食助手'
 }
 
 const auxLinks = [
@@ -134,6 +136,7 @@ const auxLinks = [
 const activeTopModule = computed(() => {
   const path = route.path
   if (path.startsWith('/today')) return 'today'
+  if (path.startsWith('/meal-plan')) return 'mealplan'
   if (path.startsWith('/records')) return 'records'
   if (path.startsWith('/nutrition')) return 'nutrition'
   if (path.startsWith('/chat')) return 'chat'
@@ -143,6 +146,9 @@ const activeTopModule = computed(() => {
 const currentModuleTitle = computed(() => moduleTitleMap[activeTopModule.value] || '🏠 今日饮食')
 
 const currentSideMenus = computed(() => sideMenusMap[activeTopModule.value] || [])
+
+// AI 饮食助手页面自带三栏布局（会话 / 对话 / 今日营养），不需要外层左侧导航
+const hideSidebar = computed(() => activeTopModule.value === 'chat')
 
 const sidebarCollapsed = ref(false)
 

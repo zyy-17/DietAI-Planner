@@ -28,6 +28,14 @@ public class DietRecord {
     @Column(name = "food_id", nullable = false)
     private Long foodId;
 
+    /**
+     * 食物来源：system = 公共食物库（food 表），user = 用户自定义食物（user_custom_food 表）。
+     * 两张表的 ID 各自独立，必须靠该字段才能正确解析食物名称。
+     */
+    @Column(name = "food_source", nullable = false, length = 20)
+    @Builder.Default
+    private String foodSource = "system";
+
     @Column(name = "meal_type", nullable = false, length = 20)
     private String mealType;
 
@@ -54,6 +62,10 @@ public class DietRecord {
 
     @Transient
     private String foodName;
+
+    /** 管理端展示用：所属用户名（非数据库字段） */
+    @Transient
+    private String userName;
 
     @PrePersist
     protected void onCreate() {

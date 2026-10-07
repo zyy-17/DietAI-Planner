@@ -22,7 +22,7 @@
           <template #header>
             <div class="card-header">
               <el-input v-model="keyword" :placeholder="searchPlaceholder" @input="loadFoods" clearable style="width:300px" />
-              <el-button type="primary" @click="addFoodDialogVisible = true">添加新食物</el-button>
+              <span class="header-tip">💡 想记录自己的食物？在「今日概览 → 添加食物」里选择自定义食物，只有你自己能看到</span>
             </div>
           </template>
           <el-row :gutter="16">
@@ -60,30 +60,11 @@
         <el-button type="primary" @click="addToDiet">添加到今日饮食</el-button>
       </template>
     </el-dialog>
-
-    <el-dialog v-model="addFoodDialogVisible" title="添加新食物" width="500px">
-      <el-form :model="newFood" label-width="80px">
-        <el-form-item label="名称"><el-input v-model="newFood.name" /></el-form-item>
-        <el-form-item label="分类">
-          <el-select v-model="newFood.categoryId" style="width:100%">
-            <el-option v-for="cat in categories" :key="cat.id" :label="cat.name" :value="cat.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="热量"><el-input-number v-model="newFood.calories" :precision="2" /></el-form-item>
-        <el-form-item label="蛋白质"><el-input-number v-model="newFood.protein" :precision="2" /></el-form-item>
-        <el-form-item label="碳水"><el-input-number v-model="newFood.carbohydrate" :precision="2" /></el-form-item>
-        <el-form-item label="脂肪"><el-input-number v-model="newFood.fat" :precision="2" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="addFoodDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="addFood">提交</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
@@ -95,8 +76,7 @@ const mode = computed(() => route.meta.mode || 'default')
 const tabs = [
   { name: '全部食物', path: '/foods', icon: '🍎' },
   { name: '食物搜索', path: '/foods/search', icon: '🔍' },
-  { name: '食物分类', path: '/foods/categories', icon: '🥩' },
-  { name: '添加食物', path: '/foods/add', icon: '➕' }
+  { name: '食物分类', path: '/foods/categories', icon: '🥩' }
 ]
 
 function isTabActive(tab) {
@@ -113,10 +93,8 @@ const selectedCategory = ref(null)
 const page = ref(1)
 const total = ref(0)
 const foodDetailVisible = ref(false)
-const addFoodDialogVisible = ref(false)
 const currentFood = ref(null)
 const addAmount = ref(100)
-const newFood = reactive({ name: '', categoryId: null, calories: 0, protein: 0, carbohydrate: 0, fat: 0 })
 
 async function loadCategories() {
   try { categories.value = await api.get('/categories') } catch (e) {}
@@ -142,7 +120,7 @@ function showFoodDetail(food) {
 async function addToDiet() {
   if (!currentFood.value) return
   try {
-    await api.post('/diet/record', {
+    await api.post('/diet/today/add', {
       foodId: currentFood.value.id,
       amount: addAmount.value,
       mealType: 'snack'
@@ -154,19 +132,9 @@ async function addToDiet() {
   }
 }
 
-async function addFood() {
-  await api.post('/foods', newFood)
-  ElMessage.success('食物添加成功')
-  addFoodDialogVisible.value = false
-  loadFoods()
-}
-
 onMounted(() => {
   loadCategories()
   loadFoods()
-  if (mode.value === 'add') {
-    addFoodDialogVisible.value = true
-  }
 })
 </script>
 
@@ -180,7 +148,8 @@ onMounted(() => {
 .cat-item { padding: 8px 12px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
 .cat-item:hover { background: #f5f7fa; }
 .cat-item.active { background: #ecf5ff; color: #409eff; }
-.card-header { display: flex; justify-content: space-between; align-items: center; }
+.card-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.header-tip { font-size: 12px; color: #8499a8; text-align: right; line-height: 1.5; }
 .food-card { margin-bottom: 16px; cursor: pointer; text-align: center; }
 .food-name { font-weight: bold; margin-bottom: 4px; }
 .food-cal { color: #e6a23c; font-size: 14px; }

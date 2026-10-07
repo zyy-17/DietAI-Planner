@@ -1,9 +1,10 @@
 package com.zyyqq.controller;
 
-import com.zyyqq.dto.request.AddFoodRequest;
 import com.zyyqq.dto.response.ApiResponse;
+import com.zyyqq.dto.response.FoodOptionVO;
 import com.zyyqq.entity.Food;
 import com.zyyqq.service.FoodService;
+import com.zyyqq.service.UserCustomFoodService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.security.core.Authentication;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 public class FoodController {
 
     private final FoodService foodService;
+    private final UserCustomFoodService userCustomFoodService;
 
     @GetMapping
     public ApiResponse<Page<Food>> getFoods(
@@ -35,21 +37,26 @@ public class FoodController {
         return ApiResponse.success(foodService.searchFoods(keyword));
     }
 
-    /** 获取所有已审核食物列表 */
+    /**
+     * 获取当前用户可选择的食物列表：公共食物库 + 本人自定义食物。
+     * 每项的 custom 字段标识是否为本人私有食物（自定义食物存放在 user_custom_food 表，不进入公共食物库）。
+     */
     @GetMapping("/all")
-    public ApiResponse<java.util.List<Food>> getAllFoods() {
-        return ApiResponse.success(foodService.getAllApprovedFoods());
+    public ApiResponse<java.util.List<FoodOptionVO>> getAllFoods(Authentication authentication) {
+        return ApiResponse.success(foodService.getAvailableFoodOptions(getUserIdOrNull(authentication)));
     }
 
-    @PostMapping
-    public ApiResponse<Food> addFood(Authentication authentication,
-                                     @RequestBody AddFoodRequest request) {
-        Long userId = getUserId(authentication);
-        return ApiResponse.success(foodService.addFoodByUser(request, userId));
+    /** 获取当前用户自己添加的自定义食物（仅本人可见） */
+    @GetMapping("/my")
+    public ApiResponse<java.util.List<FoodOptionVO>> getMyFoods(Authentication authentication) {
+        return ApiResponse.success(userCustomFoodService.listMineAsOptions(getUserIdOrNull(authentication)));
     }
 
-    /** 从认证信息中提取用户ID */
-    private Long getUserId(Authentication authentication) {
-        return (Long) authentication.getPrincipal();
+    /** 从认证信息中提取用户ID，未登录或匿名访问时返回 null */
+    private Long getUserIdOrNull(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof Long userId) {
+            return userId;
+        }
+        return null;
     }
 }
