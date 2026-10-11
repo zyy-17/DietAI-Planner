@@ -12,6 +12,7 @@ import com.zyyqq.dto.response.MealPlanCurrentVO;
 import com.zyyqq.dto.response.MealPlanDayVO;
 import com.zyyqq.dto.response.MealPlanDetailVO;
 import com.zyyqq.dto.response.MealPlanExecutionVO;
+import com.zyyqq.dto.response.MealPlanListVO;
 import com.zyyqq.dto.response.MealPlanVO;
 import com.zyyqq.entity.MealPlanReview;
 import com.zyyqq.service.MealPlanService;
@@ -88,6 +89,21 @@ public class MealPlanController {
     public ApiResponse<List<MealPlanVO>> list(Authentication authentication,
                                              @RequestParam(required = false) String status) {
         return ApiResponse.success(mealPlanService.list(getUserId(authentication), status));
+    }
+
+    /**
+     * 我的食谱列表（带状态计数 + 组合筛选）。
+     * status：none/pending/approved/rejected/active，不传=全部；
+     * days：3/7/14 按周期分组；sort：updated/created。
+     */
+    @GetMapping("/list")
+    public ApiResponse<MealPlanListVO> listWithCounts(Authentication authentication,
+                                                      @RequestParam(required = false) String status,
+                                                      @RequestParam(required = false) String keyword,
+                                                      @RequestParam(required = false) Integer days,
+                                                      @RequestParam(required = false) String sort) {
+        return ApiResponse.success(
+                mealPlanService.listWithCounts(getUserId(authentication), status, keyword, days, sort));
     }
 
     /** 我收藏的食谱 */

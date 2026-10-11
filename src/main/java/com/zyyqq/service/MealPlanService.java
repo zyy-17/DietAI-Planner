@@ -14,6 +14,7 @@ import com.zyyqq.dto.response.MealPlanDayVO;
 import com.zyyqq.dto.response.MealPlanDetailVO;
 import com.zyyqq.dto.response.MealPlanExecutionVO;
 import com.zyyqq.dto.response.MealPlanItemVO;
+import com.zyyqq.dto.response.MealPlanListVO;
 import com.zyyqq.dto.response.MealPlanVO;
 import com.zyyqq.dto.response.MealProgressVO;
 import com.zyyqq.entity.AiGenerationLog;
@@ -602,6 +603,69 @@ public class MealPlanService {
             plans = planRepository.findByUserIdAndStatusOrderByCreatedAtDesc(userId, status);
         }
         return decorateList(plans, userId, Set.of());
+    }
+
+    /**
+     * 「我的食谱」列表页：返回状态计数 + 按条件筛选后的列表。
+     *
+     * <p>筛选维度：</p>
+     * <ul>
+     *   <li>{@code status} —— 发布状态 none/pending/approved/rejected，或执行态 active，
+     *       传 null/blank 表示「全部」</li>
+     *   <li>{@code keyword} —— 食谱名模糊匹配</li>
+     *   <li>{@code days} —— 周期天数（3/7/14），用于「食谱类型」分组</li>
+     *   <li>{@code sort} —— updated（最近更新，默认）/ created（创建时间）</li>
+     * </ul>
+     * <p>个人食谱量级小（几十条），直接在内存里做组合筛选，避免堆砌一堆派生查询。</p>
+     */
+    public MealPlanListVO listWithCounts(Long userId, String status, String keyword,
+                                         Integer days, String sort) {
+        List<MealPlan> all = planRepository.findByUserIdOrderByCreatedAtDesc(userId);
+
+        // 状态计数（不含软删除，软删除由 @SQLRestriction 已过滤）
+        Map<String, Long> publishCounts = new HashMap<>();
+        Map<String, Long> statusCounts = new HashMap<>();
+        for (MealPlan p : all) {
+            publishCounts.merge(p.getPublishStatus(), 1L, Long::sum);
+            statusCounts.merge(p.getStatus(), 1L, Long::sum);
+        }
+
+        // 组合筛选
+        List<MealPlan> filtered = new ArrayList<>(all);
+        if (status != null && !status.isBlank()) {
+            if ("active".equals(status)) {
+                // 「执行中」：active 或 paused 都算正在执行
+                filtered.removeIf(p -> !MealPlan.STATUS_ACTIVE.equals(p.getStatus())
+                        && !MealPlan.STATUS_PAUSED.equals(p.getStatus()));
+            } else {
+                filtered.removeIf(p -> !status.equals(p.getPublishStatus()));
+            }
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            String kw = keyword.trim().toLowerCase();
+            filtered.removeIf(p -> p.getName() == null || !p.getName().toLowerCase().contains(kw));
+        }
+        if (days != null && days > 0) {
+            filtered.removeIf(p -> !days.equals(p.getDays()));
+        }
+
+        // 排序
+        if ("created".equals(sort)) {
+            filtered.sort(Comparator.comparing(MealPlan::getCreatedAt,
+                    Comparator.nullsLast(Comparator.reverseOrder())));
+        } else {
+            // 默认按更新时间倒序
+            filtered.sort(Comparator.comparing(MealPlan::getUpdatedAt,
+                    Comparator.nullsLast(Comparator.reverseOrder())));
+        }
+
+        List<MealPlanVO> vos = decorateList(filtered, userId, Set.of());
+        return MealPlanListVO.builder()
+                .publishCounts(publishCounts)
+                .statusCounts(statusCounts)
+                .total(all.size())
+                .plans(vos)
+                .build();
     }
 
     /** 食谱详情：逐天明细。 */
