@@ -42,7 +42,6 @@
           <el-select v-model="mineMealType" placeholder="计划天数" clearable class="tool-select" @change="loadMine">
             <el-option label="3天" value="3" />
             <el-option label="7天" value="7" />
-            <el-option label="14天" value="14" />
           </el-select>
           <el-select v-model="mineVisibility" placeholder="可见范围" clearable class="tool-select" @change="loadMine">
             <el-option label="个人可见" value="private" />
@@ -451,7 +450,6 @@
           <el-radio-group v-model="createForm.days">
             <el-radio-button :value="3">3天</el-radio-button>
             <el-radio-button :value="7">7天</el-radio-button>
-            <el-radio-button :value="14">14天</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="每日餐次">
@@ -617,8 +615,7 @@ const squareCategories = [
   { key: 'gain', label: '增重', icon: '💪' },
   { key: 'maintain', label: '维持体重', icon: '⚖️' },
   { key: '3', label: '3天计划', icon: '📅' },
-  { key: '7', label: '7天计划', icon: '📆' },
-  { key: '14', label: '14天计划', icon: '🗓️' }
+  { key: '7', label: '7天计划', icon: '📆' }
 ]
 
 const statusFilters = computed(() => {
@@ -813,7 +810,6 @@ function matchCategory(plan) {
     case 'all': return true
     case '3': return (plan.days || 0) === 3
     case '7': return (plan.days || 0) === 7
-    case '14': return (plan.days || 0) === 14
     default: return plan.goal === squareCategory.value
   }
 }
