@@ -4,9 +4,11 @@ import com.zyyqq.dto.request.MealPlanRejectRequest;
 import com.zyyqq.dto.response.ApiResponse;
 import com.zyyqq.dto.response.MealPlanDetailVO;
 import com.zyyqq.dto.response.MealPlanVO;
+import com.zyyqq.entity.MealPlanReview;
 import com.zyyqq.service.MealPlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 食谱广场的审核接口（仅管理员，走 {@code /api/admin/**} 的 ROLE_ADMIN 约束）。
@@ -47,15 +51,25 @@ public class AdminMealPlanController {
 
     /** 审核通过 → 上架广场 */
     @PostMapping("/{id}/approve")
-    public ApiResponse<Void> approve(@PathVariable Long id) {
-        mealPlanService.approve(id);
+    public ApiResponse<Void> approve(Authentication authentication, @PathVariable Long id) {
+        mealPlanService.approve(getUserId(authentication), id);
         return ApiResponse.success("已通过", null);
     }
 
     /** 驳回并附原因 */
     @PostMapping("/{id}/reject")
-    public ApiResponse<Void> reject(@PathVariable Long id, @RequestBody(required = false) MealPlanRejectRequest request) {
-        mealPlanService.reject(id, request == null ? null : request.getReason());
+    public ApiResponse<Void> reject(Authentication authentication, @PathVariable Long id, @RequestBody(required = false) MealPlanRejectRequest request) {
+        mealPlanService.reject(getUserId(authentication), id, request == null ? null : request.getReason());
         return ApiResponse.success("已驳回", null);
+    }
+
+    /** 某份食谱的审核历史 */
+    @GetMapping("/{id}/reviews")
+    public ApiResponse<List<MealPlanReview>> reviews(@PathVariable Long id) {
+        return ApiResponse.success(mealPlanService.reviewHistory(null, id, true));
+    }
+
+    private Long getUserId(Authentication authentication) {
+        return authentication == null ? null : (Long) authentication.getPrincipal();
     }
 }

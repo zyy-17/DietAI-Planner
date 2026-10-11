@@ -9,8 +9,10 @@ import com.zyyqq.dto.response.FoodAlternativeVO;
 import com.zyyqq.dto.response.MealGroupVO;
 import com.zyyqq.dto.response.MealPlanAlternativesVO;
 import com.zyyqq.dto.response.MealPlanCurrentVO;
+import com.zyyqq.dto.response.MealPlanDayProgressVO;
 import com.zyyqq.dto.response.MealPlanDayVO;
 import com.zyyqq.dto.response.MealPlanDetailVO;
+import com.zyyqq.dto.response.MealPlanExecutionVO;
 import com.zyyqq.dto.response.MealPlanItemVO;
 import com.zyyqq.dto.response.MealPlanVO;
 import com.zyyqq.dto.response.MealProgressVO;
@@ -20,6 +22,7 @@ import com.zyyqq.entity.Food;
 import com.zyyqq.entity.MealPlan;
 import com.zyyqq.entity.MealPlanFavorite;
 import com.zyyqq.entity.MealPlanItem;
+import com.zyyqq.entity.MealPlanReview;
 import com.zyyqq.entity.ProfileOptionType;
 import com.zyyqq.entity.User;
 import com.zyyqq.entity.UserCustomFood;
@@ -28,6 +31,7 @@ import com.zyyqq.repository.AiGenerationLogRepository;
 import com.zyyqq.repository.MealPlanFavoriteRepository;
 import com.zyyqq.repository.MealPlanItemRepository;
 import com.zyyqq.repository.MealPlanRepository;
+import com.zyyqq.repository.MealPlanReviewRepository;
 import com.zyyqq.repository.UserCustomFoodRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -90,7 +94,7 @@ public class MealPlanService {
             "lose", "减脂", "gain", "增重", "maintain", "维持体重");
 
     private static final Map<String, String> STATUS_LABELS = Map.of(
-            "idle", "未执行", "active", "执行中", "archived", "已归档");
+            "idle", "未执行", "active", "执行中", "paused", "已暂停", "archived", "已归档");
 
     private static final Map<String, String> PUBLISH_LABELS = Map.of(
             "none", "未发布", "pending", "待审核", "approved", "已上架", "rejected", "未通过");
@@ -112,6 +116,7 @@ public class MealPlanService {
     private final MealPlanRepository planRepository;
     private final MealPlanItemRepository itemRepository;
     private final MealPlanFavoriteRepository favoriteRepository;
+    private final MealPlanReviewRepository reviewRepository;
     private final UserCustomFoodRepository userCustomFoodRepository;
     private final AiGenerationLogRepository generationLogRepository;
     private final UserService userService;
@@ -333,8 +338,62 @@ public class MealPlanService {
         }
         plan.setStatus(MealPlan.STATUS_ACTIVE);
         plan.setStartDate(LocalDate.now());
+        plan.setPausedAtDay(null);
         planRepository.save(plan);
         log.info("应用食谱开始执行: userId={}, planId={}", userId, planId);
+        return withStats(plan, userId, null, false);
+    }
+
+    /** 暂停当前执行：保留进度，可从暂停处恢复。 */
+    @Transactional
+    public MealPlanVO pause(Long userId, Long planId) {
+        MealPlan plan = requireOwnedPlan(userId, planId);
+        if (!MealPlan.STATUS_ACTIVE.equals(plan.getStatus())) {
+            throw new BusinessException("只有执行中的食谱才能暂停");
+        }
+        // 先记录暂停时处在第几天，再切换状态（resolveCurrentDayIndex 依赖 active 态）
+        int pausedDay = resolveCurrentDayIndex(plan);
+        plan.setStatus(MealPlan.STATUS_PAUSED);
+        plan.setPausedAtDay(pausedDay);
+        planRepository.save(plan);
+        log.info("暂停食谱执行: userId={}, planId={}, day={}", userId, planId, pausedDay);
+        return withStats(plan, userId, null, false);
+    }
+
+    /** 恢复暂停的执行。 */
+    @Transactional
+    public MealPlanVO resume(Long userId, Long planId) {
+        MealPlan plan = requireOwnedPlan(userId, planId);
+        if (!MealPlan.STATUS_PAUSED.equals(plan.getStatus())) {
+            throw new BusinessException("这份食谱没有处于暂停状态");
+        }
+        // 恢复时把其他执行中的方案归档，保证同一用户只有一份在跑
+        for (MealPlan other : planRepository.findByUserIdAndStatus(userId, MealPlan.STATUS_ACTIVE)) {
+            if (!other.getId().equals(planId)) {
+                other.setStatus(MealPlan.STATUS_ARCHIVED);
+                planRepository.save(other);
+            }
+        }
+        plan.setStatus(MealPlan.STATUS_ACTIVE);
+        // 暂停期间日期没走，保持 startDate 与 pausedAtDay 不动，恢复后继续按自然日推进
+        plan.setPausedAtDay(null);
+        planRepository.save(plan);
+        log.info("恢复食谱执行: userId={}, planId={}", userId, planId);
+        return withStats(plan, userId, null, false);
+    }
+
+    /** 提前结束执行，归档到历史。 */
+    @Transactional
+    public MealPlanVO finish(Long userId, Long planId) {
+        MealPlan plan = requireOwnedPlan(userId, planId);
+        if (!MealPlan.STATUS_ACTIVE.equals(plan.getStatus())
+                && !MealPlan.STATUS_PAUSED.equals(plan.getStatus())) {
+            throw new BusinessException("这份食谱当前不在执行中");
+        }
+        plan.setStatus(MealPlan.STATUS_ARCHIVED);
+        plan.setPausedAtDay(null);
+        planRepository.save(plan);
+        log.info("提前结束食谱执行: userId={}, planId={}", userId, planId);
         return withStats(plan, userId, null, false);
     }
 
@@ -346,6 +405,11 @@ public class MealPlanService {
     public MealPlanCurrentVO getCurrent(Long userId) {
         Optional<MealPlan> active = planRepository
                 .findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, MealPlan.STATUS_ACTIVE);
+        if (active.isEmpty()) {
+            // 执行中的没有，退回看暂停中的，让用户能看到「已暂停」的食谱
+            active = planRepository
+                    .findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, MealPlan.STATUS_PAUSED);
+        }
         if (active.isEmpty()) {
             return MealPlanCurrentVO.builder().todayDate(LocalDate.now()).build();
         }
@@ -391,6 +455,138 @@ public class MealPlanService {
     }
 
     /**
+     * 执行闭环进度：周期进度 + 每日打卡 + 计划 vs 实际营养差异。
+     *
+     * <p>打卡由 {@code diet_record} 反推：某天开启的餐次里，凡是在饮食记录里出现过的就算
+     * 「已记录」，全部出现才算「当天完成」。不引入独立打卡表，与「今日进度」同一口径。</p>
+     */
+    public MealPlanExecutionVO getExecutionProgress(Long userId, Long planId) {
+        MealPlan plan = requireOwnedPlan(userId, planId);
+        if (MealPlan.STATUS_IDLE.equals(plan.getStatus())) {
+            throw new BusinessException("这份食谱还没有开始执行");
+        }
+
+        List<String> meals = splitMeals(plan.getMeals());
+        List<MealPlanItem> allItems = itemRepository.findByPlanIdOrderByDayIndexAscSortOrderAscIdAsc(planId);
+        int totalDays = plan.getDays() == null || plan.getDays() < 1 ? 1 : plan.getDays();
+
+        LocalDate start = plan.getStartDate();
+        if (start == null) {
+            start = LocalDate.now();
+        }
+
+        // 已过天数：从开始到今天（含），截断在周期内；结束的按整周期算
+        int elapsedDays;
+        if (MealPlan.STATUS_ARCHIVED.equals(plan.getStatus())) {
+            elapsedDays = totalDays;
+        } else {
+            long offset = ChronoUnit.DAYS.between(start, LocalDate.now()) + 1;
+            elapsedDays = (int) Math.min(Math.max(offset, 1), totalDays);
+        }
+
+        // 一次性拉出周期内的所有饮食记录，按日期分组
+        LocalDate end = start.plusDays(totalDays - 1L);
+        List<DietRecord> records = dietRecordService.getRecordsByDateRange(userId, start, end);
+        Map<LocalDate, List<DietRecord>> recordsByDate = new HashMap<>();
+        for (DietRecord record : records) {
+            recordsByDate.computeIfAbsent(record.getRecordDate(), k -> new ArrayList<>()).add(record);
+        }
+
+        // 每天的计划热量：按天聚合条目热量
+        Map<Integer, BigDecimal> plannedByDay = new HashMap<>();
+        for (MealPlanItem item : allItems) {
+            if (item.getDayIndex() == null) {
+                continue;
+            }
+            plannedByDay.merge(item.getDayIndex(),
+                    item.getCalories() == null ? BigDecimal.ZERO : item.getCalories(),
+                    BigDecimal::add);
+        }
+
+        int doneMeals = 0;
+        int totalMeals = 0;
+        BigDecimal plannedSum = BigDecimal.ZERO;
+        BigDecimal actualSum = BigDecimal.ZERO;
+        List<MealPlanDayProgressVO> days = new ArrayList<>();
+
+        for (int day = 1; day <= elapsedDays; day++) {
+            LocalDate date = start.plusDays(day - 1L);
+            List<DietRecord> dayRecords = recordsByDate.getOrDefault(date, List.of());
+
+            // 该天开启的餐次里，哪些已有记录
+            Map<String, Long> countByMeal = new HashMap<>();
+            for (DietRecord record : dayRecords) {
+                countByMeal.merge(record.getMealType(), 1L, Long::sum);
+            }
+            List<MealProgressVO> dayProgress = new ArrayList<>();
+            int dayDone = 0;
+            for (String mealType : meals) {
+                long count = countByMeal.getOrDefault(mealType, 0L);
+                boolean done = count > 0;
+                if (done) {
+                    dayDone++;
+                }
+                dayProgress.add(MealProgressVO.builder()
+                        .mealType(mealType)
+                        .mealLabel(mealLabel(mealType))
+                        .done(done)
+                        .recordCount((int) count)
+                        .build());
+            }
+
+            BigDecimal planned = plannedByDay.getOrDefault(day, BigDecimal.ZERO);
+            BigDecimal actual = dayRecords.stream()
+                    .map(r -> r.getCalories() != null ? r.getCalories() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            int dayTotal = meals.size();
+            doneMeals += dayDone;
+            totalMeals += dayTotal;
+            plannedSum = plannedSum.add(planned);
+            actualSum = actualSum.add(actual);
+
+            days.add(MealPlanDayProgressVO.builder()
+                    .dayIndex(day)
+                    .date(date)
+                    .plannedCalories(planned)
+                    .actualCalories(actual)
+                    .doneMeals(dayDone)
+                    .totalMeals(dayTotal)
+                    .completed(dayDone == dayTotal)
+                    .meals(dayProgress)
+                    .build());
+        }
+
+        // 日均：按已过天数摊
+        BigDecimal plannedDaily = elapsedDays > 0
+                ? plannedSum.divide(BigDecimal.valueOf(elapsedDays), 0, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        BigDecimal actualDaily = elapsedDays > 0
+                ? actualSum.divide(BigDecimal.valueOf(elapsedDays), 0, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+
+        int progressPercent = totalMeals > 0
+                ? (int) Math.round(doneMeals * 100.0 / totalMeals)
+                : 0;
+
+        return MealPlanExecutionVO.builder()
+                .plan(withStats(plan, userId, null, false))
+                .startDate(start)
+                .currentDayIndex(elapsedDays)
+                .totalDays(totalDays)
+                .meals(meals)
+                .elapsedDays(elapsedDays)
+                .doneMeals(doneMeals)
+                .totalMeals(totalMeals)
+                .progressPercent(progressPercent)
+                .days(days)
+                .plannedDailyCalories(plannedDaily)
+                .actualDailyCalories(actualDaily)
+                .calorieGap(plannedDaily.subtract(actualDaily))
+                .build();
+    }
+
+    /**
      * 我的食谱列表。
      *
      * @param status null 或 "all" 取全部；"recipes" 只要我的食谱（不含已归档的历史）；
@@ -414,14 +610,27 @@ public class MealPlanService {
         return buildDetail(plan, userId, false);
     }
 
-    /** 删除食谱（连同条目与收藏关系）。 */
+    /**
+     * 删除食谱（软删除）。
+     *
+     * <p>执行过、被广场保存过、或从广场复制来的食谱可能被膳食方案/执行历史引用，
+     * 物理删除会破坏这些历史数据。因此统一走软删除：打 {@code deleted} 标记，
+     * 我的食谱、广场、收藏等查询都会自动过滤。条目数据保留，保证历史执行记录完整。</p>
+     */
     @Transactional
     public void delete(Long userId, Long planId) {
         MealPlan plan = requireOwnedPlan(userId, planId);
-        itemRepository.deleteByPlanId(plan.getId());
+        plan.setDeleted(true);
+        // 软删除的食谱同时退出广场与执行态
+        plan.setPublishStatus(MealPlan.PUBLISH_NONE);
+        plan.setPublishedAt(null);
+        if (MealPlan.STATUS_ACTIVE.equals(plan.getStatus())
+                || MealPlan.STATUS_PAUSED.equals(plan.getStatus())) {
+            plan.setStatus(MealPlan.STATUS_ARCHIVED);
+        }
+        planRepository.save(plan);
         favoriteRepository.deleteByPlanId(plan.getId());
-        planRepository.delete(plan);
-        log.info("删除食谱: userId={}, planId={}", userId, planId);
+        log.info("软删除食谱: userId={}, planId={}", userId, planId);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -648,9 +857,9 @@ public class MealPlanService {
         return buildDetail(plan, null, true);
     }
 
-    /** 审核通过，上架到广场。 */
+    /** 审核通过，上架到广场，并记录审核历史。 */
     @Transactional
-    public void approve(Long planId) {
+    public void approve(Long reviewerId, Long planId) {
         MealPlan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new BusinessException("食谱不存在"));
         if (itemRepository.countByPlanId(planId) == 0) {
@@ -660,24 +869,57 @@ public class MealPlanService {
         plan.setPublishedAt(LocalDateTime.now());
         plan.setRejectReason(null);
         planRepository.save(plan);
-        log.info("食谱审核通过: planId={}", planId);
+        writeReview(planId, reviewerId, MealPlanReview.RESULT_APPROVED, null);
+        log.info("食谱审核通过: planId={}, reviewerId={}", planId, reviewerId);
     }
 
-    /** 审核不通过，附上原因。 */
+    /** 审核不通过，附上原因，并记录审核历史。 */
     @Transactional
-    public void reject(Long planId, String reason) {
+    public void reject(Long reviewerId, Long planId, String reason) {
         MealPlan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new BusinessException("食谱不存在"));
+        String trimmedReason = trimTo(reason == null ? "" : reason, 500);
         plan.setPublishStatus(MealPlan.PUBLISH_REJECTED);
         plan.setPublishedAt(null);
-        plan.setRejectReason(trimTo(reason == null ? "" : reason, 500));
+        plan.setRejectReason(trimmedReason);
         planRepository.save(plan);
+        writeReview(planId, reviewerId, MealPlanReview.RESULT_REJECTED, trimmedReason);
         log.info("食谱审核驳回: planId={}, reason={}", planId, reason);
+    }
+
+    /** 写一条审核记录，保留审核人用户名快照。 */
+    private void writeReview(Long planId, Long reviewerId, String result, String reason) {
+        String reviewerName = null;
+        if (reviewerId != null) {
+            try {
+                User reviewer = userService.getUserById(reviewerId);
+                reviewerName = reviewer == null ? null : reviewer.getUsername();
+            } catch (Exception e) {
+                log.warn("取审核人用户名失败: reviewerId={}, {}", reviewerId, e.getMessage());
+            }
+        }
+        reviewRepository.save(MealPlanReview.builder()
+                .planId(planId)
+                .reviewerId(reviewerId)
+                .reviewerName(trimTo(reviewerName, 50))
+                .result(result)
+                .reason(reason)
+                .build());
     }
 
     /** 管理后台首页要用的待审核数量 */
     public long countPending() {
         return planRepository.countByPublishStatus(MealPlan.PUBLISH_PENDING);
+    }
+
+    /** 某份食谱的审核历史（管理员与作者可见）。 */
+    public List<MealPlanReview> reviewHistory(Long userId, Long planId, boolean admin) {
+        MealPlan plan = planRepository.findById(planId)
+                .orElseThrow(() -> new BusinessException("食谱不存在"));
+        if (!admin && !plan.getUserId().equals(userId)) {
+            throw new BusinessException("无权查看这份食谱的审核记录");
+        }
+        return reviewRepository.findByPlanIdOrderByReviewedAtDesc(planId);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1191,11 +1433,21 @@ public class MealPlanService {
 
     /** 今天是食谱第几天；超出周期后停在最后一天，避免详情页定位到空白 */
     private int resolveCurrentDayIndex(MealPlan plan) {
-        if (plan.getStartDate() == null || !MealPlan.STATUS_ACTIVE.equals(plan.getStatus())) {
+        if (plan.getStartDate() == null) {
+            return 1;
+        }
+        int days = plan.getDays() == null || plan.getDays() < 1 ? 1 : plan.getDays();
+        // 暂停中的食谱停在暂停那天，避免「今天吃什么」定位回第 1 天
+        if (MealPlan.STATUS_PAUSED.equals(plan.getStatus())) {
+            if (plan.getPausedAtDay() != null) {
+                return Math.min(Math.max(plan.getPausedAtDay(), 1), days);
+            }
+            return 1;
+        }
+        if (!MealPlan.STATUS_ACTIVE.equals(plan.getStatus())) {
             return 1;
         }
         long offset = ChronoUnit.DAYS.between(plan.getStartDate(), LocalDate.now()) + 1;
-        int days = plan.getDays() == null || plan.getDays() < 1 ? 1 : plan.getDays();
         return (int) Math.min(Math.max(offset, 1), days);
     }
 

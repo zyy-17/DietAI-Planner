@@ -11,7 +11,9 @@ import com.zyyqq.dto.response.MealPlanAlternativesVO;
 import com.zyyqq.dto.response.MealPlanCurrentVO;
 import com.zyyqq.dto.response.MealPlanDayVO;
 import com.zyyqq.dto.response.MealPlanDetailVO;
+import com.zyyqq.dto.response.MealPlanExecutionVO;
 import com.zyyqq.dto.response.MealPlanVO;
+import com.zyyqq.entity.MealPlanReview;
 import com.zyyqq.service.MealPlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -111,6 +113,36 @@ public class MealPlanController {
     @PostMapping("/{id}/apply")
     public ApiResponse<MealPlanVO> apply(Authentication authentication, @PathVariable Long id) {
         return ApiResponse.success("已开始执行", mealPlanService.apply(getUserId(authentication), id));
+    }
+
+    /** 暂停执行 */
+    @PostMapping("/{id}/pause")
+    public ApiResponse<MealPlanVO> pause(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success("已暂停", mealPlanService.pause(getUserId(authentication), id));
+    }
+
+    /** 恢复执行 */
+    @PostMapping("/{id}/resume")
+    public ApiResponse<MealPlanVO> resume(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success("已恢复执行", mealPlanService.resume(getUserId(authentication), id));
+    }
+
+    /** 提前结束执行（归档） */
+    @PostMapping("/{id}/finish")
+    public ApiResponse<MealPlanVO> finish(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success("已结束执行", mealPlanService.finish(getUserId(authentication), id));
+    }
+
+    /** 执行闭环进度：周期进度 + 每日打卡 + 计划 vs 实际 */
+    @GetMapping("/{id}/execution")
+    public ApiResponse<MealPlanExecutionVO> execution(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success(mealPlanService.getExecutionProgress(getUserId(authentication), id));
+    }
+
+    /** 作者查看自己食谱的审核历史 */
+    @GetMapping("/{id}/reviews")
+    public ApiResponse<List<MealPlanReview>> reviews(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success(mealPlanService.reviewHistory(getUserId(authentication), id, false));
     }
 
     // ── 编辑食谱内容 ───────────────────────────────────────────────

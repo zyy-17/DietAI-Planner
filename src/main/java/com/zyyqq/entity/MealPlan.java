@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,12 +37,15 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Entity
 @Table(name = "meal_plan")
+@SQLRestriction("deleted = false")
 public class MealPlan {
 
     /** 执行状态：躺在我的食谱里，未执行 */
     public static final String STATUS_IDLE = "idle";
     /** 执行状态：正在执行 */
     public static final String STATUS_ACTIVE = "active";
+    /** 执行状态：暂停（执行中途暂停，可恢复） */
+    public static final String STATUS_PAUSED = "paused";
     /** 执行状态：已结束（历史） */
     public static final String STATUS_ARCHIVED = "archived";
 
@@ -163,6 +167,15 @@ public class MealPlan {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /** 软删除标记：被膳食方案/执行历史引用时不再物理删除，只打标记 */
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean deleted = false;
+
+    /** 暂停时的第几天（恢复时从这天继续），无暂停历史时为 null */
+    @Column(name = "paused_at_day")
+    private Integer pausedAtDay;
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();
@@ -180,6 +193,11 @@ public class MealPlan {
 
     /** 是否已上架到广场 */
     public boolean isOnSquare() {
-        return PUBLISH_APPROVED.equals(this.publishStatus);
+        return PUBLISH_APPROVED.equals(this.publishStatus) && !isDeleted();
+    }
+
+    /** 是否已软删除 */
+    public boolean isDeleted() {
+        return Boolean.TRUE.equals(this.deleted);
     }
 }

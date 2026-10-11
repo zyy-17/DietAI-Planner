@@ -16,13 +16,30 @@
           <div class="exec-head">
             <div class="exec-title">
               <span class="exec-name">{{ current.plan.name }}</span>
-              <span class="badge-active">● 执行中</span>
+              <span class="badge-active" :class="{ 'badge-paused': current.plan.status === 'paused' }">
+                {{ current.plan.status === 'paused' ? '⏸ 已暂停' : '● 执行中' }}
+              </span>
             </div>
             <div class="exec-meta">
               <span>目标：{{ current.plan.goalLabel }}</span>
               <span>周期：{{ current.plan.days }}天</span>
               <span>每日：{{ fmt(current.plan.plannedDailyCalories) }} kcal</span>
               <span v-if="current.plan.dailyCalories">目标热量：{{ fmt(current.plan.dailyCalories) }} kcal</span>
+            </div>
+          </div>
+
+          <!-- 周期进度条 -->
+          <div class="cycle-progress" v-if="execution">
+            <div class="cycle-head">
+              <span class="cycle-label">执行进度</span>
+              <span class="cycle-pct">{{ execution.progressPercent }}%</span>
+            </div>
+            <el-progress :percentage="execution.progressPercent" :stroke-width="10"
+              :color="execution.progressPercent >= 80 ? '#4caf7d' : '#f0a04b'" />
+            <div class="cycle-sub">
+              <span>第 {{ execution.currentDayIndex }} / {{ execution.totalDays }} 天</span>
+              <span>已打卡 {{ execution.doneMeals }} / {{ execution.totalMeals }} 餐</span>
+              <a class="cycle-detail" @click="openExecution">查看每日打卡 ›</a>
             </div>
           </div>
 
@@ -34,6 +51,17 @@
             </span>
             <span class="progress-intake" v-if="current.todayIntakeCalories">
               已记录 {{ fmt(current.todayIntakeCalories) }} kcal
+            </span>
+          </div>
+
+          <!-- 计划 vs 实际 -->
+          <div class="gap-row" v-if="execution && execution.actualDailyCalories">
+            <span class="gap-label">日均计划 vs 实际</span>
+            <span class="gap-value planned">{{ fmt(execution.plannedDailyCalories) }} kcal</span>
+            <span class="gap-arrow">→</span>
+            <span class="gap-value actual">{{ fmt(execution.actualDailyCalories) }} kcal</span>
+            <span class="gap-diff" :class="{ over: execution.calorieGap < 0 }">
+              {{ execution.calorieGap >= 0 ? '少摄入' : '多摄入' }} {{ fmt(Math.abs(execution.calorieGap)) }} kcal/天
             </span>
           </div>
 
@@ -49,9 +77,14 @@
 
           <div class="exec-actions">
             <el-button size="small" @click="openSheet(current.plan.id, 'mine')">查看完整食谱</el-button>
-            <el-button size="small" type="primary" plain @click="openSheet(current.plan.id, 'mine')">
-              调整今日饮食
-            </el-button>
+            <template v-if="current.plan.status === 'active'">
+              <el-button size="small" plain @click="pausePlan(current.plan)">⏸ 暂停</el-button>
+              <el-button size="small" type="warning" plain @click="finishPlan(current.plan)">提前结束</el-button>
+            </template>
+            <template v-else-if="current.plan.status === 'paused'">
+              <el-button size="small" type="primary" plain @click="resumePlan(current.plan)">▶ 恢复执行</el-button>
+              <el-button size="small" type="warning" plain @click="finishPlan(current.plan)">提前结束</el-button>
+            </template>
           </div>
         </el-card>
 
@@ -238,6 +271,48 @@
       </template>
     </el-dialog>
 
+    <!-- 执行进度弹窗 -->
+    <el-dialog v-model="execDialog" title="执行进度" width="640px">
+      <div class="exec-dialog" v-loading="execLoading">
+        <div class="exec-summary" v-if="execution">
+          <div class="exec-summary-item">
+            <div class="es-value">{{ execution.doneMeals }}</div>
+            <div class="es-label">已打卡餐次 / {{ execution.totalMeals }}</div>
+          </div>
+          <div class="exec-summary-item">
+            <div class="es-value">{{ fmt(execution.plannedDailyCalories) }}</div>
+            <div class="es-label">日均计划 kcal</div>
+          </div>
+          <div class="exec-summary-item">
+            <div class="es-value">{{ fmt(execution.actualDailyCalories) }}</div>
+            <div class="es-label">日均实际 kcal</div>
+          </div>
+        </div>
+
+        <div class="day-progress-list">
+          <div class="day-progress" v-for="d in execution?.days || []" :key="d.dayIndex"
+            :class="{ done: d.completed }">
+            <div class="dp-head">
+              <span class="dp-day">第 {{ d.dayIndex }} 天</span>
+              <span class="dp-date">{{ d.date }}</span>
+              <span class="dp-status" :class="{ ok: d.completed }">
+                {{ d.completed ? '✓ 已完成' : `${d.doneMeals}/${d.totalMeals} 餐` }}
+              </span>
+            </div>
+            <div class="dp-meals">
+              <span v-for="m in d.meals" :key="m.mealType" class="dp-meal" :class="{ ok: m.done }">
+                {{ m.mealLabel }}{{ m.done ? '✓' : '○' }}
+              </span>
+            </div>
+            <div class="dp-kcal">
+              计划 {{ fmt(d.plannedCalories) }} kcal · 实际 {{ fmt(d.actualCalories) }} kcal
+            </div>
+          </div>
+          <div class="empty-box" v-if="!execution?.days?.length && !execLoading">还没有执行记录</div>
+        </div>
+      </div>
+    </el-dialog>
+
     <RecipeSheet v-model="sheetVisible" :plan-id="sheetPlanId" :mode="sheetMode"
       @changed="onSheetChanged" @copy="onCopyFromSquare" @applied="onApplied" />
   </div>
@@ -282,6 +357,10 @@ const sheetVisible = ref(false)
 const sheetPlanId = ref(null)
 const sheetMode = ref('mine')
 
+const execDialog = ref(false)
+const execLoading = ref(false)
+const execution = ref(null)
+
 function fmt(v) {
   const n = Number(v)
   if (!n || Number.isNaN(n)) return '0'
@@ -303,6 +382,59 @@ async function loadCurrent() {
     current.value = (await api.get('/meal-plan/current')) || {}
   } catch (e) {
     current.value = {}
+  }
+  await loadExecution()
+}
+
+async function loadExecution() {
+  const planId = current.value?.plan?.id
+  if (!planId || (current.value.plan.status !== 'active' && current.value.plan.status !== 'paused')) {
+    execution.value = null
+    return
+  }
+  try {
+    execution.value = await api.get(`/meal-plan/${planId}/execution`)
+  } catch (e) {
+    execution.value = null
+  }
+}
+
+function openExecution() {
+  execDialog.value = true
+}
+
+async function pausePlan(plan) {
+  try {
+    await api.post(`/meal-plan/${plan.id}/pause`)
+    ElMessage.success('已暂停')
+    await Promise.all([loadCurrent(), loadMine()])
+  } catch (e) {
+    // 拦截器已提示
+  }
+}
+
+async function resumePlan(plan) {
+  try {
+    await api.post(`/meal-plan/${plan.id}/resume`)
+    ElMessage.success('已恢复执行')
+    await Promise.all([loadCurrent(), loadMine()])
+  } catch (e) {
+    // 拦截器已提示
+  }
+}
+
+async function finishPlan(plan) {
+  try {
+    await ElMessageBox.confirm(`确定提前结束「${plan.name}」？结束后会归档到历史。`, '提示', { type: 'warning' })
+  } catch (e) {
+    return
+  }
+  try {
+    await api.post(`/meal-plan/${plan.id}/finish`)
+    ElMessage.success('已结束执行')
+    await Promise.all([loadCurrent(), loadMine()])
+  } catch (e) {
+    // 拦截器已提示
   }
 }
 
@@ -562,9 +694,48 @@ onMounted(() => {
 .cover-tip { font-size: 12px; color: #a9b6c1; }
 .publish-note { font-size: 12px; color: #8b98a5; padding: 0 8px; }
 
+.badge-paused { color: #f0a04b !important; }
+.cycle-progress { margin: 12px 0 6px; background: #fafcfb; border-radius: 10px; padding: 12px 14px; }
+.cycle-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.cycle-label { font-size: 13px; color: #5b6b7a; font-weight: 600; }
+.cycle-pct { font-size: 15px; font-weight: 700; color: #4caf7d; }
+.cycle-sub { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #8b98a5; }
+.cycle-detail { color: #4caf7d; cursor: pointer; margin-left: auto; }
+.gap-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 12px; }
+.gap-label { color: #8b98a5; }
+.gap-value { font-weight: 600; }
+.gap-value.planned { color: #5b9bd5; }
+.gap-value.actual { color: #4caf7d; }
+.gap-arrow { color: #a9b6c1; }
+.gap-diff { color: #4caf7d; }
+.gap-diff.over { color: #e06055; }
+
+.exec-summary { display: flex; gap: 12px; margin-bottom: 14px; }
+.exec-summary-item { flex: 1; background: #f5f8f6; border-radius: 12px; padding: 14px 8px; text-align: center; }
+.es-value { font-size: 20px; font-weight: 700; color: #3fae74; line-height: 1.2; }
+.es-label { margin-top: 4px; font-size: 12px; color: #8b98a5; }
+.day-progress-list { max-height: 52vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.day-progress { border: 1px solid #e9f0ec; border-radius: 10px; padding: 12px 14px; }
+.day-progress.done { border-color: #c8e6d3; background: #f5fbf7; }
+.dp-head { display: flex; align-items: center; gap: 10px; }
+.dp-day { font-size: 14px; font-weight: 600; color: #2f4152; }
+.dp-date { font-size: 12px; color: #a9b6c1; }
+.dp-status { margin-left: auto; font-size: 12px; color: #8b98a5; }
+.dp-status.ok { color: #4caf7d; font-weight: 600; }
+.dp-meals { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.dp-meal { font-size: 12px; padding: 3px 9px; border-radius: 12px; background: #f2f6f3; color: #9aa7b4; }
+.dp-meal.ok { background: #e6f6ec; color: #3fae74; }
+.dp-kcal { margin-top: 8px; font-size: 12px; color: #7b8a97; }
+
 html.dark .page-title, html.dark .exec-name, html.dark .section-title,
 html.dark .rc-name, html.dark .today-meal-items { color: #d8e2ea; }
 html.dark .exec-card, html.dark .recipe-card { background: #1b2129; border-color: #2a333d; }
 html.dark .today-meals { background: #202730; }
 html.dark .progress-chip { background: #232b34; }
+html.dark .cycle-progress, html.dark .exec-summary-item { background: #202730; }
+html.dark .cycle-label, html.dark .dp-day { color: #d8e2ea; }
+html.dark .day-progress { border-color: #2a333d; }
+html.dark .day-progress.done { background: #203028; border-color: #2e4637; }
+html.dark .dp-meal { background: #232b34; }
+html.dark .dp-kcal { color: #8ea0b0; }
 </style>
