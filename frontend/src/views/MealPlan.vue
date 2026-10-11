@@ -616,8 +616,9 @@ const squareCategories = [
   { key: 'lose', label: '减脂', icon: '🔥' },
   { key: 'gain', label: '增重', icon: '💪' },
   { key: 'maintain', label: '维持体重', icon: '⚖️' },
-  { key: 'single', label: '单日食谱', icon: '📅' },
-  { key: 'multi', label: '多日食谱', icon: '📆' }
+  { key: '3', label: '3天计划', icon: '📅' },
+  { key: '7', label: '7天计划', icon: '📆' },
+  { key: '14', label: '14天计划', icon: '🗓️' }
 ]
 
 const statusFilters = computed(() => {
@@ -817,8 +818,9 @@ function toggleHotFavorite(plan) {
 function matchCategory(plan) {
   switch (squareCategory.value) {
     case 'all': return true
-    case 'single': return (plan.days || 0) === 1
-    case 'multi': return (plan.days || 0) > 1
+    case '3': return (plan.days || 0) === 3
+    case '7': return (plan.days || 0) === 7
+    case '14': return (plan.days || 0) === 14
     default: return plan.goal === squareCategory.value
   }
 }
