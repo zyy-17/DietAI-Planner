@@ -302,7 +302,7 @@
         <!-- 搜索区 -->
         <div class="square-search-box">
           <el-input
-            v-model="squareKeyword" placeholder="搜索食谱名称、食物或餐次"
+            v-model="squareKeyword" placeholder="搜索食谱名称、食物或目标"
             clearable class="square-search-input" @keyup.enter="loadSquare(true)" @clear="loadSquare(true)"
           >
             <template #prefix>
@@ -613,10 +613,9 @@ const execution = ref(null)
 
 const squareCategories = [
   { key: 'all', label: '全部食谱', icon: '📋' },
-  { key: 'breakfast', label: '早餐', icon: '🌅' },
-  { key: 'lunch', label: '午餐', icon: '☀️' },
-  { key: 'dinner', label: '晚餐', icon: '🌙' },
-  { key: 'snack', label: '加餐', icon: '🍎' },
+  { key: 'lose', label: '减脂', icon: '🔥' },
+  { key: 'gain', label: '增重', icon: '💪' },
+  { key: 'maintain', label: '维持体重', icon: '⚖️' },
   { key: 'single', label: '单日食谱', icon: '📅' },
   { key: 'multi', label: '多日食谱', icon: '📆' }
 ]
@@ -820,7 +819,7 @@ function matchCategory(plan) {
     case 'all': return true
     case 'single': return (plan.days || 0) === 1
     case 'multi': return (plan.days || 0) > 1
-    default: return (plan.meals || []).includes(squareCategory.value)
+    default: return plan.goal === squareCategory.value
   }
 }
 
