@@ -1,18 +1,21 @@
 <template>
   <div class="meal-plan-page">
-    <!-- ══════════ 我的食谱 ══════════ -->
+    <!-- ══════════ 我的食谱（左右布局：主内容 + 热门推荐侧边栏） ══════════ -->
     <template v-if="activeTab === 'mine'">
-      <div class="page-card">
-        <!-- 标题操作区 -->
-        <div class="page-head">
-          <div>
-            <h2 class="page-title">我的食谱</h2>
-            <p class="page-sub">管理自己创建和收藏的食谱，随时应用到膳食方案</p>
-          </div>
-          <el-button type="primary" round class="btn-create" @click="openCreate">
-            <span class="btn-create-icon">＋</span> 新建食谱
-          </el-button>
-        </div>
+      <div class="mine-layout">
+        <!-- 左侧：原有内容区（完全不变） -->
+        <div class="mine-main">
+          <div class="page-card">
+            <!-- 标题操作区 -->
+            <div class="page-head">
+              <div>
+                <h2 class="page-title">我的食谱</h2>
+                <p class="page-sub">管理自己创建和收藏的食谱，随时应用到膳食方案</p>
+              </div>
+              <el-button type="primary" round class="btn-create" @click="openCreate">
+                <span class="btn-create-icon">＋</span> 新建食谱
+              </el-button>
+            </div>
 
         <!-- 状态筛选区（数量内联到 pill 中） -->
         <div class="status-filter">
@@ -241,7 +244,47 @@
             </div>
           </div>
         </template>
-      </div>
+          </div><!-- /page-card -->
+        </div><!-- /mine-main -->
+
+        <!-- 右侧：热门推荐侧边栏 -->
+        <div class="mine-sidebar">
+          <div class="sidebar-card">
+            <div class="sidebar-head">
+              <span class="sidebar-title">热门推荐</span>
+              <el-button type="primary" size="small" round @click="openCreate">＋ 新建食谱</el-button>
+            </div>
+            <div class="sidebar-list" v-loading="hotLoading">
+              <div class="hot-item" v-for="plan in hotList" :key="'hot' + plan.id" @click="openSheet(plan.id, 'square')">
+                <img class="hot-cover" :src="plan.coverUrl || defaultCoverSmall" alt="" />
+                <div class="hot-info">
+                  <div class="hot-name">{{ plan.name }}</div>
+                  <div class="hot-stats">{{ plan.usageCount || 0 }}人收藏</div>
+                </div>
+                <button class="hot-fav-btn" :class="{ on: plan.favorited }" @click.stop="toggleHotFavorite(plan)">
+                  {{ plan.favorited ? '已收藏' : '收藏' }}
+                </button>
+              </div>
+              <div class="hot-empty" v-if="!hotList.length && !hotLoading">暂无热门食谱</div>
+            </div>
+
+            <!-- 小贴士 -->
+            <div class="sidebar-tips">
+              <div class="tips-title">💡 小贴士</div>
+              <ul class="tips-list">
+                <li>公开发布的食谱需要管理员审核后才会出现在广场展示。</li>
+                <li>你可以从食谱保存到个人菜，或用AI智能膳食方案中，合理搭配食材、均衡营养，才是健康的关键！</li>
+              </ul>
+            </div>
+
+            <!-- 底部装饰区 -->
+            <div class="sidebar-deco">
+              <div class="deco-text">科学饮食<br/>让生活更美好</div>
+              <div class="deco-leaf">🌿</div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /mine-layout -->
     </template>
 
     <!-- ══════════ 食谱广场 ══════════ -->
@@ -524,6 +567,7 @@ const route = useRoute()
 const router = useRouter()
 
 const defaultCover = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="%23eef7f1"/><text x="100" y="115" font-size="60" text-anchor="middle">🍲</text></svg>'
+const defaultCoverSmall = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60"><rect width="80" height="60" fill="%23e8f5e9" rx="6"/><text x="40" y="38" font-size="24" text-anchor="middle">🍽️</text></svg>'
 
 const activeTab = ref(route.path === '/meal-plan/square' ? 'square' : 'mine')
 const current = ref({})
@@ -545,6 +589,10 @@ const squareSort = ref('hot')
 const squareKeyword = ref('')
 const squareCategory = ref('all')
 const featuredList = ref([])
+
+// 热门推荐侧边栏
+const hotList = ref([])
+const hotLoading = ref(false)
 
 const saving = ref(false)
 const createDialog = ref(false)
@@ -751,6 +799,22 @@ async function loadFavorites() {
   }
 }
 
+async function loadHotRecipes() {
+  hotLoading.value = true
+  try {
+    const res = await api.get('/meal-plan/square', { params: { sort: 'hot', page: 0, size: 5 } })
+    hotList.value = (res?.content || []).slice(0, 5)
+  } catch (e) {
+    hotList.value = []
+  } finally {
+    hotLoading.value = false
+  }
+}
+
+function toggleHotFavorite(plan) {
+  toggleFavorite(plan)
+}
+
 function matchCategory(plan) {
   switch (squareCategory.value) {
     case 'all': return true
@@ -951,15 +1015,26 @@ onMounted(() => {
   loadCurrent()
   loadMine()
   loadFavorites()
+  loadHotRecipes()
   if (activeTab.value === 'square') loadSquare(true)
 })
 </script>
 
 <style scoped>
 .meal-plan-page { padding: 4px; }
+.mine-layout {
+  display: flex; gap: 20px; align-items: flex-start;
+  max-width: 1280px; margin: 0 auto;
+}
+.mine-main {
+  flex: 1; min-width: 0; /* 确保内容区收缩时不溢出 */
+}
+.mine-sidebar {
+  width: 280px; flex: none;
+}
 .page-card {
   background: #fff; border: 1px solid #eef1f5; border-radius: 16px;
-  padding: 28px 30px 32px; max-width: 1120px; margin: 0 auto;
+  padding: 28px 30px 32px; /* 移除 max-width，由外层 mine-layout 控制 */
 }
 
 /* ====== 标题操作区 ====== */
@@ -973,6 +1048,59 @@ onMounted(() => {
 .btn-create:hover { background: #1a6dd4 !important; }
 .btn-create-icon { font-size: 16px; margin-right: 2px; }
 .btn-share { border-radius: 10px; font-size: 13px; padding: 10px 18px; }
+
+/* ====== 热门推荐侧边栏 ====== */
+.sidebar-card {
+  background: #fff; border: 1px solid #eef1f5; border-radius: 16px;
+  padding: 20px; position: sticky; top: 4px;
+}
+.sidebar-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.sidebar-title { font-size: 16px; font-weight: 700; color: #1f2d3a; }
+.sidebar-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.hot-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 10px; cursor: pointer;
+  transition: background .2s;
+}
+.hot-item:hover { background: #f5f8f6; }
+.hot-cover {
+  width: 48px; height: 36px; border-radius: 8px; object-fit: cover;
+  background: #f0f4f2; flex: none;
+}
+.hot-info { flex: 1; min-width: 0; }
+.hot-name {
+  font-size: 13px; font-weight: 600; color: #33414f;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hot-stats { font-size: 11px; color: #9aa7b4; margin-top: 2px; }
+.hot-fav-btn {
+  flex: none; border: 1px solid #e3e8ee; background: #fff; border-radius: 14px;
+  padding: 4px 12px; font-size: 12px; cursor: pointer; color: #7b8a97;
+  transition: all .2s;
+}
+.hot-fav-btn:hover { border-color: #2b7de9; color: #2b7de9; }
+.hot-fav-btn.on { background: #e8f1fd; border-color: #2b7de9; color: #2b7de9; }
+.hot-empty { text-align: center; color: #a9b6c1; font-size: 13px; padding: 20px 0; }
+
+.sidebar-tips {
+  background: #fafcfb; border-radius: 12px; padding: 14px 16px; margin-bottom: 18px;
+}
+.tips-title { font-size: 13px; font-weight: 600; color: #3fae74; margin-bottom: 8px; }
+.tips-list { margin: 0; padding-left: 16px; }
+.tips-list li { font-size: 12px; color: #7b8a97; line-height: 1.8; }
+
+.sidebar-deco {
+  position: relative; text-align: center; padding: 20px 0 8px;
+  background: linear-gradient(180deg, transparent, #f0faf3); border-radius: 12px;
+  overflow: hidden;
+}
+.deco-text {
+  font-size: 13px; font-weight: 600; color: #4caf7d; line-height: 1.6;
+}
+.deco-leaf { font-size: 40px; margin-top: 4px; opacity: .6; }
 
 /* ====== 状态筛选区 ====== */
 .status-filter {
@@ -1042,6 +1170,7 @@ onMounted(() => {
 }
 @media (max-width: 960px) {
   .recipe-grid { grid-template-columns: repeat(2, 1fr); }
+  .mine-sidebar { display: none; }
 }
 @media (max-width: 640px) {
   .recipe-grid { grid-template-columns: 1fr; }
@@ -1275,4 +1404,13 @@ html.dark .publish-note { background: #202730; }
 html.dark .cover-preview { background: #232b34; }
 html.dark .rc-vis-badge { background: rgba(27,33,41,.85); color: #8ea0b0; }
 html.dark .rc-vis-badge.pub { background: rgba(29,51,77,.9); color: #5b9bd5; }
+html.dark .sidebar-card { background: #1b2129; border-color: #2a333d; }
+html.dark .sidebar-title { color: #d8e2ea; }
+html.dark .hot-item:hover { background: #232b34; }
+html.dark .hot-name { color: #d8e2ea; }
+html.dark .hot-fav-btn { background: #232b34; border-color: #333e49; color: #c8d6e5; }
+html.dark .sidebar-tips { background: #202730; }
+html.dark .tips-title { color: #3fae74; }
+html.dark .tips-list li { color: #8ea0b0; }
+html.dark .sidebar-deco { background: linear-gradient(180deg, transparent, #1a2820); }
 </style>

@@ -144,24 +144,80 @@
       </div>
     </div>
 
-    <!-- 添加食物 -->
-    <el-dialog v-model="addDialog" title="添加食物" width="460px" append-to-body>
-      <el-form label-width="72px">
-        <el-form-item label="食物">
-          <el-select v-model="addForm.foodKey" filterable placeholder="搜索食物库" style="width: 100%">
-            <el-option v-for="f in foodOptions" :key="f.key" :label="f.name" :value="f.key">
-              <span>{{ f.name }}</span>
-              <span style="float: right; color: #9aa7b4; font-size: 12px">{{ f.calories }} kcal/100g</span>
-            </el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="克数">
-          <el-input-number v-model="addForm.amount" :min="1" :max="2000" :step="10" />
-        </el-form-item>
-      </el-form>
+    <!-- 添加食物（支持：食物库选择 / 新建自定义食物） -->
+    <el-dialog v-model="addDialog" title="添加食物" width="540px" append-to-body>
+      <!-- 模式切换 -->
+      <div class="add-mode-switch">
+        <span
+          class="mode-tab" :class="{ active: addMode === 'select' }" @click="addMode = 'select'"
+        >📦 从食物库选择</span>
+        <span
+          class="mode-tab" :class="{ active: addMode === 'create' }" @click="switchToAddCreate"
+        >🍳 新建自定义食物</span>
+      </div>
+
+      <!-- 模式1：从食物库选择（原有逻辑增强） -->
+      <template v-if="addMode === 'select'">
+        <el-form label-width="72px">
+          <el-form-item label="食物">
+            <el-select v-model="addForm.foodKey" filterable placeholder="搜索食物库或自定义食物" style="width: 100%">
+              <el-option-group label="我的自定义食物">
+                <el-option v-for="f in customFoodOptions" :key="f.key" :label="f.name" :value="f.key">
+                  <span>{{ f.name }}</span>
+                  <span style="float: right; color: #4caf7d; font-size: 12px">我的 · {{ f.calories }} kcal</span>
+                </el-option>
+              </el-option-group>
+              <el-option-group label="系统食物库">
+                <el-option v-for="f in systemFoodOptions" :key="f.key" :label="f.name" :value="f.key">
+                  <span>{{ f.name }}</span>
+                  <span style="float: right; color: #9aa7b4; font-size: 12px">{{ f.calories }} kcal/100g</span>
+                </el-option>
+              </el-option-group>
+            </el-select>
+          </el-form-item>
+          <el-form-item label="克数">
+            <el-input-number v-model="addForm.amount" :min="1" :max="2000" :step="10" />
+          </el-form-item>
+        </el-form>
+      </template>
+
+      <!-- 模式2：新建自定义食物（表单与 FoodLibrary.vue 自定义食物弹窗一致） -->
+      <template v-else>
+        <el-alert type="info" :closable="false" show-icon title="新建的自定义食物仅本人可见，会同时添加到你的食物库中" style="margin-bottom:14px" />
+        <el-form label-width="100px" class="custom-food-form">
+          <el-form-item label="食物名称" required>
+            <el-input v-model="customFoodForm.name" placeholder="如：妈妈牌红烧肉" maxlength="50" />
+          </el-form-item>
+          <el-form-item label="分类（可选）">
+            <el-select v-model="customFoodForm.categoryId" placeholder="默认归入「其他」" clearable style="width:100%">
+              <el-option v-for="cat in categoryOptions" :key="cat.id" :label="cat.name" :value="cat.id" />
+            </el-select>
+          </el-form-item>
+          <div class="form-grid-2">
+            <el-form-item label="热量(kcal/100g)" required>
+              <el-input-number v-model="customFoodForm.calories" :min="0" :max="2000" :precision="1" controls-position="right" style="width:100%" />
+            </el-form-item>
+            <el-form-item label="蛋白质(g/100g)">
+              <el-input-number v-model="customFoodForm.protein" :min="0" :max="200" :precision="1" controls-position="right" style="width:100%" />
+            </el-form-item>
+            <el-form-item label="碳水(g/100g)">
+              <el-input-number v-model="customFoodForm.carbohydrate" :min="0" :max="200" :precision="1" controls-position="right" style="width:100%" />
+            </el-form-item>
+            <el-form-item label="脂肪(g/100g)">
+              <el-input-number v-model="customFoodForm.fat" :min="0" :max="200" :precision="1" controls-position="right" style="width:100%" />
+            </el-form-item>
+          </div>
+          <el-form-item label="本次添加克数" required>
+            <el-input-number v-model="addForm.amount" :min="1" :max="2000" :step="10" />
+          </el-form-item>
+        </el-form>
+      </template>
+
       <template #footer>
         <el-button @click="addDialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitAdd">添加</el-button>
+        <el-button type="primary" :loading="saving" @click="submitAdd">
+          {{ addMode === 'create' ? '创建并添加' : '添加' }}
+        </el-button>
       </template>
     </el-dialog>
 
@@ -250,6 +306,11 @@ const foodOptions = ref([])
 
 const addDialog = ref(false)
 const addForm = reactive({ mealType: 'breakfast', foodKey: '', amount: 100 })
+const addMode = ref('select') // 'select' | 'create'
+const customFoodForm = reactive({
+  name: '', categoryId: null, calories: 0, protein: 0, carbohydrate: 0, fat: 0
+})
+const categoryOptions = ref([])
 const replaceDialog = ref(false)
 const replaceTarget = ref(null)
 const candidates = ref([])
@@ -291,6 +352,10 @@ const macro = computed(() => {
   if (carb + protein + fat !== 100) carb += 100 - (carb + protein + fat)
   return { carbPct: carb, proteinPct: protein, fatPct: fat }
 })
+
+// 食物选项按来源分组
+const customFoodOptions = computed(() => foodOptions.value.filter(f => f.source === 'user'))
+const systemFoodOptions = computed(() => foodOptions.value.filter(f => f.source === 'system'))
 
 watch(() => [props.modelValue, props.planId], ([open]) => {
   if (open && props.planId) load()
@@ -339,7 +404,10 @@ function close() {
 async function loadFoodOptions() {
   if (foodOptions.value.length) return
   try {
-    const list = await api.get('/foods/all')
+    const [list, cats] = await Promise.all([
+      api.get('/foods/all'),
+      api.get('/categories').catch(() => [])
+    ])
     foodOptions.value = (list || []).map(f => ({
       key: `${f.custom ? 'user' : 'system'}:${f.id}`,
       id: f.id,
@@ -347,8 +415,17 @@ async function loadFoodOptions() {
       name: f.name,
       calories: f.calories
     }))
+    categoryOptions.value = cats || []
   } catch (e) {
     foodOptions.value = []
+  }
+}
+
+function switchToAddCreate() {
+  addMode.value = 'create'
+  // 加载分类（如果还没加载）
+  if (!categoryOptions.value.length) {
+    api.get('/categories').then(cats => { categoryOptions.value = cats || [] }).catch(() => {})
   }
 }
 
@@ -357,10 +434,64 @@ function openAdd(mealType) {
   addForm.mealType = mealType
   addForm.foodKey = ''
   addForm.amount = 100
+  addMode.value = 'select'
+  // 重置自定义食物表单
+  customFoodForm.name = ''
+  customFoodForm.categoryId = null
+  customFoodForm.calories = 0
+  customFoodForm.protein = 0
+  customFoodForm.carbohydrate = 0
+  customFoodForm.fat = 0
   addDialog.value = true
 }
 
 async function submitAdd() {
+  if (addMode.value === 'create') {
+    // 模式2：新建自定义食物并添加
+    const name = (customFoodForm.name || '').trim()
+    if (!name) { ElMessage.warning('请填写自定义食物名称'); return }
+    if (customFoodForm.calories === null || customFoodForm.calories === undefined) {
+      ElMessage.warning('请填写热量'); return
+    }
+    saving.value = true
+    try {
+      // 1) 创建自定义食物
+      const newFood = await api.post('/foods/my', {
+        name,
+        categoryId: customFoodForm.categoryId || null,
+        calories: customFoodForm.calories,
+        protein: customFoodForm.protein,
+        carbohydrate: customFoodForm.carbohydrate,
+        fat: customFoodForm.fat
+      })
+      // 2) 用新建的食物ID添加到食谱
+      await api.post(`/meal-plan/${props.planId}/items`, {
+        dayIndex: activeDay.value,
+        mealType: addForm.mealType,
+        foodId: newFood.id || newFood,
+        foodSource: 'user',
+        amount: addForm.amount
+      })
+      // 3) 刷新食物选项列表（把新食物加进去）
+      foodOptions.value.push({
+        key: `user:${newFood.id || newFood}`,
+        id: newFood.id || newFood,
+        source: 'user',
+        name,
+        calories: customFoodForm.calories
+      })
+      addDialog.value = false
+      ElMessage.success(`已创建「${name}」并添加到食谱`)
+      await reload()
+    } catch (e) {
+      // 拦截器已提示
+    } finally {
+      saving.value = false
+    }
+    return
+  }
+
+  // 模式1：从食物库选择（原有逻辑）
   if (!addForm.foodKey) {
     ElMessage.warning('请先选食物')
     return
@@ -602,6 +733,24 @@ async function applyPlan() {
 .swap-empty { text-align: center; color: #a9b6c1; font-size: 13px; padding: 20px 0; }
 .dlg-tip { font-size: 13px; color: #5b6b7a; margin: 0 0 10px; }
 
+/* 添加食物弹窗：模式切换 */
+.add-mode-switch {
+  display: flex; gap: 0; border: 1px solid #e3e8ee; border-radius: 10px;
+  overflow: hidden; margin-bottom: 18px;
+}
+.mode-tab {
+  flex: 1; text-align: center; padding: 10px 16px; font-size: 13px;
+  color: #7b8a97; cursor: pointer; transition: all .2s;
+  background: #fff; border: none;
+}
+.mode-tab:hover { color: #2b7de9; background: #f5f8fc; }
+.mode-tab.active {
+  background: #e8f1fd; color: #2b7de9; font-weight: 600;
+}
+.custom-food-form { margin-top: 4px; }
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.form-grid-2 .el-form-item { margin-bottom: 14px; }
+
 html.dark .sheet { background: #1b2129; }
 html.dark .stat { background: #232b34; }
 html.dark .stat-label, html.dark .meal-kcal, html.dark .food-kcal { color: #8ea0b0; }
@@ -613,6 +762,10 @@ html.dark .sheet-footer { background: #1b2129; border-top-color: #2a333d; }
 html.dark .btn-ghost { background: #232b34; border-color: #333e49; color: #c8d6e5; }
 html.dark .tool { background: #24322b; }
 html.dark .food-empty { background: #202730; }
+html.dark .add-mode-switch { border-color: #333e49; }
+html.dark .mode-tab { background: #1b2129; color: #8ea0b0; }
+html.dark .mode-tab:hover { background: #232b34; color: #5b9bd5; }
+html.dark .mode-tab.active { background: #1d334d; color: #5b9bd5; }
 </style>
 
 <style>
