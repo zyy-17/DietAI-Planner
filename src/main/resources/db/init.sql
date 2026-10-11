@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS `food` (
     `image_url`     VARCHAR(255)  DEFAULT NULL COMMENT '食物图片',
     `unit_name`     VARCHAR(20)   DEFAULT NULL COMMENT '常用计量单位名称，如 个/份/盒（为空表示只能按克数记录）',
     `unit_weight`   DECIMAL(8,2)  DEFAULT NULL COMMENT '每个/每份约多少克，配合 unit_name 做按个数换算',
+    `food_type`     VARCHAR(20)   NOT NULL DEFAULT 'ingredient' COMMENT '食物类型：ingredient基础食材/dish成品菜肴（行业平均估算值）',
     `source`        VARCHAR(20)   NOT NULL DEFAULT 'system' COMMENT '来源：system/user',
     `status`        VARCHAR(20)   NOT NULL DEFAULT 'approved' COMMENT 'pending/approved/rejected',
     `created_by`    BIGINT        DEFAULT NULL COMMENT '提交用户ID',
@@ -120,12 +121,33 @@ CREATE TABLE IF NOT EXISTS `user_custom_food` (
     `fiber`         DECIMAL(8,2)  DEFAULT NULL COMMENT '膳食纤维(g/100g)',
     `unit_name`     VARCHAR(20)   DEFAULT NULL COMMENT '常用计量单位名称，如 个/份（为空表示只能按克数记录）',
     `unit_weight`   DECIMAL(8,2)  DEFAULT NULL COMMENT '每个/每份约多少克',
+    `is_recipe`     TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '是否为组合食谱（由食材组合累加营养）',
     `created_at`    DATETIME      NOT NULL COMMENT '创建时间',
     `updated_at`    DATETIME      NOT NULL COMMENT '更新时间',
     PRIMARY KEY (`id`),
     KEY `idx_user` (`user_id`),
     KEY `idx_user_name` (`user_id`, `name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户自定义食物表（私有，不进公共食物库）';
+
+-- ============================================================
+-- 4.2 用户自定义食谱组成明细表 (user_custom_food_item)
+-- 组合食谱由若干基础食材组成，本表记录「哪个食谱 → 哪种食材 → 多少克」，
+-- 营养值为按克数换算后的快照。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `user_custom_food_item` (
+    `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `recipe_id`     BIGINT        NOT NULL COMMENT '所属食谱ID（user_custom_food.id，is_recipe=1）',
+    `food_id`       BIGINT        NOT NULL COMMENT '基础食材ID（food.id）',
+    `food_name`     VARCHAR(100)  NOT NULL COMMENT '食材名快照',
+    `amount`        DECIMAL(8,2)  NOT NULL COMMENT '食材用量（克）',
+    `calories`      DECIMAL(8,2)  NOT NULL COMMENT '该食材贡献热量快照(kcal)',
+    `protein`       DECIMAL(8,2)  DEFAULT NULL COMMENT '该食材贡献蛋白质快照(g)',
+    `carbohydrate`  DECIMAL(8,2)  DEFAULT NULL COMMENT '该食材贡献碳水快照(g)',
+    `fat`           DECIMAL(8,2)  DEFAULT NULL COMMENT '该食材贡献脂肪快照(g)',
+    `created_at`    DATETIME      NOT NULL COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_recipe` (`recipe_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户自定义食谱组成明细表';
 
 
 -- ============================================================
@@ -211,7 +233,8 @@ INSERT INTO `food_category` (`name`, `parent_id`, `sort_order`, `icon`, `status`
 ('零食', 0, 7, 'snack', 1),
 ('饮品', 0, 8, 'drink', 1),
 ('海鲜', 0, 9, 'seafood', 1),
-('蛋类', 0, 10, 'egg', 1);
+('蛋类', 0, 10, 'egg', 1),
+('成品菜肴', 0, 11, 'dish', 1);
 
 -- 常见食物数据
 INSERT INTO `food` (`name`, `category_id`, `calories`, `protein`, `carbohydrate`, `fat`, `fiber`, `image_url`, `source`, `status`, `created_by`, `created_at`, `updated_at`) VALUES
@@ -262,6 +285,34 @@ INSERT INTO `food` (`name`, `category_id`, `calories`, `protein`, `carbohydrate`
 ('黑咖啡', 8, 1.00, 0.10, 0.00, 0.00, 0.00, NULL, 'system', 'approved', NULL, NOW(), NOW()),
 ('鸭蛋', 10, 180.00, 12.60, 0.50, 13.00, 0.00, NULL, 'system', 'approved', NULL, NOW(), NOW()),
 ('鹌鹑蛋', 10, 160.00, 12.80, 2.10, 11.10, 0.00, NULL, 'system', 'approved', NULL, NOW(), NOW());
+
+-- 成品菜肴数据（分类11：成品菜肴；food_type=dish；为行业平均估算值，仅供参考）
+-- 营养为每100g估算值，unit_name/unit_weight 表示一份约多少克，便于按"份"记录外食
+INSERT INTO `food` (`name`, `category_id`, `calories`, `protein`, `carbohydrate`, `fat`, `fiber`, `image_url`, `unit_name`, `unit_weight`, `food_type`, `source`, `status`, `created_by`, `created_at`, `updated_at`) VALUES
+('蛋炒饭', 11, 150.00, 4.50, 22.00, 5.00, 0.80, NULL, '份', 300.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('扬州炒饭', 11, 168.00, 5.20, 24.00, 6.20, 1.00, NULL, '份', 320.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('牛肉炒饭', 11, 172.00, 6.00, 23.50, 6.50, 0.80, NULL, '份', 320.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('黄焖鸡米饭', 11, 155.00, 7.50, 18.00, 6.80, 1.20, NULL, '份', 450.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('红烧肉盖饭', 11, 210.00, 8.00, 22.00, 12.00, 0.60, NULL, '份', 400.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('鱼香肉丝盖饭', 11, 185.00, 6.80, 21.00, 9.50, 0.80, NULL, '份', 400.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('宫保鸡丁', 11, 190.00, 9.50, 14.00, 11.00, 0.90, NULL, '份', 350.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('麻辣烫', 11, 120.00, 6.00, 12.00, 6.50, 2.00, NULL, '份', 500.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('牛肉面', 11, 130.00, 6.50, 20.00, 3.80, 1.00, NULL, '份', 450.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('炸酱面', 11, 175.00, 6.00, 26.00, 6.00, 1.20, NULL, '份', 450.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('螺蛳粉', 11, 115.00, 4.50, 18.00, 4.00, 1.00, NULL, '份', 500.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('兰州拉面', 11, 125.00, 5.50, 21.00, 3.50, 1.00, NULL, '份', 450.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('奶茶', 11, 65.00, 1.20, 11.00, 2.50, 0.00, NULL, '杯', 500.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('炸鸡', 11, 250.00, 18.00, 12.00, 15.00, 0.50, NULL, '份', 300.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('包子', 11, 220.00, 8.00, 38.00, 6.00, 1.50, NULL, '个', 80.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('煎饺', 11, 210.00, 8.50, 25.00, 9.00, 1.00, NULL, '个', 35.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('汉堡', 11, 280.00, 13.00, 30.00, 13.00, 1.50, NULL, '个', 200.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('披萨', 11, 265.00, 11.00, 32.00, 11.00, 1.50, NULL, '份', 250.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('薯条', 11, 310.00, 3.50, 40.00, 15.00, 3.00, NULL, '份', 150.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('蛋挞', 11, 320.00, 5.50, 35.00, 18.00, 0.50, NULL, '个', 50.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('饺子', 11, 200.00, 8.00, 28.00, 8.00, 1.00, NULL, '个', 30.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('馄饨', 11, 160.00, 7.00, 24.00, 5.00, 0.80, NULL, '份', 250.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('盖浇饭', 11, 165.00, 7.00, 22.00, 6.50, 1.00, NULL, '份', 400.00, 'dish', 'system', 'approved', NULL, NOW(), NOW()),
+('蛋花汤', 11, 30.00, 2.00, 2.50, 1.50, 0.20, NULL, '份', 300.00, 'dish', 'system', 'approved', NULL, NOW(), NOW());
 
 -- 营养标准配置
 INSERT INTO `nutrition_standard` (`gender`, `age_min`, `age_max`, `calories_kcal`, `protein_g`, `carb_g`, `fat_g`) VALUES

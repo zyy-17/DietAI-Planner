@@ -40,6 +40,11 @@ public interface FoodRepository extends JpaRepository<Food, Long> {
     @Query("SELECT f FROM Food f WHERE f.status = :status AND (f.source IS NULL OR f.source <> :source)")
     List<Food> findPublicFoodList(@Param("status") String status, @Param("source") String source);
 
+    /** 按食物类型分页查询公开食物（ingredient 食材 / dish 成品菜） */
+    @Query("SELECT f FROM Food f WHERE f.foodType = :foodType AND f.status = :status AND (f.source IS NULL OR f.source <> :source)")
+    Page<Food> findPublicFoodsByType(@Param("foodType") String foodType, @Param("status") String status,
+                                     @Param("source") String source, Pageable pageable);
+
     /** 按关键字搜索公开食物 */
     @Query("SELECT f FROM Food f WHERE f.name LIKE %:keyword% AND f.status = 'approved' AND (f.source IS NULL OR f.source <> 'user')")
     List<Food> searchPublicApproved(@Param("keyword") String keyword);

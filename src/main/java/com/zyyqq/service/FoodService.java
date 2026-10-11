@@ -58,6 +58,12 @@ public class FoodService {
         return foodRepository.findPublicFoods(STATUS_APPROVED, SOURCE_USER, pageable);
     }
 
+    /** 按食物类型（食材/成品菜）分页查询公开食物 */
+    public Page<Food> getFoodsByType(String foodType, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        return foodRepository.findPublicFoodsByType(foodType, STATUS_APPROVED, SOURCE_USER, pageable);
+    }
+
     public Food getFoodById(Long id) {
         return foodRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("食物不存在"));

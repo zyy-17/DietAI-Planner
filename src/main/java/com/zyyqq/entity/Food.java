@@ -53,6 +53,11 @@ public class Food {
     @Column(name = "unit_weight", precision = 8, scale = 2)
     private BigDecimal unitWeight;
 
+    /** 食物类型：ingredient 基础食材（精准数据源）/ dish 成品菜肴（外食快速记录，行业平均估算值） */
+    @Column(name = "food_type", nullable = false, length = 20, columnDefinition = "varchar(20) NOT NULL DEFAULT 'ingredient'")
+    @Builder.Default
+    private String foodType = "ingredient";
+
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String source = "system";

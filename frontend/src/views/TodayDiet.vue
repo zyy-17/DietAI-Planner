@@ -186,7 +186,48 @@
         <el-button text type="primary" size="small" @click="toggleCustomForm">
           {{ showCustomForm ? '收起自定义食物' : '＋ 找不到？添加自定义食物' }}
         </el-button>
-        <span v-if="!showCustomForm" class="custom-tip">自己填写营养数据，仅你本人可见，不会进入公共食物库</span>
+        <el-button text type="primary" size="small" @click="toggleRecipeForm">
+          {{ showRecipeForm ? '收起组合食谱' : '🧩 组合食谱：用食材拼成一道常吃的菜' }}
+        </el-button>
+        <span v-if="!showCustomForm && !showRecipeForm" class="custom-tip">自己填写营养数据，仅你本人可见，不会进入公共食物库</span>
+      </div>
+
+      <div v-if="showRecipeForm" class="custom-food-form recipe-form">
+        <div class="custom-form-title">🧩 组合食谱 <small>用基础食材拼菜，营养自动累加，保存后一键复用</small></div>
+        <div class="custom-grid">
+          <label class="cf-field">
+            <span>食谱名称</span>
+            <el-input v-model="recipeForm.name" placeholder="如：我的家常蛋炒饭" size="small" />
+          </label>
+          <label class="cf-field">
+            <span>分类（可选）</span>
+            <el-select v-model="recipeForm.categoryId" placeholder="默认归入「其他」" clearable size="small" style="width:100%">
+              <el-option v-for="cat in categories" :key="cat.id" :label="cat.name" :value="cat.id" />
+            </el-select>
+          </label>
+        </div>
+        <div class="custom-form-tip">在下方搜索并点击添加食材，设置克数；营养会自动累加</div>
+        <el-input v-model="recipeSearch" placeholder="搜索基础食材，如：米饭、鸡蛋、食用油..." size="small" clearable style="margin-bottom:8px" @input="filterRecipeFoods" />
+        <div class="recipe-food-list">
+          <div v-for="f in recipeFoodOptions" :key="f.key" class="recipe-food-item" :class="{ chosen: isRecipeItemChosen(f.key) }" @click="toggleRecipeItem(f)">
+            <span class="rf-name">{{ f.name }}</span>
+            <span class="rf-cal">{{ f.calories }} kcal/100g</span>
+            <span v-if="isRecipeItemChosen(f.key)" class="rf-amount">
+              <el-input-number v-model="getRecipeItem(f.key).amount" :min="1" :max="2000" :step="10" size="small" style="width:110px" @click.stop />
+            </span>
+            <span v-else class="rf-add">＋</span>
+          </div>
+          <div v-if="!recipeFoodOptions.length" class="rf-empty">暂无匹配食材</div>
+        </div>
+        <div class="custom-grid">
+          <div class="custom-preview">🧮 合计约 <b>{{ recipeTotalCal }}</b> kcal · {{ recipeForm.items.length }} 种食材</div>
+        </div>
+        <div class="custom-form-footer">
+          <el-button size="small" @click="showRecipeForm = false">取消</el-button>
+          <el-button size="small" type="primary" :loading="recipeSubmitting" @click="submitRecipe">
+            保存食谱并记录到{{ currentMealName }}
+          </el-button>
+        </div>
       </div>
 
       <div v-if="showCustomForm" class="custom-food-form">
@@ -388,6 +429,98 @@ const customFood = reactive({
 
 const customPreviewCal = computed(() => ((customFood.calories || 0) * (customFood.amount || 0) / 100).toFixed(1))
 
+// 组合食谱（用基础食材拼成一道常吃的菜，营养自动累加）
+const showRecipeForm = ref(false)
+const recipeSubmitting = ref(false)
+const recipeSearch = ref('')
+const recipeFoodOptions = ref([])
+const recipeForm = reactive({
+  name: '',
+  categoryId: null,
+  items: [] // { key, foodId, name, amount, calories, protein, carbohydrate, fat }
+})
+
+const recipeTotalCal = computed(() => recipeForm.items.reduce((s, it) => s + (it.calories || 0) * (it.amount || 0) / 100, 0).toFixed(0))
+
+function resetRecipeForm() {
+  recipeForm.name = ''
+  recipeForm.categoryId = null
+  recipeForm.items = []
+  recipeSearch.value = ''
+  recipeFoodOptions.value = allFoods.value.filter(f => f.foodSource === 'system')
+}
+
+function toggleRecipeForm() {
+  showRecipeForm.value = !showRecipeForm.value
+  if (showRecipeForm.value) {
+    showCustomForm.value = false
+    resetRecipeForm()
+  }
+}
+
+function filterRecipeFoods() {
+  const kw = recipeSearch.value.trim().toLowerCase()
+  const base = allFoods.value.filter(f => f.foodSource === 'system')
+  recipeFoodOptions.value = kw ? base.filter(f => f.name.toLowerCase().includes(kw)) : base
+}
+
+function isRecipeItemChosen(key) {
+  return recipeForm.items.some(it => it.key === key)
+}
+
+function getRecipeItem(key) {
+  return recipeForm.items.find(it => it.key === key)
+}
+
+function toggleRecipeItem(f) {
+  const item = toPickerItem(f)
+  const idx = recipeForm.items.findIndex(it => it.key === item.key)
+  if (idx >= 0) {
+    recipeForm.items.splice(idx, 1)
+  } else {
+    recipeForm.items.push({
+      key: item.key,
+      foodId: item.id,
+      name: item.name,
+      amount: 100,
+      calories: item.calories || 0,
+      protein: item.protein || 0,
+      carbohydrate: item.carbohydrate || 0,
+      fat: item.fat || 0
+    })
+  }
+}
+
+async function submitRecipe() {
+  const name = (recipeForm.name || '').trim()
+  if (!name) return ElMessage.warning('请填写食谱名称')
+  if (recipeForm.items.length === 0) return ElMessage.warning('请至少添加一种食材')
+  recipeSubmitting.value = true
+  try {
+    const recipe = await api.post('/foods/my/recipe', {
+      name,
+      categoryId: recipeForm.categoryId || null,
+      items: recipeForm.items.map(it => ({ foodId: it.foodId, amount: it.amount }))
+    })
+    ElMessage.success(`已保存食谱「${name}」`)
+    // 记录到当前餐次：按 1 份（整份食谱）记录
+    await api.post('/diet/today/add', {
+      foodId: recipe.id,
+      foodSource: 'user',
+      amount: recipe.unitWeight || recipeForm.items.reduce((s, it) => s + it.amount, 0),
+      mealType: addForm.mealType
+    })
+    showRecipeForm.value = false
+    resetRecipeForm()
+    addDialogVisible.value = false
+    await loadData()
+  } catch (e) {
+    ElMessage.error('保存食谱失败，请重试')
+  } finally {
+    recipeSubmitting.value = false
+  }
+}
+
 const meals = [
   { type: 'breakfast', name: '早餐', icon: '🍳', time: '07:00 - 09:00' },
   { type: 'lunch', name: '午餐', icon: '🥗', time: '11:00 - 13:00' },
@@ -537,12 +670,15 @@ function openAddDialog(mealType) {
   dialogSearchResults.value = allFoods.value
   chosenFoods.value = []
   showCustomForm.value = false
+  showRecipeForm.value = false
   resetCustomFood()
+  resetRecipeForm()
   addDialogVisible.value = true
 }
 
 function toggleCustomForm() {
   showCustomForm.value = !showCustomForm.value
+  if (showCustomForm.value) showRecipeForm.value = false
 }
 
 function resetCustomFood() {
@@ -856,6 +992,14 @@ h1 { font-size: 26px; line-height: 1.25; margin: 0; color: #153d67; }
 .custom-preview { font-size: 12px; color: #8499a8; padding-bottom: 6px; }
 .custom-preview b { color: #e6a23c; font-size: 16px; margin: 0 3px; }
 .custom-form-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.recipe-food-list { max-height: 200px; overflow-y: auto; border: 1px solid #eef2f6; border-radius: 8px; margin-bottom: 10px; }
+.recipe-food-item { display: flex; align-items: center; gap: 10px; padding: 7px 12px; cursor: pointer; border-bottom: 1px solid #f5f7fa; }
+.recipe-food-item:hover { background: #f5f9ff; }
+.recipe-food-item.chosen { background: #eef7ff; }
+.rf-name { font-size: 13px; color: #244b6b; flex: 1; }
+.rf-cal { font-size: 12px; color: #8ea1af; }
+.rf-add { color: #2589ee; font-weight: 600; }
+.rf-empty { padding: 12px; text-align: center; color: #b3c2cc; font-size: 12px; }
 .food-select-list { max-height: 320px; overflow-y: auto; border: 1px solid #eef2f6; border-radius: 8px; }
 .food-select-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f5f7fa; transition: background 0.15s; }
 .food-select-item:hover { background: #f5f9ff; }
