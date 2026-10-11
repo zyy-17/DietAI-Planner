@@ -1,6 +1,7 @@
 package com.zyyqq.service;
 
 import com.zyyqq.dto.request.MealPlanCopyDayRequest;
+import com.zyyqq.dto.request.MealPlanGenerateRequest;
 import com.zyyqq.dto.request.MealPlanItemAddRequest;
 import com.zyyqq.dto.request.MealPlanItemReplaceRequest;
 import com.zyyqq.dto.request.MealPlanPublishRequest;
@@ -1752,5 +1753,137 @@ public class MealPlanService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  AI 智能生成完整食谱
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * AI 智能生成完整 N 天膳食计划。
+     *
+     * <p>流程：创建空食谱 → 组装食物库白名单 → 调 ai-service 生成 →
+     * 解析返回 JSON → 食物名匹配 food 表 → 批量写入 meal_plan_item → 返回 planId。</p>
+     *
+     * <p>核心原则：AI 只输出食物名+克数，营养值一律按 food 表换算；
+     * 匹配不到的食物标记为 SOURCE_AI（foodId=null）。</p>
+     */
+    @Transactional
+    public Map<String, Object> generate(Long userId, MealPlanGenerateRequest request) {
+        // 1. 参数校验与标准化
+        String goal = normalizeGoal(request.getGoal());
+        int days = normalizeDays(request.getDays());
+        List<String> meals = normalizeMeals(request.getMeals());
+
+        // 2. 创建空食谱（复用现有逻辑）
+        MealPlanSaveRequest saveReq = new MealPlanSaveRequest();
+        saveReq.setGoal(goal);
+        saveReq.setDays(days);
+        saveReq.setMeals(meals);
+        saveReq.setDailyCalories(request.getDailyCalories());
+        String autoName = days + "天" + GOAL_LABELS.get(goal) + "食谱(AI生成)";
+        saveReq.setName(autoName);
+        if (request.getIdea() != null && !request.getIdea().isBlank()) {
+            saveReq.setSummary(trimTo(request.getIdea(), 500));
+        }
+        MealPlanVO vo = create(userId, saveReq);
+        Long planId = vo.getId();
+
+        // 3. 加载食物池，组装白名单发给 ai-service
+        FoodPool pool = loadFoodPool(userId);
+        List<Map<String, Object>> foodLibrary = new ArrayList<>();
+        for (FoodRef ref : pool.all()) {
+            Map<String, Object> item = new java.util.LinkedHashMap<>();
+            item.put("name", ref.name());
+            item.put("calories", ref.calories() != null ? ref.calories().doubleValue() : null);
+            item.put("protein", ref.protein() != null ? ref.protein().doubleValue() : null);
+            item.put("carbohydrate", ref.carbohydrate() != null ? ref.carbohydrate().doubleValue() : null);
+            item.put("fat", ref.fat() != null ? ref.fat().doubleValue() : null);
+            foodLibrary.add(item);
+        }
+
+        // 4. 调用 ai-service
+        Map<String, Object> body = new HashMap<>();
+        body.put("goal", goal);
+        body.put("days", days);
+        body.put("meals", meals);
+        body.put("idea", request.getIdea());
+        body.put("daily_calories", request.getDailyCalories() != null ? request.getDailyCalories().doubleValue() : null);
+        body.put("dislikes", cleanList(request.getDislikes()));
+        body.put("preferences", cleanList(request.getPreferences()));
+        body.put("food_library", foodLibrary);
+
+        Map<?, ?> response = callAiService("/api/meal-plan/generate", body, "AI 智能生成食谱");
+
+        // 5. 解析返回结果并写入 meal_plan_item
+        Object rawDays = response.get("days");
+        if (!(rawDays instanceof List<?> dayList)) {
+            throw new BusinessException("AI 返回数据格式异常：缺少 days 数组");
+        }
+
+        int totalItems = 0;
+        int matchedItems = 0;
+        int aiItems = 0;
+
+        for (Object dayObj : dayList) {
+            if (!(dayObj instanceof Map<?, ?> dayData)) continue;
+            Object dayIndexObj = dayData.get("day_index");
+            int dayIndex = dayIndexObj instanceof Number ? ((Number) dayIndexObj).intValue() : 1;
+            Object mealsObj = dayData.get("meals");
+            if (!(mealsObj instanceof Map<?, ?> mealsMap)) continue;
+
+            for (String mealType : meals) {
+                Object mealItemsObj = mealsMap.get(mealType);
+                if (!(mealItemsObj instanceof List<?> mealItems)) continue;
+
+                List<MealPlanItem> exist = itemRepository
+                        .findByPlanIdAndDayIndexOrderBySortOrderAscIdAsc(planId, dayIndex);
+                int nextOrder = exist.stream()
+                        .filter(i -> mealType.equals(i.getMealType()))
+                        .mapToInt(i -> i.getSortOrder() == null ? 0 : i.getSortOrder())
+                        .max().orElse(-1) + 1;
+
+                for (Object itemObj : mealItems) {
+                    if (!(itemObj instanceof Map<?, ?> itemMap)) continue;
+                    String foodName = str(itemMap.get("food"));
+                    if (foodName.isBlank()) continue;
+                    BigDecimal amount = toDecimal(itemMap.get("amount"));
+                    if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+                    totalItems++;
+                    FoodRef ref = pool.match(foodName);
+
+                    if (ref != null) {
+                        // 匹配到食物库 → 用库中的营养值
+                        itemRepository.save(buildItem(planId, dayIndex, mealType, ref, amount, nextOrder));
+                        matchedItems++;
+                    } else {
+                        // 匹配不到 → 标记为 AI 估算，营养值留零（前端展示时显示 "AI估算"）
+                        itemRepository.save(buildItem(planId, dayIndex, mealType,
+                                foodName, null, null, MealPlanItem.SOURCE_AI,
+                                amount, null, null,
+                                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                                nextOrder));
+                        aiItems++;
+                    }
+                    nextOrder++;
+                }
+            }
+        }
+
+        // 6. 记录生成日志
+        writeGenerationLog(userId, "AI生成" + days + "天" + GOAL_LABELS.get(goal) + "食谱",
+                totalItems + "条食物(匹配" + matchedItems + "+AI估算" + aiItems + ")");
+
+        log.info("AI生成食谱完成: userId={}, planId={}, 总条目={}, 匹配={}, AI估算={}",
+                userId, planId, totalItems, matchedItems, aiItems);
+
+        // 7. 返回 planId，前端用它打开编辑器
+        Map<String, Object> result = new HashMap<>();
+        result.put("planId", planId);
+        result.put("totalItems", totalItems);
+        result.put("matchedItems", matchedItems);
+        result.put("aiItems", aiItems);
+        return result;
     }
 }

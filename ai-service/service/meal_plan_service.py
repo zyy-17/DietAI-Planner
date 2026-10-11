@@ -1,17 +1,14 @@
-"""单项食物替换（AI 辅助）。
+"""食谱模块 AI 服务（替换 + 生成）。
 
-食谱本身由用户在 App 里自己编写，「AI 生成整份食谱」那条路径已经撤掉，
-这里只保留一个可选能力：用户在编辑食谱时点「AI 智能推荐」，
-由模型在系统挑好的同类候选中排序并给出理由。
+- 替换：用户在编辑食谱时点「AI 智能推荐」，由模型在候选中排序并给出理由。
+  模型只排序不造数据，候选由 Java 侧从食物库筛好。
+- 生成：用户输入想法，AI 生成完整 N 天膳食计划（每天每餐的食物+克数）。
+  食物只能从 Java 注入的白名单里选，营养值回 Java 按 food 表换算。
 
-设计要点：
-1. **模型只排序，不造数据**：候选食物由 Java 侧从食物库筛好（同类目 + 热量接近），
-   模型不许自己发明食物；它给出的名字还要回 Java 侧按食物库再核一遍。
-2. **只管名字与克数**：热量与三大营养素一律回 Java 侧按食物库换算。
-3. **失败要说失败**：模型不可用或连续拿不到合法内容时抛错，由 Java 侧退化成
-   「同类目 + 热量接近」的算法排序，并在响应里标明 aiUsed=false。
-4. **预算要留够**：思维链模型的「思考过程」同样占用 max_tokens，
-   用 .env 默认的 2048 容易思考占满预算、正式内容为空，所以这里单独放宽。
+共同设计原则：
+1. 模型只输出食物名与克数，热量/营养素一律回 Java 侧换算
+2. 失败要说失败，由 Java 侧决定是否退化
+3. 思维链模型的「思考过程」占用 max_tokens，需单独放宽预算
 """
 
 import json
@@ -19,8 +16,8 @@ import logging
 import re
 from typing import List, Optional
 
-from model.request import FoodReplaceRequest
-from prompt.system_prompt import FOOD_REPLACE_PROMPT
+from model.request import FoodReplaceRequest, MealPlanGenerateRequest
+from prompt.system_prompt import FOOD_REPLACE_PROMPT, MEAL_PLAN_GENERATE_PROMPT
 from service.llm_service import call_llm_text, get_model
 
 logger = logging.getLogger("dietai")
@@ -115,6 +112,124 @@ def recommend_replacements(request: FoodReplaceRequest) -> dict:
             last_error = e
             logger.warning(f"{tag} 失败(尝试{attempt + 1}): {e}")
             # 预算被思维链占满属于「同一条件下必然重演」，再问几次只是白花钱
+            if "被 max_tokens 截断" in str(e):
+                raise RuntimeError(f"{tag}失败：{e}")
+
+    raise RuntimeError(f"{tag}失败：{last_error}")
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  AI 智能生成完整食谱
+# ════════════════════════════════════════════════════════════════════════
+
+# 生成任务的重试次数和 token 预算
+GENERATE_ATTEMPTS = 3
+GENERATE_MAX_TOKENS_3DAY = 4096     # 3天计划足够
+GENERATE_MAX_TOKENS_7DAY = 8192     # 7天计划需要更多输出空间
+
+
+def _build_food_library_section(food_library: list) -> str:
+    """把食物库列表格式化为 Prompt 文本段。"""
+    if not food_library:
+        return "（未提供食物库）"
+    lines = []
+    for item in food_library:
+        name = getattr(item, "name", item.get("name", "??"))
+        cal = getattr(item, "calories", item.get("calories")) or "-"
+        pro = getattr(item, "protein", item.get("protein")) or "-"
+        carb = getattr(item, "carbohydrate", item.get("carbohydrate")) or "-"
+        fat = getattr(item, "fat", item.get("fat")) or "-"
+        cat = getattr(item, "category", item.get("category"))
+        cat_str = f" [{cat}]" if cat else ""
+        lines.append(f"- {name}{cat_str} | {cal} kcal | 蛋白质{pro}g / 碳水{carb}g / 脂肪{fat}g (每100g)")
+    return "\n".join(lines)
+
+
+def generate_meal_plan(request: MealPlanGenerateRequest) -> dict:
+    """AI 生成完整的 N 天膳食计划，返回 { days: [{ day_index, meals: { ... } }] }。"""
+    if get_model() == "none":
+        raise RuntimeError(
+            "AI 模型不可用：请在 ai-service/.env 里配置 API_KEY，或确认本机 Ollama 已启动"
+        )
+
+    goal_desc = GOAL_DESC.get(request.goal, "维持体重")
+    meal_labels = [MEAL_DESC.get(m, m) for m in request.meals]
+
+    # 组装 Prompt 各段落
+    daily_calories_section = (
+        f"【每日目标热量】{int(request.daily_calories)} kcal"
+        if request.daily_calories
+        else ""
+    )
+    idea_section = (
+        f"【用户想法/需求】{request.idea}"
+        if request.idea and request.idea.strip()
+        else ""
+    )
+
+    prompt = MEAL_PLAN_GENERATE_PROMPT.format(
+        days=request.days,
+        goal_desc=goal_desc,
+        meals_desc="、".join(meal_labels),
+        daily_calories_section=daily_calories_section,
+        idea_section=idea_section,
+        preferences="、".join(request.preferences) if request.preferences else "无特别偏好",
+        dislikes="、".join(request.dislikes) if request.dislikes else "无",
+        food_library_section=_build_food_library_section(request.food_library),
+        meals_keys=", ".join(request.meals),
+    )
+
+    # 根据周期选择 token 预算
+    max_tokens = GENERATE_MAX_TOKENS_7DAY if request.days >= 7 else GENERATE_MAX_TOKENS_3DAY
+
+    tag = f"生成{request.days}天{goal_desc}食谱"
+    last_error = None
+    for attempt in range(GENERATE_ATTEMPTS):
+        fmt = "json" if attempt < 2 else None
+        try:
+            data = _call_once(prompt, fmt, max_tokens)
+
+            # 校验并清洗返回结构
+            raw_days = data.get("days") or []
+            if not isinstance(raw_days, list) or len(raw_days) != request.days:
+                raise ValueError(f"天数不匹配：期望 {request.days} 天，得到 {len(raw_days)} 天")
+
+            result_days = []
+            for day_data in raw_days:
+                if not isinstance(day_data, dict):
+                    continue
+                day_index = day_data.get("day_index", len(result_days) + 1)
+                meals_raw = day_data.get("meals") or {}
+                cleaned_meals = {}
+                for meal_type in request.meals:
+                    items = meals_raw.get(meal_type) or []
+                    cleaned_items = []
+                    for it in items:
+                        if not isinstance(it, dict):
+                            continue
+                        fname = str(it.get("food") or "").strip()
+                        if not fname:
+                            continue
+                        amt = _fmt_float(it.get("amount"))
+                        if amt is None or amt <= 0:
+                            continue
+                        cleaned_items.append({"food": fname, "amount": amt})
+                    if cleaned_items:
+                        cleaned_meals[meal_type] = cleaned_items
+                if cleaned_meals:
+                    result_days.append({
+                        "day_index": day_index,
+                        "meals": cleaned_meals,
+                    })
+
+            if not result_days:
+                raise ValueError("模型没有生成任何有效的餐食数据")
+
+            return {"days": result_days}
+
+        except Exception as e:
+            last_error = e
+            logger.warning(f"{tag} 失败(尝试{attempt + 1}): {e}")
             if "被 max_tokens 截断" in str(e):
                 raise RuntimeError(f"{tag}失败：{e}")
 

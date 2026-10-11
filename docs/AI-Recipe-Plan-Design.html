@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DietAI 食谱模块 — AI 应用方案设计</title>
+<style>
+  :root {
+    --bg: #f8f9fb; --card: #fff; --text: #2c2c2a; --text2: #5f5e5a;
+    --text3: #888780; --border: #e2e4e8; --blue: #378ADD; --blue-bg: #E6F1FB;
+    --green: #1D9E75; --green-bg: #E1F5EE; --orange: #D85A30; --orange-bg: #FAECE7;
+    --purple: #534AB7; --purple-bg: #EEEDFE; --radius: 12px; --shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; padding: 32px 16px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; text-align: center; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text3); font-size: 14px; margin-bottom: 32px; }
+  h2 { font-size: 17px; font-weight: 600; margin: 36px 0 14px; padding-left: 14px; border-left: 3px solid var(--blue); }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 10px; color: var(--text); }
+  h4 { font-size: 13.5px; font-weight: 600; margin: 14px 0 8px; color: var(--text2); }
+  p, li { font-size: 14px; color: var(--text2); }
+  .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); padding: 24px 28px; margin-bottom: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 12px 0; }
+  th { background: var(--bg); text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border); font-weight: 600; color: var(--text); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: #fafbfc; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+  .tag-blue { background: var(--blue-bg); color: var(--blue); }
+  .tag-green { background: var(--green-bg); color: var(--green); }
+  .tag-orange { background: var(--orange-bg); color: var(--orange); }
+  .tag-purple { background: var(--purple-bg); color: var(--purple); }
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
+  .flow-step { background: var(--blue-bg); border: 1px solid #B5D4F4; border-radius: 8px; padding: 8px 14px; font-size: 13px; color: var(--blue); font-weight: 500; }
+  .flow-arrow { color: var(--text3); font-size: 18px; }
+  ul, ol { padding-left: 22px; margin: 8px 0; }
+  li { margin-bottom: 5px; }
+  .highlight { background: #fff8e1; padding: 2px 6px; border-radius: 4px; }
+  code { background: #f0f2f5; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; font-family: "Cascadia Code", "Fira Code", monospace; color: #d85a30; }
+  .principle-box { background: linear-gradient(135deg, #EAF3DE 0%, #E1F5EE 100%); border: 1px solid #97C459; border-radius: var(--radius); padding: 20px 24px; margin: 18px 0; }
+  .principle-box h3 { color: #27500A; margin-top: 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 14px 0; }
+  .mini-card { background: var(--bg); border-radius: 8px; padding: 16px; border: 1px solid var(--border); }
+  .mini-card h4 { margin-top: 0; }
+  .section-divider { border: none; height: 1px; background: var(--border); margin: 28px 0; }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 28px; margin-bottom: 24px; }
+  .toc ul { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
+  .toc li a { color: var(--blue); text-decoration: none; font-size: 14px; }
+  .toc li a:hover { text-decoration: underline; }
+  .api-box { background: #f7f8fa; border-left: 3px solid var(--purple); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 12px 0; font-family: "Cascadia Code", monospace; font-size: 12.5px; line-height: 1.8; }
+  .json-key { color: #534AB7; } .json-str { color: #1D9E75; } .json-num { color: #D85A30; } .json-note { color: #888780; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>DietAI 食谱模块 — AI 应用方案设计</h1>
+<p class="subtitle">软件工程概论课程作业 · 基于现有业务逻辑的 AI 能力扩展方案</p>
+
+<!-- 目录 -->
+<div class="toc">
+  <strong style="display:block;margin-bottom:10px;color:var(--text)">目录</strong>
+  <ul>
+    <li><a href="#s1">一、现有模块分析</a></li>
+    <li><a href="#s2">二、AI 应用场景总览</a></li>
+    <li><a href="#s3">三、场景一：AI 智能生成食谱</a></li>
+    <li><a href="#s4">四、场景二：AI 智能替换食物（已有）</a></li>
+    <li><a href="#s5">五、场景三：AI 智能营养分析</a></li>
+    <li><a href="#s6">六、数据流与核心原则</a></li>
+    <li><a href="#s7">七、技术实现要点</a></li>
+    <li><a href="#s8">八、方案价值总结</a></li>
+  </ul>
+</div>
+
+<!-- ===== 一、现有模块分析 ===== -->
+<h2 id="s1">一、现有模块分析</h2>
+<div class="card">
+  <h3>1.1 系统架构</h3>
+  <p>项目采用三层架构，食谱模块跨全部三层：</p>
+  <table>
+    <tr><th>层</th><th>技术栈</th><th>食谱模块职责</th></tr>
+    <tr><td>前端展示层</td><td>Vue3 + Element Plus + Vite</td><td>MealPlan.vue（我的食谱/广场）、RecipeSheet.vue（食谱编辑器）、FoodLibrary.vue（自定义食物）</td></tr>
+    <tr><td>业务逻辑层</td><td>Spring Boot (8080)</td><td>MealPlanService（1757行，核心编排）、MealPlanController（REST API）、FoodController</td></tr>
+    <tr><td>AI 服务层</td><td>FastAPI (8000)</td><td>meal_plan_service.py（目前仅实现 replace 替换）、llm_service.py（LLM 调用封装）</td></tr>
+  </table>
+
+  <h3 style="margin-top:20px">1.2 核心数据模型</h3>
+  <table>
+    <tr><th>实体</th><th>关键字段</th><th>说明</th></tr>
+    <tr><td><code>MealPlan</code></td><td>goal / days(3|7) / meals / status / publishStatus / preferences / dislikes / dailyCalories</td><td>食谱主表，双状态机：执行状态(idle→active→paused→archived) + 发布状态(none→pending→approved/rejected)</td></tr>
+    <tr><td><code>MealPlanItem</code></td><td>planId / dayIndex / mealType / foodId / foodSource / foodName / amount / calories / protein / carbohydrate / fat</td><td>食物条目，营养值为按克数换算后的快照。foodSource 三态：system / user / ai</td></tr>
+    <tr><td><code>Food</code>（系统库）</td><td>name / category / calories / protein / carbohydrate / fat per 100g</td><td>系统内置食物库，AI 只能从中选食物</td></tr>
+    <tr><td><code>UserCustomFood</code></td><td>name / category / calories / protein / carbohydrate / fat per 100g</td><td>用户自定义食物，也可作为 AI 选择的来源</td></tr>
+  </table>
+
+  <h3 style="margin-top:20px">1.3 现有 AI 能力</h3>
+  <p>当前 ai-service 仅有一个食谱相关端点：</p>
+  <div class="api-box">
+<span class="json-note">POST</span> /api/meal-plan/replace
+<br/>→ 输入：被替换食物 + 候选列表 + 用户偏好
+<br/>→ 输出：<span class="json-key">{ recommendations: [{ food, amount, reason }] }</span>
+<br/>→ 对应 Java 方法：MealPlanService.getAlternatives()
+  </div>
+  <p><span class="tag tag-green">已实现可用</span> 此能力在 RecipeSheet 编辑器中通过「换一个」按钮触发。</p>
+
+  <h3 style="margin-top:20px">1.4 已删除的能力</h3>
+  <p><code>POST /api/meal-plan/generate</code>（AI 一键生成完整食谱）<span class="tag tag-orange">已删除</span>——原实现因输出质量不稳定、token 消耗大等原因被移除。本方案将重新设计并实现此功能。</p>
+</div>
+
+<!-- ===== 二、AI 应用场景总览 ===== -->
+<h2 id="s2">二、AI 应用场景总览</h2>
+<div class="card">
+  <p>基于对现有模块的全面分析，设计 <strong>三个 AI 应用场景</strong>，覆盖食谱的<strong>「创建 → 编辑 → 审阅」全生命周期</strong>：</p>
+
+  <div class="two-col" style="margin-top:16px">
+    <div class="mini-card">
+      <h4><span class="tag tag-blue">场景一</span> AI 智能生成</h4>
+      <p style="font-size:13px">用户输入想法 → AI 生成完整 N 天膳食计划 → 写入食谱 → 进入编辑器</p>
+      <p style="font-size:12px;color:var(--text3)">生命周期阶段：创建</p>
+    </div>
+    <div class="mini-card">
+      <h4><span class="tag tag-green">场景二</span> AI 智能替换</h4>
+      <p style="font-size:13px">用户不想吃某食物 → AI 从候选中推荐替代品 → 用户选择替换</p>
+      <p style="font-size:12px;color:var(--text3)">生命周期阶段：编辑（已实现）</p>
+    </div>
+  </div>
+  <div class="mini-card" style="margin-top:16px">
+    <h4><span class="tag tag-orange">场景三</span> AI 智能营养分析</h4>
+    <p style="font-size:13px">用户查看已创建/已执行的食谱 → AI 分析营养结构 + 给出改进建议 → 展示报告</p>
+    <p style="font-size:12px;color:var(--text3)">生命周期阶段：审阅/复盘</p>
+  </div>
+</div>
+
+<!-- ===== 场景一 ===== -->
+<h2 id="s3">三、场景一：AI 智能生成食谱（核心新增）</h2>
+<div class="card">
+  <h3>3.1 功能定位</h3>
+  <p>这是本方案的<strong>核心新增功能</strong>——让用户通过自然语言描述自己的饮食需求，AI 自动生成一份结构化的多天膳食计划，直接写入数据库并在编辑器中打开供用户调整。</p>
+
+  <h3>3.2 触发入口</h3>
+  <p>在 MealPlan.vue 的「新建食谱」弹窗中，新增一个 Tab 切换：</p>
+  <div class="two-col">
+    <div class="mini-card" style="border-color:var(--blue)">
+      <h4 style="color:var(--blue)">手动创建（原有）</h4>
+      <p style="font-size:13px">选目标 → 选周期 → 逐天逐餐手动添加食物</p>
+    </div>
+    <div class="mini-card" style="border-color:#D85A30;background:#FFFBF8">
+      <h4 style="color:#D85A30">✨ AI 智能生成（新增）</h4>
+      <p style="font-size:13px">描述想法 → AI 一键生成完整计划 → 进编辑器微调</p>
+    </div>
+  </div>
+
+  <h3>3.3 用户输入项设计</h3>
+  <table>
+    <tr><th>字段</th><th>类型</th><th>是否必填</th><th>说明</th><th>映射到 MealPlan 字段</th></tr>
+    <tr><td>膳食目标</td><td>Radio</td><td>必填</td><td>减脂 / 增重 / 维持体重</td><td><code>goal</code></td></tr>
+    <tr><td>计划周期</td><td>Radio</td><td>必填</td><td>3天 / 7天</td><td><code>days</code></td></tr>
+    <tr><td>每日餐次</td><td>Checkbox</td><td>必填</td><td>早餐 / 午餐 / 晚餐 / 加餐</td><td><code>meals</code></td></tr>
+    <tr><td>想法描述</td><td>Textarea</td><td>选填</td><td>自由文本，如"我想吃中式减脂餐，喜欢鸡胸肉和西兰花，不吃香菜"</td><td><code>extraRequirement</code></td></tr>
+    <tr><td>每日目标热量</td><td>Input(number)</td><td>选填</td><td>如 1500（kcal）</td><td><code>dailyCalories</code></td></tr>
+    <tr><td>忌口食物</td><td>Input(text)</td><td>选填</td><td>如"香菜、芹菜、内脏"</td><td><code>dislikes</code></td></tr>
+    <tr><td>饮食偏好</td><td>Input(text)</td><td>选填</td><td>如"高蛋白、低糖、中式"</td><td><code>preferences</code></td></tr>
+  </table>
+
+  <h3>3.4 业务流程</h3>
+  <div class="flow">
+    <div class="flow-step">① 填写生成参数</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">② 前端 POST /meal-plan/generate</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">③ Java 创建空 MealPlan</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">④ 调用 ai-service /generate</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">⑤ LLM 返回结构化 JSON</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">⑥ Java 解析+匹配食物库</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">⑦ 写入 meal_plan_item</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">⑧ 返回 planId → 打开编辑器</div>
+  </div>
+
+  <h3>3.5 API 设计</h3>
+  <h4>前端 → 后端（Java）</h4>
+  <div class="api-box">
+<span class="json-note">POST</span> /api/meal-plan/generate
+<br/><br/><span class="json-comment">// Request</span>
+{
+  <span class="json-key">"goal"</span>: <span class="json-str">"lose"</span>,
+  <span class="json-key">"days"</span>: <span class="json-num">3</span>,
+  <span class="json-key">"meals"</span>: [<span class="json-str">"breakfast"</span>, <span class="json-str">"lunch"</span>, <span class="json-str">"dinner"</span>],
+  <span class="json-key">"idea"</span>: <span class="json-str">"我想吃中式减脂餐，喜欢鸡胸肉和西兰花"</span>,
+  <span class="json-key">"dailyCalories"</span>: <span class="json-num">1500</span>,   <span class="json-comment">// 可空</span>
+  <span class="json-key">"dislikes"</span>: <span class="json-str">"香菜、芹菜"</span>,  <span class="json-comment">// 可空</span>
+  <span class="json-key">"preferences"</span>: <span class="json-str">"高蛋白、低糖"</span>  <span class="json-comment">// 可空</span>
+}
+<br/><br/><span class="json-comment">// Response</span>
+{ <span class="json-key">"planId"</span>: <span class="json-num">42</span> }
+  </div>
+
+  <h4>后端（Java）→ ai-service</h4>
+  <div class="api-box">
+<span class="json-note">POST</span> http://localhost:8000/api/meal-plan/generate
+<br/><br/>{
+  <span class="json-key">"goal"</span>: <span class="json-str">"lose"</span>,
+  <span class="json-key">"days"</span>: <span class="json-num">3</span>,
+  <span class="json-key">"meals"</span>: [<span class="json-str">"breakfast"</span>, <span class="json-str">"lunch"</span>, <span class="json-str">"dinner"</span>],
+  <span class="json-key">"idea"</span>: <span class="json-str">"..."</span>,
+  <span class="json-key">"daily_calories"</span>: <span class="json-num">1500</span>,
+  <span class="json-key">"dislikes"</span>: [<span class="json-str">"香菜"</span>, <span class="json-str">"芹菜"</span>],
+  <span class="json-key">"preferences"</span>: [<span class="json-str">"高蛋白"</span>, <span class="json-str">"低糖"</span>],
+  <span class="json-key">"food_library"</span>: [          <span class="json-comment">// Java 注入的食物库白名单</span>
+    { <span class="json-key">"name"</span>: <span class="json-str">"鸡胸肉"</span>, <span class="json-key">"calories"</span>: <span class="json-num">133</span>, <span class="json-key">"protein"</span>: <span class="json-num">31</span>, ... },
+    ...
+  ]
+}
+  </div>
+
+  <h4>ai-service → LLM → 返回给 Java</h4>
+  <div class="api-box">
+{
+  <span class="json-key">"days"</span>: [
+    {
+      <span class="json-key">"day_index"</span>: <span class="json-num">1</span>,
+      <span class="json-key">"meals"</span>: {
+        <span class="json-key">"breakfast"</span>: [
+          { <span class="json-key">"food"</span>: <span class="json-str">"水煮蛋"</span>, <span class="json-key">"amount"</span>: <span class="json-num">100</span> },
+          { <span class="json-key">"food"</span>: <span class="json-str">"全麦面包"</span>, <span class="json-key">"amount"</span>: <span class="json-num">60</span> },
+          { <span class="json-key">"food"</span>: <span class="json-str">"牛奶"</span>, <span class="json-key">"amount"</span>: <span class="json-num">200</span> }
+        ],
+        <span class="json-key">"lunch"</span>: [
+          { <span class="json-key">"food"</span>: <span class="json-str">"鸡胸肉"</span>, <span class="json-key">"amount"</span>: <span class="json-num">150</span> },
+          { <span class="json-key">"food"</span>: <span class="json-str">"糙米饭"</span>, <span class="json-key">"amount"</span>: <span class="json-num">120</span> },
+          ...
+        ],
+        <span class="json-key">"dinner"</span>: [ ... ]
+      }
+    },
+    { <span class="json-key">"day_index"</span>: <span class="json-num">2</span>, <span class="json-key">"meals"</span>: { ... } },
+    { <span class="json-key">"day_index"</span>: <span class="json-num">3</span>, <span class="json-key">"meals"</span>: { ... } }
+  ]
+}
+  </div>
+
+  <h3>3.6 Prompt 设计要点</h3>
+  <ol>
+    <li><strong>角色设定</strong>：你是一位专业的注册营养师，擅长根据用户需求制定科学膳食计划</li>
+    <li><strong>食物白名单约束</strong>：将系统食物库 + 用户自定义食物列表注入 prompt，要求 AI <strong>只从列表中选择食物</strong>，不得编造列表外的食物名</li>
+    <li><strong>严格 JSON 输出格式</strong>：强制输出上述结构化 JSON，方便程序解析</li>
+    <li><strong>营养约束</strong>：若用户给了每日热量目标，要求 AI 控制每天总热量在目标 ±10% 以内</li>
+    <li><strong>多样性要求</strong>：不同天数之间要有变化，不要完全重复</li>
+    <li><strong>思维链控制</strong>：明确提示"不要在思考过程中反复核算营养值，直接给出搭配方案"（避免 max_tokens 被思考占满导致截断）</li>
+    <li><strong>max_tokens 设置</strong>：3 天计划设 4096，7 天计划设 8192</li>
+  </ol>
+
+  <h3>3.7 Java 后端处理逻辑（关键步骤）</h3>
+  <ol>
+    <li><strong>创建空 MealPlan</strong>：复用现有 <code>create()</code> 方法，status=idle, publishStatus=none</li>
+    <li><strong>组装食物库白名单</strong>：查询 food 表 + user_custom_food 表，精简为 <code>{name, calories, protein, carb, fat}</code> 列表，发给 ai-service</li>
+    <li><strong>调用 ai-service</strong>：复用现有 <code>callAiService("/api/meal-plan/generate", body)</code> 方法</li>
+    <li><strong>解析返回 JSON</strong>：校验结构合法性（days 数组长度=周期、每天的 meals 包含选定餐次）</li>
+    <li><strong>食物名 → foodId 匹配</strong>：复用现有 <code>FoodPool.match(foodName)</code> 模糊匹配
+      <ul>
+        <li>匹配成功 → <code>foodSource=system/user</code>，<code>foodId=匹配到的ID</code>，营养值按 food 表换算</li>
+        <li>匹配失败 → <code>foodSource=ai</code>，<code>foodId=null</code>，营养值取 AI 估算值（如果 AI 返回了的话），否则跳过该条目并记录 warning</li>
+      </ul>
+    </li>
+    <li><strong>批量写入 MealPlanItem</strong>：复用现有的 item 新增逻辑，计算 sortOrder</li>
+    <li><strong>记录生成日志</strong>：复用 <code>writeGenerationLog()</code> 写入 ai_generation_log 表</li>
+    <li><strong>返回 planId</strong>：前端拿到后调用 <code>openSheet(planId, 'mine')</code> 打开编辑器</li>
+  </ol>
+</div>
+
+<!-- ===== 场景二 ===== -->
+<h2 id="s4">四、场景二：AI 智能替换食物（已有能力）</h2>
+<div class="card">
+  <h3>4.1 当前实现状态</h3>
+  <p><span class="tag tag-green">✅ 已实现并上线</span> 这是目前食谱模块唯一已实现的 AI 功能。</p>
+
+  <h3>4.2 功能说明</h3>
+  <p>用户在 RecipeSheet 编辑器中查看某条食物时，点击「换一个/AI 替换」按钮：</p>
+  <ol>
+    <li>前端收集当前食物信息（名称、克数）、用户不想吃的原因（可选填）、候选食物列表（从食物库中按热量接近度预筛选）</li>
+    <li>Java 调用 <code>GET /{planId}/item/{itemId}/alternatives</code> → 内部调 ai-service <code>POST /api/meal-plan/replace</code></li>
+    <li>AI 返回 3-4 个替代建议（每个含食物名、推荐克数、推荐理由）</li>
+    <li>前端以卡片形式展示，用户点击即替换原食物</li>
+  </ol>
+
+  <h3>4.3 技术细节</h3>
+  <table>
+    <tr><th>项</th><th>值</th></tr>
+    <tr><td>ai-service 端点</td><td><code>POST /api/meal-plan/replace</code></td></tr>
+    <tr><td>Prompt 模板</td><td><code>FOOD_REPLACE_PROMPT</code>（system_prompt.py）</td></tr>
+    <tr><td>重试策略</td><td>最多 3 次，前 2 次强制 json mode，第 3 次放开</td></tr>
+    <tr><td>max_tokens</td><td>4096</td></tr>
+    <tr><td>降级策略</td><td>AI 调用失败时，退化为按热量接近度排序的纯算法推荐</td></tr>
+    <tr><td>Java 侧方法</td><td><code>MealPlanService.getAlternatives(planId, itemId, reason)</code></td></tr>
+  </table>
+
+  <h3>4.4 本方案中的优化点</h3>
+  <ul>
+    <li>无需大改，当前实现已经比较完善</li>
+    <li>可考虑增加：替换时自动同步更新当天营养汇总（已有此逻辑，确认闭环即可）</li>
+    <li>可考虑增加：记录用户的替换偏好（如经常替换掉某类食物），用于优化未来生成质量</li>
+  </ul>
+</div>
+
+<!-- ===== 场景三 ===== -->
+<h2 id="s5">五、场景三：AI 智能营养分析（新增）</h2>
+<div class="card">
+  <h3>5.1 功能定位</h3>
+  <p>对<strong>已创建或已执行过</strong>的食谱进行 AI 驱动的营养分析，生成人类可读的分析报告。这不是简单的数值汇总（前端已有饼图/柱图），而是 AI 基于营养学知识给出的<strong>解读性建议</strong>。</p>
+
+  <h3>5.2 触发入口</h3>
+  <p>两个位置：</p>
+  <ol>
+    <li><strong>RecipeSheet 编辑器内</strong>：顶部工具栏新增「AI 分析」按钮，点击后在侧边面板展示分析结果</li>
+    <li><strong>我的食谱卡片上</strong>：卡片操作区新增「AI 诊断」入口，点击弹出分析报告弹窗</li>
+  </ol>
+
+  <h3>5.3 输入数据</h3>
+  <table>
+    <tr><th>数据项</th><th>来源</th><th>说明</th></tr>
+    <tr><td>食谱基本信息</td><td>meal_plan 表</td><td>名称、目标、周期、每日餐次</td></tr>
+    <tr><td>完整食物清单</td><td>meal_plan_item 表</td><td>每天每餐的所有食物条目（名称、克数、营养快照）</td></tr>
+    <tr><td>营养汇总</td><td>前端/Java 聚合计算</td><td>每天/全局的总热量、蛋白质、碳水、脂肪</td></tr>
+    <tr><td>宏量营养素比例</td><td>前端计算</td><td>碳水% / 蛋白质% / 脂肪%</td></tr>
+    <tr><td>执行记录（如有）</td><td>diet_record 表</td><td>用户实际打卡情况，用于对比「计划 vs 实际」</td></tr>
+    <tr><td>用户目标</td><td>meal_plan.goal</td><td>减脂/增重/维持，影响分析角度</td></tr>
+  </table>
+
+  <h3>5.4 输出内容设计</h3>
+  <div class="api-box">
+{
+  <span class="json-key">"summary"</span>: <span class="json-str">"这份3天减脂食谱整体设计合理，日均约1480kcal..."</span>,
+  <span class="json-key">"daily_analysis"</span>: [
+    {
+      <span class="json-key">"day"</span>: <span class="json-num">1</span>,
+      <span class="json-key">"total_calories"</span>: <span class="json-num">1512</span>,
+      <span class="json-key">"macro_ratio"</span>: { <span class="json-key">"carb_pct"</span>: <span class="json-num">45</span>, <span class="json-key">"protein_pct"</span>: <span class="json-num">30</span>, <span class="json-key">"fat_pct"</span>: <span class="json-num">25</span> },
+      <span class="json-key">"evaluation"</span>: <span class="json-str">"蛋白质占比优秀，符合减脂期需求"</span>,
+      <span class="json-key">"suggestions"</span>: [<span class="json-str">"晚餐可适当减少碳水占比"</span>]
+    },
+    ...
+  ],
+  <span class="json-key">"overall_suggestions"</span>: [
+    <span class="json-str">"蔬菜种类偏少，建议增加深色蔬菜摄入"</span>,
+    <span class="json-str">"第3天晚餐热量偏高，可调整为主食减半"</span>,
+    <span class="json-str">"整体缺乏优质脂肪来源（坚果、牛油果），建议每日添加一小份"</span>
+  ],
+  <span class="json-key">"nutrition_score"</span>: <span class="json-num">82</span>,     <span class="json-comment">// 百分制评分</span>
+  <span class="json-key">"risk_warnings"</span>: [
+    <span class="json-str">"钙摄入量可能不足，建议补充乳制品或绿叶菜"</span>
+  ]
+}
+  </div>
+
+  <h3>5.5 API 设计</h3>
+  <div class="api-box">
+<span class="json-note">POST</span> /api/meal-plan/{id}/analyze
+<br/><br/><span class="json-comment">// 无需请求体（数据从服务端取）</span>
+<br/>
+<span class="json-comment">// Response: 上面的 JSON 结构</span>
+  </div>
+
+  <h3>5.6 与现有模块的关系</h3>
+  <p>此功能是<strong>纯只读分析</strong>，不修改任何 meal_plan 或 meal_plan_item 数据。它读取已有的食谱数据，交给 AI 做语义层面的分析和建议输出。可以理解为给现有的营养可视化（饼图/柱图）加上一层<strong>AI 解读</strong>。</p>
+</div>
+
+<!-- ===== 六、数据流与核心原则 ===== -->
+<hr class="section-divider"/>
+<h2 id="s6">六、数据流与核心原则</h2>
+
+<div class="principle-box">
+  <h3>三大核心原则（贯穿所有 AI 场景）</h3>
+  <table style="background:#fff;margin-top:12px">
+    <tr><th width="180">原则</th><th>说明</th><th>适用场景</th></tr>
+    <tr>
+      <td><strong>原则一：AI 不管算数</strong></td>
+      <td>AI 只负责输出「食物名称 + 克数」，所有营养值（calories/protein/carbohydrate/fat）一律由 Java 后端根据 food 表的 per-100g 值按克数换算。绝不使用 AI 返回的营养数据作为权威值。</td>
+      <td>场景一、场景二</td>
+    </tr>
+    <tr>
+      <td><strong>原则二：食物来源三态</strong></td>
+      <td>MealPlanItem.foodSource 严格区分三种来源：<br/>• <code>system</code> — 匹配到系统食物库<br/>• <code>user</code> — 匹配到用户自定义食物<br/>• <code>ai</code> — 食物库中无此食物，AI 编造的（foodId=null）</td>
+      <td>场景一（主要）、场景二</td>
+    </tr>
+    <tr>
+      <td><strong>原则三：生成即初稿</strong></td>
+      <td>AI 生成的食谱不是最终产品，而是「智能初稿」。生成完成后自动进入 RecipeSheet 编辑器，用户必须能够查看、修改、删除任何一条 AI 生成的食物条目，确认无误后再发布。</td>
+      <td>场景一</td>
+    </tr>
+  </table>
+</div>
+
+<h3>6.1 统一数据流</h3>
+<div class="flow">
+  <div class="flow-step" style="background:var(--blue-bg);color:var(--blue)">Vue3 前端<br/><span style="font-size:11px;font-weight:400;color:var(--text3)">收集参数 / 展示结果</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step" style="background:var(--purple-bg);color:var(--purple)">Spring Boot<br/><span style="font-size:11px;font-weight:400;color:var(--text3)">编排 / 匹配 / 写入</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step" style="background:var(--green-bg);color:var(--green)">FastAPI<br/><span style="font-size:11px;font-weight:400;color:var(--text3)">Prompt / LLM / 解析</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step" style="background:var(--orange-bg);color:var(--orange)">DeepSeek LLM<br/><span style="font-size:11px;font-weight:400;color:var(--text3)">推理 + 生成</span></div>
+</div>
+
+<h3>6.2 复用现有代码清单</h3>
+<table>
+  <tr><th>现有能力</th><th>位置</th><th>复用于</th></tr>
+  <tr><td><code>FoodPool.match(name)</code></td><td>MealPlanService.java</td><td>场景一：AI 返回食物名 → 匹配 food 表 ID</td></tr>
+  <tr><td><code>applyFoodRef(ref, amount)</code></td><td>MealPlanService.java</td><td>场景一：按 food 表换算营养值 + 构建 Item</td></tr>
+  <tr><td><code>callAiService(path, body)</code></td><td>MealPlanService.java</td><td>场景一、三：Java → ai-service HTTP 调用</td></tr>
+  <tr><td><code>call_llm_text(messages, fmt, max_tokens)</code></td><td>ai-service llm_service.py</td><td>场景一、三：实际 LLM 调用（带重试+截断检测）</td></tr>
+  <tr><td><code>_clean_json(raw)</code></td><td>ai-service meal_plan_service.py</td><td>场景一、三：清洗 LLM 返回的 JSON</td></tr>
+  <tr><td><code>_call_once(prompt, fmt, max_tokens)</code></td><td>ai-service meal_plan_service.py</td><td>场景一、三：单次调用+解析（含重试策略）</td></tr>
+  <tr><td><code>writeGenerationLog(...)</code></td><td>MealPlanService.java</td><td>场景一：记录 AI 生成日志</td></tr>
+  <tr><td><code>RecipeSheet.vue</code></td><td>前端组件</td><td>场景一：生成完后直接打开编辑</td></tr>
+  <tr><td><code>FOOD_REPLACE_PROMPT</code> 格式</td><td>ai-service prompt/</td><td>场景一、三：参考其 Prompt 工程模式</td></tr>
+</table>
+
+<!-- ===== 七、技术实现要点 ===== -->
+<h2 id="s7">七、技术实现要点</h2>
+<div class="card">
+  <h3>7.1 需要新建的文件</h3>
+  <table>
+    <tr><th>文件路径</th><th>内容</th></tr>
+    <tr><td><code>ai-service/model/request.py</code> （追加）</td><td><code>MealPlanGenerateRequest</code>：生成请求模型</td></tr>
+    <tr><td><code>ai-service/prompt/generate_prompt.py</code> （新建）</td><td><code>MEAL_PLAN_GENERATE_PROMPT</code>：生成食谱的 Prompt 模板</td></tr>
+    <tr><td><code>ai-service/prompt/analyze_prompt.py</code> （新建）</td><td><code>NUTRITION_ANALYZE_PROMPT</code>：营养分析的 Prompt 模板</td></tr>
+    <tr><td><code>ai-service/service/generate_service.py</code> （新建）</td><td><code>generate_meal_plan()</code>：生成核心逻辑</td></tr>
+    <tr><td><code>ai-service/service/analyze_service.py</code> （新建）</td><td><code>analyze_nutrition()</code>：分析核心逻辑</td></tr>
+    <tr><td><code>ai-service/api/meal_plan.py</code> （追加路由）</td><td><code>POST /generate</code>、<code>POST /analyze</code></td></tr>
+    <tr><td><code>src/.../dto/request/MealPlanGenerateRequest.java</code> （新建）</td><td>生成请求 DTO</td></tr>
+    <tr><td><code>src/.../dto/response/NutritionAnalysisVO.java</code> （新建）</td><td>分析响应 VO</td></tr>
+  </table>
+
+  <h3>7.2 需要修改的文件</h3>
+  <table>
+    <tr><th>文件</th><th>改动</th></tr>
+    <tr><td><code>MealPlan.vue</code></td><td>新建弹窗加「AI 生成」Tab + 输入表单 + 「AI 分析」按钮</td></tr>
+    <tr><td><code>RecipeSheet.vue</code></td><td>工具栏加「AI 分析」入口 + 分析结果侧边面板</td></tr>
+    <tr><td><code>MealPlanController.java</code></td><td>新增 <code>POST /generate</code>、<code>POST /{id}/analyze</code></td></tr>
+    <tr><td><code>MealPlanService.java</code></td><td>新增 <code>generate()</code>、<code>analyze()</code> 方法</td></tr>
+  </table>
+
+  <h3>7.3 风险与应对</h3>
+  <table>
+    <tr><th>风险</th><th>影响</th><th>应对措施</th></tr>
+    <tr><td>AI 输出食物名在 food 表中找不到</td><td>场景一：部分食物无法入库</td><td>Fuzzy match（模糊匹配）；仍匹配不到则标记为 SOURCE_AI 并用 AI 自估营养值；记录警告日志</td></tr>
+    <tr><td>7天计划输出太长被截断</td><td>场景一：JSON 不完整，解析失败</td><td>max_tokens 设 8192；Prompt 明确禁止反复核算；检测到截断异常后直接报错提示用户缩短周期</td></tr>
+    <tr><td>AI 不遵守 JSON 格式</td><td>场景一、三：解析失败</td><td>复用 _clean_json() 清洗；前 2 次重试强制 json mode；第 3 次放开并用正则抽取</td></tr>
+    <tr><td>AI 生成质量不满意</td><td>用户体验差</td><td>"生成即初稿"原则——生成完进编辑器，用户可任意修改；提供「重新生成」按钮</td></tr>
+    <tr><td>API 费用（长输出 = 更多 token）</td><td>成本</td><td>前端生成前显示预估 token 消耗提示；7天计划的 max_tokens 更高但用户可自主选择 3 天降低成本</td></tr>
+    <tr><td>ai-service 未启动</td><td>功能不可用</td><td>Java 侧 catch 异常后返回友好提示"AI 服务未响应"；场景二已有此降级（退化为算法排序）</td></tr>
+  </table>
+</div>
+
+<!-- ===== 八、方案价值 ===== -->
+<h2 id="s8">八、方案价值总结</h2>
+<div class="card">
+  <div class="two-col">
+    <div class="mini-card">
+      <h4>对课程作业的价值</h4>
+      <ol style="font-size:13px;padding-left:18px">
+        <li>体现<strong>AI 工程化落地</strong>能力：不是简单调 API，而是设计了完整的「前端→后端→AI服务→LLM」多层协作链路</li>
+        <li>展现<strong>软件工程思维</strong>：需求分析→场景设计→API 设计→数据流→风险管控，形成完整闭环</li>
+        <li>贴合<strong>竞赛主题</strong>：「大数据与人工智能应用」——AI 膳食规划是典型的 AI 垂直领域应用</li>
+        <li>技术栈完整性：Vue3 + Spring Boot + FastAPI + LLM，覆盖前后端 + AI 服务</li>
+      </ol>
+    </div>
+    <div class="mini-card">
+      <h4>对产品体验的价值</h4>
+      <ol style="font-size:13px;padding-left:18px">
+        <li><strong>降低使用门槛</strong>：用户不需要懂营养学，用自然语言描述需求即可获得专业食谱</li>
+        <li><strong>提升编辑效率</strong>：AI 生成初稿 + 人工微调，比从零手动添加效率提升 10 倍以上</li>
+        <li><strong>增强专业性</strong>：AI 营养分析提供超越数值汇总的深度解读和建议</li>
+        <li><strong>完整覆盖生命周期</strong>：创建（生成）→ 编辑（替换）→ 复盘（分析），三个环节都有 AI 加持</li>
+      </ol>
+    </div>
+  </div>
+
+  <hr class="section-divider"/>
+
+  <h3>实施优先级建议</h3>
+  <table>
+    <tr><th>优先级</th><th>场景</th><th>理由</th><th>预估工作量</th></tr>
+    <tr><td><span class="tag tag-orange">P0 最高</span></td><td>场景一：AI 智能生成</td><td>核心亮点功能，竞赛演示的关键差异化能力；技术复杂度最高需优先攻克</td><td>新增 ~400 行代码</td></tr>
+    <tr><td><span class="tag tag-blue">P1</span></td><td>场景三：AI 营养分析</td><td>实现相对简单（纯只读分析），但能显著提升产品完整性和演示效果</td><td>新增 ~250 行代码</td></tr>
+    <tr><td><span class="tag tag-green">P2</span></td><td>场景二：优化替换</td><td>已能用，仅需小优化（如记录用户替换偏好）</td><td>改动 ~50 行代码</td></tr>
+  </table>
+</div>
+
+<p style="text-align:center;color:var(--text3);font-size:12px;margin-top:32px;">— DietAI 食谱模块 AI 应用方案设计文档 —</p>
+
+</div>
+</body>
+</html>

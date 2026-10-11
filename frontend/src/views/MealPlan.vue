@@ -434,11 +434,24 @@
     </template>
 
     <!-- 新建食谱 -->
-    <el-dialog v-model="createDialog" title="新建食谱" width="480px" class="create-dialog">
+    <el-dialog v-model="createDialog" width="560px" class="create-dialog" :title="createMode === 'manual' ? '新建食谱' : 'AI 智能生成食谱'">
+      <!-- 模式切换 Tab -->
+      <div class="create-mode-tabs">
+        <span
+          class="mode-tab" :class="{ active: createMode === 'manual' }" @click="createMode = 'manual'"
+        >✏️ 手动创建</span>
+        <span
+          class="mode-tab" :class="{ active: createMode === 'ai' }" @click="createMode = 'ai'"
+        >🤖 AI 智能生成</span>
+      </div>
+
       <el-form label-width="88px">
-        <el-form-item label="食谱名称">
+        <!-- 手动模式：显示食谱名称 -->
+        <el-form-item v-if="createMode === 'manual'" label="食谱名称">
           <el-input v-model="createForm.name" placeholder="如：七天减脂食谱" maxlength="50" show-word-limit />
         </el-form-item>
+
+        <!-- 共享字段：膳食目标 / 计划天数 / 每日餐次 -->
         <el-form-item label="膳食目标">
           <el-radio-group v-model="createForm.goal">
             <el-radio-button value="lose">🔥 减脂</el-radio-button>
@@ -460,10 +473,48 @@
             <el-checkbox value="snack">🍎 加餐</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
+
+        <!-- AI 模式专属字段 -->
+        <template v-if="createMode === 'ai'">
+          <el-form-item label="生成想法">
+            <el-input
+              v-model="createForm.idea" type="textarea" :rows="3"
+              placeholder="描述你想要的食谱风格，例如：&#10;· 偏好中式家常菜，少油少盐&#10;· 希望包含粗粮和大量蔬菜&#10;· 早餐想有燕麦/鸡蛋，晚餐清淡"
+              maxlength="500" show-word-limit
+            />
+          </el-form-item>
+          <el-form-item label="每日目标热量">
+            <el-input-number
+              v-model="createForm.dailyCalories" :min="800" :max="5000" :step="50"
+              placeholder="留空则自动估算"
+            />
+            <span class="form-tip">kcal/天，留空由 AI 根据目标自动估算</span>
+          </el-form-item>
+          <el-form-item label="忌口食物">
+            <el-select
+              v-model="createForm.dislikes" multiple filterable allow-create default-first-option
+              placeholder="不吃的食物，可选"
+              class="tag-select"
+            >
+            </el-select>
+          </el-form-item>
+          <el-form-item label="饮食偏好">
+            <el-select
+              v-model="createForm.preferences" multiple filterable allow-create default-first-option
+              placeholder="偏好或过敏原，可选"
+              class="tag-select"
+            >
+            </el-select>
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="createDialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitCreate">创建并开始编写</el-button>
+        <el-button v-if="createMode === 'manual'" type="primary" :loading="saving" @click="submitCreate">创建并开始编写</el-button>
+        <el-button v-else type="primary" :loading="generating" @click="submitGenerate">
+          <span v-if="!generating">🤖 开始生成</span>
+          <span v-else>AI 生成中...</span>
+        </el-button>
       </template>
     </el-dialog>
 
@@ -593,8 +644,14 @@ const hotList = ref([])
 const hotLoading = ref(false)
 
 const saving = ref(false)
+const generating = ref(false)
 const createDialog = ref(false)
-const createForm = reactive({ name: '', goal: 'lose', days: 7, meals: ['breakfast', 'lunch', 'dinner'] })
+const createMode = ref('manual') // 'manual' | 'ai'
+const createForm = reactive({
+  name: '', goal: 'lose', days: 7, meals: ['breakfast', 'lunch', 'dinner'],
+  // AI 模式专属字段
+  idea: '', dailyCalories: null, dislikes: [], preferences: []
+})
 const publishDialog = ref(false)
 const publishPlan = ref(null)
 const publishForm = reactive({
@@ -863,10 +920,16 @@ function goMine() {
 }
 
 function openCreate() {
+  createMode.value = 'manual'
   createForm.name = ''
   createForm.goal = 'lose'
   createForm.days = 7
   createForm.meals = ['breakfast', 'lunch', 'dinner']
+  // 重置 AI 字段
+  createForm.idea = ''
+  createForm.dailyCalories = null
+  createForm.dislikes = []
+  createForm.preferences = []
   createDialog.value = true
 }
 
@@ -885,6 +948,34 @@ async function submitCreate() {
   } catch (e) {
   } finally {
     saving.value = false
+  }
+}
+
+async function submitGenerate() {
+  if (!createForm.meals.length) {
+    ElMessage.warning('至少要选一餐')
+    return
+  }
+  generating.value = true
+  try {
+    const payload = {
+      goal: createForm.goal,
+      days: createForm.days,
+      meals: createForm.meals,
+      idea: createForm.idea || undefined,
+      dailyCalories: createForm.dailyCalories || undefined,
+      dislikes: createForm.dislikes,
+      preferences: createForm.preferences
+    }
+    const res = await api.post('/meal-plan/generate', payload)
+    createDialog.value = false
+    ElMessage.success('AI 食谱生成成功！')
+    await loadMine()
+    openSheet(res.planId, 'mine')
+  } catch (e) {
+    // 错误已由 axios 拦截器处理
+  } finally {
+    generating.value = false
   }
 }
 
@@ -1403,4 +1494,26 @@ html.dark .sidebar-tips { background: #202730; }
 html.dark .tips-title { color: #3fae74; }
 html.dark .tips-list li { color: #8ea0b0; }
 html.dark .sidebar-deco { background: linear-gradient(180deg, transparent, #1a2820); }
+
+/* ====== 创建对话框：模式切换 Tab ====== */
+.create-mode-tabs {
+  display: flex; gap: 0; margin-bottom: 20px;
+  border-bottom: 1px solid #e4e7ed; padding-bottom: 0;
+}
+.mode-tab {
+  padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 500;
+  color: #909399; border-bottom: 2px solid transparent;
+  transition: all 0.25s; user-select: none;
+}
+.mode-tab:hover { color: #2b7de9; }
+.mode-tab.active {
+  color: #2b7de9; border-bottom-color: #2b7de9; font-weight: 600;
+}
+.form-tip { margin-left: 10px; font-size: 12px; color: #c0c4cc; }
+.tag-select { width: 100%; }
+html.dark .create-mode-tabs { border-bottom-color: #333e49; }
+html.dark .mode-tab { color: #6b7a8a; }
+html.dark .mode-tab:hover { color: #5b9bd5; }
+html.dark .mode-tab.active { color: #5b9bd5; border-bottom-color: #5b9bd5; }
+html.dark .form-tip { color: #555f6a; }
 </style>

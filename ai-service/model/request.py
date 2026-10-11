@@ -71,3 +71,26 @@ class FoodReplaceRequest(BaseModel):
     preferences: List[str] = []
     dislikes: List[str] = []
     candidates: List[str] = []
+
+
+class FoodLibraryItem(BaseModel):
+    """食物库条目（由 Java 侧注入，约束 AI 只能从中选食物）。"""
+    name: str
+    category: Optional[str] = None
+    calories: Optional[float] = None            # 每100g热量 kcal
+    protein: Optional[float] = None            # 每100g蛋白质 g
+    carbohydrate: Optional[float] = None       # 每100g碳水 g
+    fat: Optional[float] = None                # 每100g脂肪 g
+
+
+class MealPlanGenerateRequest(BaseModel):
+    """AI 生成完整食谱请求。"""
+
+    goal: str                                      # lose / gain / maintain
+    days: int                                      # 3 或 7
+    meals: List[str]                               # ["breakfast","lunch","dinner",...]
+    idea: Optional[str] = None                     # 用户自由描述的想法/需求
+    daily_calories: Optional[float] = None         # 每日目标热量（kcal），可空
+    dislikes: List[str] = []                       # 忌口食物列表
+    preferences: List[str] = []                   # 饮食偏好标签
+    food_library: List[FoodLibraryItem] = []       # 食物库白名单（系统+自定义）

@@ -1,6 +1,7 @@
 package com.zyyqq.controller;
 
 import com.zyyqq.dto.request.MealPlanCopyDayRequest;
+import com.zyyqq.dto.request.MealPlanGenerateRequest;
 import com.zyyqq.dto.request.MealPlanItemAddRequest;
 import com.zyyqq.dto.request.MealPlanItemReplaceRequest;
 import com.zyyqq.dto.request.MealPlanPublishRequest;
@@ -36,6 +37,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -65,6 +67,17 @@ public class MealPlanController {
     public ApiResponse<MealPlanVO> create(Authentication authentication,
                                          @RequestBody MealPlanSaveRequest request) {
         return ApiResponse.success("已创建", mealPlanService.create(getUserId(authentication), request));
+    }
+
+    /**
+     * AI 智能生成完整 N 天膳食计划。
+     * 创建空食谱 → 调 ai-service 生成 → 解析并写入食物条目 → 返回 planId。
+     */
+    @PostMapping("/generate")
+    public ApiResponse<Map<String, Object>> generate(Authentication authentication,
+                                                     @RequestBody MealPlanGenerateRequest request) {
+        Map<String, Object> result = mealPlanService.generate(getUserId(authentication), request);
+        return ApiResponse.success("AI 生成成功", result);
     }
 
     /** 改食谱基本信息（名称 / 目标 / 周期 / 餐次 / 目标热量） */
