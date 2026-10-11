@@ -39,10 +39,10 @@
               <span class="search-icon">🔍</span>
             </template>
           </el-input>
-          <el-select v-model="mineMealType" placeholder="食谱类型" clearable class="tool-select" @change="loadMine">
-            <el-option label="单餐" value="single" />
-            <el-option label="单日" value="day" />
-            <el-option label="多日" value="multi" />
+          <el-select v-model="mineMealType" placeholder="计划天数" clearable class="tool-select" @change="loadMine">
+            <el-option label="3天" value="3" />
+            <el-option label="7天" value="7" />
+            <el-option label="14天" value="14" />
           </el-select>
           <el-select v-model="mineVisibility" placeholder="可见范围" clearable class="tool-select" @change="loadMine">
             <el-option label="个人可见" value="private" />
@@ -638,14 +638,7 @@ const statusFilters = computed(() => {
 const filteredMyRecipes = computed(() => {
   let list = myRecipes.value
   if (mineMealType.value) {
-    const days = (list[0]?.days) || 0
-    list = list.filter(p => {
-      const totalDays = p.days || 0
-      if (mineMealType.value === 'single') return totalDays === 1
-      if (mineMealType.value === 'day') return totalDays === 1
-      if (mineMealType.value === 'multi') return totalDays > 1
-      return true
-    })
+    list = list.filter(p => String(p.days || 0) === mineMealType.value)
   }
   if (mineVisibility.value) {
     list = list.filter(p => {
