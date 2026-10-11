@@ -69,10 +69,7 @@
             <el-row :gutter="16">
               <el-col :span="6" v-for="food in foods" :key="food.id">
                 <el-card shadow="hover" class="food-card" @click="showFoodDetail(food)">
-                  <div class="food-name">
-                    {{ food.name }}
-                    <el-tag v-if="food.foodType === 'dish'" size="small" type="warning" effect="plain" style="margin-left:4px">成品菜</el-tag>
-                  </div>
+                  <div class="food-name">{{ food.name }}</div>
                   <div class="food-cal">{{ food.calories }} kcal/100g</div>
                   <div class="food-macros">
                     蛋白{{ food.protein || 0 }}g · 碳水{{ food.carbohydrate || 0 }}g · 脂肪{{ food.fat || 0 }}g
