@@ -54,9 +54,42 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * 密码编码器：明文存储，同时兼容历史 BCrypt 数据。
+     *
+     * <p><b>为什么是明文</b>：本项目按需求把密码直接存进 {@code user.password_hash}
+     * （教学 / 演示阶段方便直接看库、直接改库），因此 {@link #encode} 原样返回。</p>
+     *
+     * <p><b>为什么要兼容 BCrypt</b>：BCrypt 是单向散列，库里已经存在的
+     * {@code $2a$10$...} 老数据无法还原成明文——如果不做兜底，
+     * 那些账号在切换存储方式后会永久登不进来。所以 {@link #matches} 分两路：
+     * 老数据走 BCrypt 校验，明文数据按字符串比较。新数据一律明文。</p>
+     *
+     * <p>⚠️ 明文存储只适用于本地教学演示，正式环境请换回 BCrypt。</p>
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        BCryptPasswordEncoder legacyBcrypt = new BCryptPasswordEncoder();
+        return new PasswordEncoder() {
+            @Override
+            public String encode(CharSequence rawPassword) {
+                return rawPassword.toString();
+            }
+
+            @Override
+            public boolean matches(CharSequence rawPassword, String encodedPassword) {
+                if (encodedPassword == null) {
+                    return false;
+                }
+                // 历史 BCrypt 数据（$2a$ / $2b$ / $2y$ 开头、长度 60）走老算法校验
+                if (encodedPassword.startsWith("$2a$")
+                        || encodedPassword.startsWith("$2b$")
+                        || encodedPassword.startsWith("$2y$")) {
+                    return legacyBcrypt.matches(rawPassword, encodedPassword);
+                }
+                return rawPassword.toString().equals(encodedPassword);
+            }
+        };
     }
 
     /** 配置跨域资源共享（CORS）策略，允许所有来源和方法 */

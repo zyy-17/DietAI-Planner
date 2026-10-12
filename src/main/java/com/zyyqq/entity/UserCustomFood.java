@@ -60,6 +60,11 @@ public class UserCustomFood {
     @Column(name = "unit_weight", precision = 8, scale = 2)
     private BigDecimal unitWeight;
 
+    /** 是否为组合食谱（由若干食材组合累加营养），false 表示手填营养值的普通自定义食物 */
+    @Column(name = "is_recipe", nullable = false, columnDefinition = "tinyint(1) NOT NULL DEFAULT 0")
+    @Builder.Default
+    private Boolean isRecipe = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

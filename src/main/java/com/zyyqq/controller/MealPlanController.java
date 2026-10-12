@@ -1,6 +1,7 @@
 package com.zyyqq.controller;
 
 import com.zyyqq.dto.request.MealPlanCopyDayRequest;
+import com.zyyqq.dto.request.MealPlanGenerateRequest;
 import com.zyyqq.dto.request.MealPlanItemAddRequest;
 import com.zyyqq.dto.request.MealPlanItemReplaceRequest;
 import com.zyyqq.dto.request.MealPlanPublishRequest;
@@ -11,7 +12,10 @@ import com.zyyqq.dto.response.MealPlanAlternativesVO;
 import com.zyyqq.dto.response.MealPlanCurrentVO;
 import com.zyyqq.dto.response.MealPlanDayVO;
 import com.zyyqq.dto.response.MealPlanDetailVO;
+import com.zyyqq.dto.response.MealPlanExecutionVO;
+import com.zyyqq.dto.response.MealPlanListVO;
 import com.zyyqq.dto.response.MealPlanVO;
+import com.zyyqq.entity.MealPlanReview;
 import com.zyyqq.service.MealPlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,14 +37,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
  * 食谱 / 膳食方案接口。
  *
- * <p>这个模块负责三件事：<b>自己写食谱</b>（选食物、填克数）、<b>看今天吃什么</b>
- * （当前执行的食谱 + 今日进度）、<b>食谱广场</b>（发布 / 收藏 / 保存成自己的）。
- * 不再有「AI 生成方案」这一步；AI 只在单条食物的「替换」里做可选的候选排序。</p>
+ * <p>这个模块负责三件事：<b>自己写食谱</b>（选食物、填克数，也支持 AI 智能生成初稿）、
+ * <b>看今天吃什么</b>（当前执行的食谱 + 今日进度）、<b>食谱广场</b>（发布 / 收藏 / 应用他人食谱）。
+ * AI 除生成初稿外，还在单条食物的「替换」里做可选的候选排序。</p>
+ *
+ * <p>版权约束：从广场「应用」来的食谱属于他人作品，只能替换 / 增删食材，
+ * 不能修改基础信息，也不能二次发布。</p>
  */
 @RestController
 @RequestMapping("/api/meal-plan")
@@ -62,6 +70,17 @@ public class MealPlanController {
     public ApiResponse<MealPlanVO> create(Authentication authentication,
                                          @RequestBody MealPlanSaveRequest request) {
         return ApiResponse.success("已创建", mealPlanService.create(getUserId(authentication), request));
+    }
+
+    /**
+     * AI 智能生成完整 N 天膳食计划。
+     * 创建空食谱 → 调 ai-service 生成 → 解析并写入食物条目 → 返回 planId。
+     */
+    @PostMapping("/generate")
+    public ApiResponse<Map<String, Object>> generate(Authentication authentication,
+                                                     @RequestBody MealPlanGenerateRequest request) {
+        Map<String, Object> result = mealPlanService.generate(getUserId(authentication), request);
+        return ApiResponse.success("AI 生成成功", result);
     }
 
     /** 改食谱基本信息（名称 / 目标 / 周期 / 餐次 / 目标热量） */
@@ -88,6 +107,21 @@ public class MealPlanController {
         return ApiResponse.success(mealPlanService.list(getUserId(authentication), status));
     }
 
+    /**
+     * 我的食谱列表（带状态计数 + 组合筛选）。
+     * status：none/pending/approved/rejected/active，不传=全部；
+     * days：3/7/14 按周期分组；sort：updated/created。
+     */
+    @GetMapping("/list")
+    public ApiResponse<MealPlanListVO> listWithCounts(Authentication authentication,
+                                                      @RequestParam(required = false) String status,
+                                                      @RequestParam(required = false) String keyword,
+                                                      @RequestParam(required = false) Integer days,
+                                                      @RequestParam(required = false) String sort) {
+        return ApiResponse.success(
+                mealPlanService.listWithCounts(getUserId(authentication), status, keyword, days, sort));
+    }
+
     /** 我收藏的食谱 */
     @GetMapping("/favorites")
     public ApiResponse<List<MealPlanVO>> favorites(Authentication authentication) {
@@ -111,6 +145,36 @@ public class MealPlanController {
     @PostMapping("/{id}/apply")
     public ApiResponse<MealPlanVO> apply(Authentication authentication, @PathVariable Long id) {
         return ApiResponse.success("已开始执行", mealPlanService.apply(getUserId(authentication), id));
+    }
+
+    /** 暂停执行 */
+    @PostMapping("/{id}/pause")
+    public ApiResponse<MealPlanVO> pause(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success("已暂停", mealPlanService.pause(getUserId(authentication), id));
+    }
+
+    /** 恢复执行 */
+    @PostMapping("/{id}/resume")
+    public ApiResponse<MealPlanVO> resume(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success("已恢复执行", mealPlanService.resume(getUserId(authentication), id));
+    }
+
+    /** 提前结束执行（归档） */
+    @PostMapping("/{id}/finish")
+    public ApiResponse<MealPlanVO> finish(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success("已结束执行", mealPlanService.finish(getUserId(authentication), id));
+    }
+
+    /** 执行闭环进度：周期进度 + 每日打卡 + 计划 vs 实际 */
+    @GetMapping("/{id}/execution")
+    public ApiResponse<MealPlanExecutionVO> execution(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success(mealPlanService.getExecutionProgress(getUserId(authentication), id));
+    }
+
+    /** 作者查看自己食谱的审核历史 */
+    @GetMapping("/{id}/reviews")
+    public ApiResponse<List<MealPlanReview>> reviews(Authentication authentication, @PathVariable Long id) {
+        return ApiResponse.success(mealPlanService.reviewHistory(getUserId(authentication), id, false));
     }
 
     // ── 编辑食谱内容 ───────────────────────────────────────────────
@@ -253,10 +317,15 @@ public class MealPlanController {
         return ApiResponse.success(mealPlanService.setFavorite(getUserId(authentication), id, false));
     }
 
-    /** 保存为我的食谱（复制一份到自己账号） */
+    /**
+     * 应用他人食谱到「我的食谱」（复制一份到自己账号）。
+     *
+     * <p>副本会标记为「应用来源食谱」并记录来源追溯信息（原食谱 id + 原作者），
+     * 用户只能在其中替换 / 增删食材，不能修改基础信息，也不能发布到广场。</p>
+     */
     @PostMapping("/square/{id}/copy")
     public ApiResponse<MealPlanVO> copyToMine(Authentication authentication, @PathVariable Long id) {
-        return ApiResponse.success("已保存为我的食谱", mealPlanService.copyToMine(getUserId(authentication), id));
+        return ApiResponse.success("已应用到我的食谱", mealPlanService.copyToMine(getUserId(authentication), id));
     }
 
     private Long getUserId(Authentication authentication) {

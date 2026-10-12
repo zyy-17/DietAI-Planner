@@ -19,6 +19,15 @@ public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
     /** 排除某个执行状态取全部（我的食谱列表：只要不是"已归档的历史"就都算我的食谱） */
     List<MealPlan> findByUserIdAndStatusNotOrderByCreatedAtDesc(Long userId, String status);
 
+    /** 我的食谱：按发布状态筛选（publishStatus 为 null 时返回全部） */
+    List<MealPlan> findByUserIdAndPublishStatusOrderByCreatedAtDesc(Long userId, String publishStatus);
+
+    /** 我的食谱：按周期天数筛选 */
+    List<MealPlan> findByUserIdAndDaysOrderByCreatedAtDesc(Long userId, Integer days);
+
+    /** 我的食谱：按名称模糊搜索 */
+    List<MealPlan> findByUserIdAndNameContainingOrderByCreatedAtDesc(Long userId, String keyword);
+
     /** 当前执行中的方案，同一用户至多一份 */
     Optional<MealPlan> findFirstByUserIdAndStatusOrderByCreatedAtDesc(Long userId, String status);
 
@@ -32,13 +41,22 @@ public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
 
     // ── 食谱广场 ───────────────────────────────────────────────────
 
-    /** 广场：按人气（使用人数）排序 */
+    /**
+     * 广场「热门」：按<b>收藏人数</b>从高到低排序。
+     * 收藏数相同再按上架时间、id 兜底，保证分页稳定。
+     */
+    Page<MealPlan> findByPublishStatusOrderByFavoriteCountDescPublishedAtDescIdDesc(String publishStatus, Pageable pageable);
+
+    /** 广场：按人气（使用人数）排序（保留：用于「被应用次数」排行等场景） */
     Page<MealPlan> findByPublishStatusOrderByUsageCountDescPublishedAtDescIdDesc(String publishStatus, Pageable pageable);
 
     /** 广场：按最新上架排序 */
     Page<MealPlan> findByPublishStatusOrderByPublishedAtDescIdDesc(String publishStatus, Pageable pageable);
 
-    /** 广场：按名称模糊搜索（同样是已上架的） */
+    /** 广场：按名称模糊搜索 + 热门（收藏数倒序） */
+    Page<MealPlan> findByPublishStatusAndNameContainingOrderByFavoriteCountDesc(String publishStatus, String keyword, Pageable pageable);
+
+    /** 广场：按名称模糊搜索（按人气/使用人数） */
     Page<MealPlan> findByPublishStatusAndNameContainingOrderByUsageCountDesc(String publishStatus, String keyword, Pageable pageable);
 
     Page<MealPlan> findByPublishStatusAndNameContainingOrderByPublishedAtDesc(String publishStatus, String keyword, Pageable pageable);

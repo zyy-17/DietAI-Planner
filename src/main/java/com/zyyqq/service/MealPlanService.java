@@ -1,6 +1,7 @@
 package com.zyyqq.service;
 
 import com.zyyqq.dto.request.MealPlanCopyDayRequest;
+import com.zyyqq.dto.request.MealPlanGenerateRequest;
 import com.zyyqq.dto.request.MealPlanItemAddRequest;
 import com.zyyqq.dto.request.MealPlanItemReplaceRequest;
 import com.zyyqq.dto.request.MealPlanPublishRequest;
@@ -9,9 +10,12 @@ import com.zyyqq.dto.response.FoodAlternativeVO;
 import com.zyyqq.dto.response.MealGroupVO;
 import com.zyyqq.dto.response.MealPlanAlternativesVO;
 import com.zyyqq.dto.response.MealPlanCurrentVO;
+import com.zyyqq.dto.response.MealPlanDayProgressVO;
 import com.zyyqq.dto.response.MealPlanDayVO;
 import com.zyyqq.dto.response.MealPlanDetailVO;
+import com.zyyqq.dto.response.MealPlanExecutionVO;
 import com.zyyqq.dto.response.MealPlanItemVO;
+import com.zyyqq.dto.response.MealPlanListVO;
 import com.zyyqq.dto.response.MealPlanVO;
 import com.zyyqq.dto.response.MealProgressVO;
 import com.zyyqq.entity.AiGenerationLog;
@@ -20,6 +24,7 @@ import com.zyyqq.entity.Food;
 import com.zyyqq.entity.MealPlan;
 import com.zyyqq.entity.MealPlanFavorite;
 import com.zyyqq.entity.MealPlanItem;
+import com.zyyqq.entity.MealPlanReview;
 import com.zyyqq.entity.ProfileOptionType;
 import com.zyyqq.entity.User;
 import com.zyyqq.entity.UserCustomFood;
@@ -28,6 +33,7 @@ import com.zyyqq.repository.AiGenerationLogRepository;
 import com.zyyqq.repository.MealPlanFavoriteRepository;
 import com.zyyqq.repository.MealPlanItemRepository;
 import com.zyyqq.repository.MealPlanRepository;
+import com.zyyqq.repository.MealPlanReviewRepository;
 import com.zyyqq.repository.UserCustomFoodRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -90,7 +96,7 @@ public class MealPlanService {
             "lose", "减脂", "gain", "增重", "maintain", "维持体重");
 
     private static final Map<String, String> STATUS_LABELS = Map.of(
-            "idle", "未执行", "active", "执行中", "archived", "已归档");
+            "idle", "未执行", "active", "执行中", "paused", "已暂停", "archived", "已归档");
 
     private static final Map<String, String> PUBLISH_LABELS = Map.of(
             "none", "未发布", "pending", "待审核", "approved", "已上架", "rejected", "未通过");
@@ -109,9 +115,13 @@ public class MealPlanService {
     /** 广场一页最多返回多少条 */
     private static final int SQUARE_MAX_PAGE_SIZE = 24;
 
+    /** 热门榜单只展示前 N 条（按收藏人数倒序） */
+    private static final int HOT_TOP_N = 10;
+
     private final MealPlanRepository planRepository;
     private final MealPlanItemRepository itemRepository;
     private final MealPlanFavoriteRepository favoriteRepository;
+    private final MealPlanReviewRepository reviewRepository;
     private final UserCustomFoodRepository userCustomFoodRepository;
     private final AiGenerationLogRepository generationLogRepository;
     private final UserService userService;
@@ -159,6 +169,8 @@ public class MealPlanService {
     @Transactional
     public MealPlanVO updateBasic(Long userId, Long planId, MealPlanSaveRequest request) {
         MealPlan plan = requireOwnedPlan(userId, planId);
+        // 应用来源食谱属于他人作品，只允许调整食材，不允许改基础信息
+        requireOriginalForBasicEdit(plan);
         if (request.getName() != null && !request.getName().isBlank()) {
             plan.setName(trimTo(request.getName().trim(), 100));
         }
@@ -333,8 +345,62 @@ public class MealPlanService {
         }
         plan.setStatus(MealPlan.STATUS_ACTIVE);
         plan.setStartDate(LocalDate.now());
+        plan.setPausedAtDay(null);
         planRepository.save(plan);
         log.info("应用食谱开始执行: userId={}, planId={}", userId, planId);
+        return withStats(plan, userId, null, false);
+    }
+
+    /** 暂停当前执行：保留进度，可从暂停处恢复。 */
+    @Transactional
+    public MealPlanVO pause(Long userId, Long planId) {
+        MealPlan plan = requireOwnedPlan(userId, planId);
+        if (!MealPlan.STATUS_ACTIVE.equals(plan.getStatus())) {
+            throw new BusinessException("只有执行中的食谱才能暂停");
+        }
+        // 先记录暂停时处在第几天，再切换状态（resolveCurrentDayIndex 依赖 active 态）
+        int pausedDay = resolveCurrentDayIndex(plan);
+        plan.setStatus(MealPlan.STATUS_PAUSED);
+        plan.setPausedAtDay(pausedDay);
+        planRepository.save(plan);
+        log.info("暂停食谱执行: userId={}, planId={}, day={}", userId, planId, pausedDay);
+        return withStats(plan, userId, null, false);
+    }
+
+    /** 恢复暂停的执行。 */
+    @Transactional
+    public MealPlanVO resume(Long userId, Long planId) {
+        MealPlan plan = requireOwnedPlan(userId, planId);
+        if (!MealPlan.STATUS_PAUSED.equals(plan.getStatus())) {
+            throw new BusinessException("这份食谱没有处于暂停状态");
+        }
+        // 恢复时把其他执行中的方案归档，保证同一用户只有一份在跑
+        for (MealPlan other : planRepository.findByUserIdAndStatus(userId, MealPlan.STATUS_ACTIVE)) {
+            if (!other.getId().equals(planId)) {
+                other.setStatus(MealPlan.STATUS_ARCHIVED);
+                planRepository.save(other);
+            }
+        }
+        plan.setStatus(MealPlan.STATUS_ACTIVE);
+        // 暂停期间日期没走，保持 startDate 与 pausedAtDay 不动，恢复后继续按自然日推进
+        plan.setPausedAtDay(null);
+        planRepository.save(plan);
+        log.info("恢复食谱执行: userId={}, planId={}", userId, planId);
+        return withStats(plan, userId, null, false);
+    }
+
+    /** 提前结束执行，归档到历史。 */
+    @Transactional
+    public MealPlanVO finish(Long userId, Long planId) {
+        MealPlan plan = requireOwnedPlan(userId, planId);
+        if (!MealPlan.STATUS_ACTIVE.equals(plan.getStatus())
+                && !MealPlan.STATUS_PAUSED.equals(plan.getStatus())) {
+            throw new BusinessException("这份食谱当前不在执行中");
+        }
+        plan.setStatus(MealPlan.STATUS_ARCHIVED);
+        plan.setPausedAtDay(null);
+        planRepository.save(plan);
+        log.info("提前结束食谱执行: userId={}, planId={}", userId, planId);
         return withStats(plan, userId, null, false);
     }
 
@@ -346,6 +412,11 @@ public class MealPlanService {
     public MealPlanCurrentVO getCurrent(Long userId) {
         Optional<MealPlan> active = planRepository
                 .findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, MealPlan.STATUS_ACTIVE);
+        if (active.isEmpty()) {
+            // 执行中的没有，退回看暂停中的，让用户能看到「已暂停」的食谱
+            active = planRepository
+                    .findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, MealPlan.STATUS_PAUSED);
+        }
         if (active.isEmpty()) {
             return MealPlanCurrentVO.builder().todayDate(LocalDate.now()).build();
         }
@@ -391,6 +462,138 @@ public class MealPlanService {
     }
 
     /**
+     * 执行闭环进度：周期进度 + 每日打卡 + 计划 vs 实际营养差异。
+     *
+     * <p>打卡由 {@code diet_record} 反推：某天开启的餐次里，凡是在饮食记录里出现过的就算
+     * 「已记录」，全部出现才算「当天完成」。不引入独立打卡表，与「今日进度」同一口径。</p>
+     */
+    public MealPlanExecutionVO getExecutionProgress(Long userId, Long planId) {
+        MealPlan plan = requireOwnedPlan(userId, planId);
+        if (MealPlan.STATUS_IDLE.equals(plan.getStatus())) {
+            throw new BusinessException("这份食谱还没有开始执行");
+        }
+
+        List<String> meals = splitMeals(plan.getMeals());
+        List<MealPlanItem> allItems = itemRepository.findByPlanIdOrderByDayIndexAscSortOrderAscIdAsc(planId);
+        int totalDays = plan.getDays() == null || plan.getDays() < 1 ? 1 : plan.getDays();
+
+        LocalDate start = plan.getStartDate();
+        if (start == null) {
+            start = LocalDate.now();
+        }
+
+        // 已过天数：从开始到今天（含），截断在周期内；结束的按整周期算
+        int elapsedDays;
+        if (MealPlan.STATUS_ARCHIVED.equals(plan.getStatus())) {
+            elapsedDays = totalDays;
+        } else {
+            long offset = ChronoUnit.DAYS.between(start, LocalDate.now()) + 1;
+            elapsedDays = (int) Math.min(Math.max(offset, 1), totalDays);
+        }
+
+        // 一次性拉出周期内的所有饮食记录，按日期分组
+        LocalDate end = start.plusDays(totalDays - 1L);
+        List<DietRecord> records = dietRecordService.getRecordsByDateRange(userId, start, end);
+        Map<LocalDate, List<DietRecord>> recordsByDate = new HashMap<>();
+        for (DietRecord record : records) {
+            recordsByDate.computeIfAbsent(record.getRecordDate(), k -> new ArrayList<>()).add(record);
+        }
+
+        // 每天的计划热量：按天聚合条目热量
+        Map<Integer, BigDecimal> plannedByDay = new HashMap<>();
+        for (MealPlanItem item : allItems) {
+            if (item.getDayIndex() == null) {
+                continue;
+            }
+            plannedByDay.merge(item.getDayIndex(),
+                    item.getCalories() == null ? BigDecimal.ZERO : item.getCalories(),
+                    BigDecimal::add);
+        }
+
+        int doneMeals = 0;
+        int totalMeals = 0;
+        BigDecimal plannedSum = BigDecimal.ZERO;
+        BigDecimal actualSum = BigDecimal.ZERO;
+        List<MealPlanDayProgressVO> days = new ArrayList<>();
+
+        for (int day = 1; day <= elapsedDays; day++) {
+            LocalDate date = start.plusDays(day - 1L);
+            List<DietRecord> dayRecords = recordsByDate.getOrDefault(date, List.of());
+
+            // 该天开启的餐次里，哪些已有记录
+            Map<String, Long> countByMeal = new HashMap<>();
+            for (DietRecord record : dayRecords) {
+                countByMeal.merge(record.getMealType(), 1L, Long::sum);
+            }
+            List<MealProgressVO> dayProgress = new ArrayList<>();
+            int dayDone = 0;
+            for (String mealType : meals) {
+                long count = countByMeal.getOrDefault(mealType, 0L);
+                boolean done = count > 0;
+                if (done) {
+                    dayDone++;
+                }
+                dayProgress.add(MealProgressVO.builder()
+                        .mealType(mealType)
+                        .mealLabel(mealLabel(mealType))
+                        .done(done)
+                        .recordCount((int) count)
+                        .build());
+            }
+
+            BigDecimal planned = plannedByDay.getOrDefault(day, BigDecimal.ZERO);
+            BigDecimal actual = dayRecords.stream()
+                    .map(r -> r.getCalories() != null ? r.getCalories() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            int dayTotal = meals.size();
+            doneMeals += dayDone;
+            totalMeals += dayTotal;
+            plannedSum = plannedSum.add(planned);
+            actualSum = actualSum.add(actual);
+
+            days.add(MealPlanDayProgressVO.builder()
+                    .dayIndex(day)
+                    .date(date)
+                    .plannedCalories(planned)
+                    .actualCalories(actual)
+                    .doneMeals(dayDone)
+                    .totalMeals(dayTotal)
+                    .completed(dayDone == dayTotal)
+                    .meals(dayProgress)
+                    .build());
+        }
+
+        // 日均：按已过天数摊
+        BigDecimal plannedDaily = elapsedDays > 0
+                ? plannedSum.divide(BigDecimal.valueOf(elapsedDays), 0, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        BigDecimal actualDaily = elapsedDays > 0
+                ? actualSum.divide(BigDecimal.valueOf(elapsedDays), 0, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+
+        int progressPercent = totalMeals > 0
+                ? (int) Math.round(doneMeals * 100.0 / totalMeals)
+                : 0;
+
+        return MealPlanExecutionVO.builder()
+                .plan(withStats(plan, userId, null, false))
+                .startDate(start)
+                .currentDayIndex(elapsedDays)
+                .totalDays(totalDays)
+                .meals(meals)
+                .elapsedDays(elapsedDays)
+                .doneMeals(doneMeals)
+                .totalMeals(totalMeals)
+                .progressPercent(progressPercent)
+                .days(days)
+                .plannedDailyCalories(plannedDaily)
+                .actualDailyCalories(actualDaily)
+                .calorieGap(plannedDaily.subtract(actualDaily))
+                .build();
+    }
+
+    /**
      * 我的食谱列表。
      *
      * @param status null 或 "all" 取全部；"recipes" 只要我的食谱（不含已归档的历史）；
@@ -408,20 +611,96 @@ public class MealPlanService {
         return decorateList(plans, userId, Set.of());
     }
 
+    /**
+     * 「我的食谱」列表页：返回状态计数 + 按条件筛选后的列表。
+     *
+     * <p>筛选维度：</p>
+     * <ul>
+     *   <li>{@code status} —— 发布状态 none/pending/approved/rejected，或执行态 active，
+     *       传 null/blank 表示「全部」</li>
+     *   <li>{@code keyword} —— 食谱名模糊匹配</li>
+     *   <li>{@code days} —— 周期天数（3/7/14），用于「食谱类型」分组</li>
+     *   <li>{@code sort} —— updated（最近更新，默认）/ created（创建时间）</li>
+     * </ul>
+     * <p>个人食谱量级小（几十条），直接在内存里做组合筛选，避免堆砌一堆派生查询。</p>
+     */
+    public MealPlanListVO listWithCounts(Long userId, String status, String keyword,
+                                         Integer days, String sort) {
+        List<MealPlan> all = planRepository.findByUserIdOrderByCreatedAtDesc(userId);
+
+        // 状态计数（不含软删除，软删除由 @SQLRestriction 已过滤）
+        Map<String, Long> publishCounts = new HashMap<>();
+        Map<String, Long> statusCounts = new HashMap<>();
+        for (MealPlan p : all) {
+            publishCounts.merge(p.getPublishStatus(), 1L, Long::sum);
+            statusCounts.merge(p.getStatus(), 1L, Long::sum);
+        }
+
+        // 组合筛选
+        List<MealPlan> filtered = new ArrayList<>(all);
+        if (status != null && !status.isBlank()) {
+            if ("active".equals(status)) {
+                // 「执行中」：active 或 paused 都算正在执行
+                filtered.removeIf(p -> !MealPlan.STATUS_ACTIVE.equals(p.getStatus())
+                        && !MealPlan.STATUS_PAUSED.equals(p.getStatus()));
+            } else {
+                filtered.removeIf(p -> !status.equals(p.getPublishStatus()));
+            }
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            String kw = keyword.trim().toLowerCase();
+            filtered.removeIf(p -> p.getName() == null || !p.getName().toLowerCase().contains(kw));
+        }
+        if (days != null && days > 0) {
+            filtered.removeIf(p -> !days.equals(p.getDays()));
+        }
+
+        // 排序
+        if ("created".equals(sort)) {
+            filtered.sort(Comparator.comparing(MealPlan::getCreatedAt,
+                    Comparator.nullsLast(Comparator.reverseOrder())));
+        } else {
+            // 默认按更新时间倒序
+            filtered.sort(Comparator.comparing(MealPlan::getUpdatedAt,
+                    Comparator.nullsLast(Comparator.reverseOrder())));
+        }
+
+        List<MealPlanVO> vos = decorateList(filtered, userId, Set.of());
+        return MealPlanListVO.builder()
+                .publishCounts(publishCounts)
+                .statusCounts(statusCounts)
+                .total(all.size())
+                .plans(vos)
+                .build();
+    }
+
     /** 食谱详情：逐天明细。 */
     public MealPlanDetailVO detail(Long userId, Long planId) {
         MealPlan plan = requireOwnedPlan(userId, planId);
         return buildDetail(plan, userId, false);
     }
 
-    /** 删除食谱（连同条目与收藏关系）。 */
+    /**
+     * 删除食谱（软删除）。
+     *
+     * <p>执行过、被广场保存过、或从广场复制来的食谱可能被膳食方案/执行历史引用，
+     * 物理删除会破坏这些历史数据。因此统一走软删除：打 {@code deleted} 标记，
+     * 我的食谱、广场、收藏等查询都会自动过滤。条目数据保留，保证历史执行记录完整。</p>
+     */
     @Transactional
     public void delete(Long userId, Long planId) {
         MealPlan plan = requireOwnedPlan(userId, planId);
-        itemRepository.deleteByPlanId(plan.getId());
+        plan.setDeleted(true);
+        // 软删除的食谱同时退出广场与执行态
+        plan.setPublishStatus(MealPlan.PUBLISH_NONE);
+        plan.setPublishedAt(null);
+        if (MealPlan.STATUS_ACTIVE.equals(plan.getStatus())
+                || MealPlan.STATUS_PAUSED.equals(plan.getStatus())) {
+            plan.setStatus(MealPlan.STATUS_ARCHIVED);
+        }
+        planRepository.save(plan);
         favoriteRepository.deleteByPlanId(plan.getId());
-        planRepository.delete(plan);
-        log.info("删除食谱: userId={}, planId={}", userId, planId);
+        log.info("软删除食谱: userId={}, planId={}", userId, planId);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -432,6 +711,8 @@ public class MealPlanService {
     @Transactional
     public void updateCover(Long userId, Long planId, String coverUrl) {
         MealPlan plan = requireOwnedPlan(userId, planId);
+        // 封面属于发布资料（基础信息），应用来源食谱不可改
+        requireOriginalForBasicEdit(plan);
         plan.setCoverUrl(trimTo(coverUrl, 255));
         markEdited(plan);
         planRepository.save(plan);
@@ -441,6 +722,10 @@ public class MealPlanService {
     @Transactional
     public MealPlanVO publish(Long userId, Long planId, MealPlanPublishRequest request) {
         MealPlan plan = requireOwnedPlan(userId, planId);
+        // 应用来源食谱不允许二次发布，防止把他人原创作品重新投稿
+        if (plan.isCopied()) {
+            throw new BusinessException("这是应用自他人分享的食谱，不能发布到广场");
+        }
         long itemCount = itemRepository.countByPlanId(planId);
         if (itemCount == 0) {
             throw new BusinessException("食谱里还没有食物，先加几样再发布");
@@ -491,23 +776,41 @@ public class MealPlanService {
     //  食谱广场
     // ══════════════════════════════════════════════════════════════
 
-    /** 广场列表：只返回审核通过的，支持热门 / 最新排序与名称搜索。 */
+    /**
+     * 广场列表：只返回审核通过的，支持<b>热门 / 最新</b>排序与名称搜索。
+     *
+     * <p><b>热门口径</b>：按 {@code favorite_count}（收藏人数）从高到低，且<b>只展示 Top10</b>——
+     * 榜单页数到第 10 条即为止，不再往下翻。最新口径照旧按上架时间倒序、可分页。</p>
+     */
     public Page<MealPlanVO> square(Long userId, String sort, String keyword, int page, int size) {
+        int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), SQUARE_MAX_PAGE_SIZE);
-        Pageable pageable = PageRequest.of(Math.max(page, 0), safeSize);
         boolean byHot = !MealPlan.SORT_NEW.equals(sort);
         String kw = keyword == null ? null : keyword.trim();
+
+        Pageable pageable;
+        if (byHot) {
+            // 热门只展示 Top10：越界的页直接返回空页，尾页按剩余条数裁剪
+            int offset = safePage * safeSize;
+            if (offset >= HOT_TOP_N) {
+                return Page.empty(PageRequest.of(safePage, safeSize));
+            }
+            int remain = Math.min(safeSize, HOT_TOP_N - offset);
+            pageable = PageRequest.of(safePage, remain);
+        } else {
+            pageable = PageRequest.of(safePage, safeSize);
+        }
 
         Page<MealPlan> plans;
         if (kw != null && !kw.isEmpty()) {
             plans = byHot
-                    ? planRepository.findByPublishStatusAndNameContainingOrderByUsageCountDesc(
+                    ? planRepository.findByPublishStatusAndNameContainingOrderByFavoriteCountDesc(
                             MealPlan.PUBLISH_APPROVED, kw, pageable)
                     : planRepository.findByPublishStatusAndNameContainingOrderByPublishedAtDesc(
                             MealPlan.PUBLISH_APPROVED, kw, pageable);
         } else {
             plans = byHot
-                    ? planRepository.findByPublishStatusOrderByUsageCountDescPublishedAtDescIdDesc(
+                    ? planRepository.findByPublishStatusOrderByFavoriteCountDescPublishedAtDescIdDesc(
                             MealPlan.PUBLISH_APPROVED, pageable)
                     : planRepository.findByPublishStatusOrderByPublishedAtDescIdDesc(
                             MealPlan.PUBLISH_APPROVED, pageable);
@@ -581,7 +884,14 @@ public class MealPlanService {
         return result;
     }
 
-    /** 「保存为我的食谱」：复制一份到自己账号，原食谱使用人数 +1。 */
+    /**
+     * 「应用到我的食谱」：把广场上的他人食谱引入自己账号，<b>仅用于查看与调整食材</b>。
+     *
+     * <p><b>版权保护</b>：副本 {@code origin=copied}，同时落库来源溯源
+     * （{@code sourcePlanId} 原食谱 id、{@code sourceAuthorId} 原作者 id、
+     * {@code sourceAuthorName} 原作者昵称快照）。服务层据此禁止副本修改基础信息与二次发布，
+     * 用户只能在副本里替换 / 增删食材。</p>
+     */
     @Transactional
     public MealPlanVO copyToMine(Long userId, Long planId) {
         MealPlan source = planRepository.findById(planId)
@@ -590,7 +900,7 @@ public class MealPlanService {
             throw new BusinessException("这份食谱还没有上架");
         }
         if (source.getUserId().equals(userId)) {
-            throw new BusinessException("这就是你自己的食谱，不用再保存一份");
+            throw new BusinessException("这就是你自己的食谱，不用再应用一份");
         }
         List<MealPlanItem> sourceItems = itemRepository
                 .findByPlanIdOrderByDayIndexAscSortOrderAscIdAsc(planId);
@@ -610,7 +920,11 @@ public class MealPlanService {
                 .expectedLoss(source.getExpectedLoss())
                 .status(MealPlan.STATUS_IDLE)
                 .publishStatus(MealPlan.PUBLISH_NONE)
+                // ── 来源溯源：标记为「应用来源食谱」，记录原食谱与原作者 ──
+                .origin(MealPlan.ORIGIN_COPIED)
                 .sourcePlanId(source.getId())
+                .sourceAuthorId(source.getUserId())
+                .sourceAuthorName(maskAuthor(source.getUserId()))
                 .build();
         planRepository.save(copy);
 
@@ -624,7 +938,8 @@ public class MealPlanService {
 
         source.setUsageCount(nz(source.getUsageCount()) + 1);
         planRepository.save(source);
-        log.info("保存他人食谱为我的: userId={}, sourcePlanId={}, newPlanId={}", userId, planId, copy.getId());
+        log.info("应用他人食谱为我的: userId={}, sourcePlanId={}, sourceAuthorId={}, newPlanId={}",
+                userId, planId, source.getUserId(), copy.getId());
         return withStats(copy, userId, null, false);
     }
 
@@ -648,9 +963,9 @@ public class MealPlanService {
         return buildDetail(plan, null, true);
     }
 
-    /** 审核通过，上架到广场。 */
+    /** 审核通过，上架到广场，并记录审核历史。 */
     @Transactional
-    public void approve(Long planId) {
+    public void approve(Long reviewerId, Long planId) {
         MealPlan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new BusinessException("食谱不存在"));
         if (itemRepository.countByPlanId(planId) == 0) {
@@ -660,19 +975,42 @@ public class MealPlanService {
         plan.setPublishedAt(LocalDateTime.now());
         plan.setRejectReason(null);
         planRepository.save(plan);
-        log.info("食谱审核通过: planId={}", planId);
+        writeReview(planId, reviewerId, MealPlanReview.RESULT_APPROVED, null);
+        log.info("食谱审核通过: planId={}, reviewerId={}", planId, reviewerId);
     }
 
-    /** 审核不通过，附上原因。 */
+    /** 审核不通过，附上原因，并记录审核历史。 */
     @Transactional
-    public void reject(Long planId, String reason) {
+    public void reject(Long reviewerId, Long planId, String reason) {
         MealPlan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new BusinessException("食谱不存在"));
+        String trimmedReason = trimTo(reason == null ? "" : reason, 500);
         plan.setPublishStatus(MealPlan.PUBLISH_REJECTED);
         plan.setPublishedAt(null);
-        plan.setRejectReason(trimTo(reason == null ? "" : reason, 500));
+        plan.setRejectReason(trimmedReason);
         planRepository.save(plan);
+        writeReview(planId, reviewerId, MealPlanReview.RESULT_REJECTED, trimmedReason);
         log.info("食谱审核驳回: planId={}, reason={}", planId, reason);
+    }
+
+    /** 写一条审核记录，保留审核人用户名快照。 */
+    private void writeReview(Long planId, Long reviewerId, String result, String reason) {
+        String reviewerName = null;
+        if (reviewerId != null) {
+            try {
+                User reviewer = userService.getUserById(reviewerId);
+                reviewerName = reviewer == null ? null : reviewer.getUsername();
+            } catch (Exception e) {
+                log.warn("取审核人用户名失败: reviewerId={}, {}", reviewerId, e.getMessage());
+            }
+        }
+        reviewRepository.save(MealPlanReview.builder()
+                .planId(planId)
+                .reviewerId(reviewerId)
+                .reviewerName(trimTo(reviewerName, 50))
+                .result(result)
+                .reason(reason)
+                .build());
     }
 
     /** 管理后台首页要用的待审核数量 */
@@ -692,6 +1030,16 @@ public class MealPlanService {
         plan.setPublishedAt(null);
         planRepository.save(plan);
         log.info("管理员下架食谱: planId={}", planId);
+    }
+
+    /** 某份食谱的审核历史（管理员与作者可见）。 */
+    public List<MealPlanReview> reviewHistory(Long userId, Long planId, boolean admin) {
+        MealPlan plan = planRepository.findById(planId)
+                .orElseThrow(() -> new BusinessException("食谱不存在"));
+        if (!admin && !plan.getUserId().equals(userId)) {
+            throw new BusinessException("无权查看这份食谱的审核记录");
+        }
+        return reviewRepository.findByPlanIdOrderByReviewedAtDesc(planId);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1094,7 +1442,26 @@ public class MealPlanService {
                 .favorited(favorited)
                 .onSquare(plan.isOnSquare())
                 .sourcePlanId(plan.getSourcePlanId())
+                .origin(plan.isCopied() ? MealPlan.ORIGIN_COPIED : MealPlan.ORIGIN_ORIGINAL)
+                .originLabel(plan.isCopied() ? "应用来源" : "原创")
+                .sourceAuthorId(plan.getSourceAuthorId())
+                .sourceAuthorName(resolveSourceAuthorName(plan))
+                .basicEditable(plan.isOriginal())
                 .build();
+    }
+
+    /**
+     * 来源原作者昵称：优先用落库快照；老数据（迁移回填）只有 authorId 时，
+     * 现场按脱敏规则补一个，保证「应用来源」卡片永远能显示来源人。
+     */
+    private String resolveSourceAuthorName(MealPlan plan) {
+        if (!plan.isCopied()) {
+            return null;
+        }
+        if (plan.getSourceAuthorName() != null && !plan.getSourceAuthorName().isBlank()) {
+            return plan.getSourceAuthorName();
+        }
+        return plan.getSourceAuthorId() != null ? maskAuthor(plan.getSourceAuthorId()) : "匿名用户";
     }
 
     /** 补上条目数与平均每日热量（要查条目表，列表里批量做）。 */
@@ -1178,6 +1545,18 @@ public class MealPlanService {
         return plan;
     }
 
+    /**
+     * 校验这份食谱允许修改「基础信息」（名称 / 简介 / 封面 / 周期 / 发布等）。
+     *
+     * <p>应用来源食谱（{@code origin=copied}）源自他人公开作品，为规避版权风险，
+     * 用户只能在其内部替换 / 增删食材，不能改基础信息或重新发布。</p>
+     */
+    private void requireOriginalForBasicEdit(MealPlan plan) {
+        if (plan.isCopied()) {
+            throw new BusinessException("这是应用自他人分享的食谱，仅可替换食材，不能修改食谱信息");
+        }
+    }
+
     private MealPlanItem requireItem(MealPlan plan, Long itemId) {
         MealPlanItem item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new BusinessException("该食物条目不存在"));
@@ -1193,6 +1572,13 @@ public class MealPlanService {
      * 被驳回的食谱改完可以重新提交。
      */
     private void markEdited(MealPlan plan) {
+        // 应用来源食谱永不进入广场，不需要触发重新审核
+        if (plan.isCopied()) {
+            plan.setPublishStatus(MealPlan.PUBLISH_NONE);
+            plan.setPublishedAt(null);
+            plan.setRejectReason(null);
+            return;
+        }
         if (MealPlan.PUBLISH_APPROVED.equals(plan.getPublishStatus())) {
             plan.setPublishStatus(MealPlan.PUBLISH_PENDING);
             plan.setPublishedAt(null);
@@ -1205,11 +1591,21 @@ public class MealPlanService {
 
     /** 今天是食谱第几天；超出周期后停在最后一天，避免详情页定位到空白 */
     private int resolveCurrentDayIndex(MealPlan plan) {
-        if (plan.getStartDate() == null || !MealPlan.STATUS_ACTIVE.equals(plan.getStatus())) {
+        if (plan.getStartDate() == null) {
+            return 1;
+        }
+        int days = plan.getDays() == null || plan.getDays() < 1 ? 1 : plan.getDays();
+        // 暂停中的食谱停在暂停那天，避免「今天吃什么」定位回第 1 天
+        if (MealPlan.STATUS_PAUSED.equals(plan.getStatus())) {
+            if (plan.getPausedAtDay() != null) {
+                return Math.min(Math.max(plan.getPausedAtDay(), 1), days);
+            }
+            return 1;
+        }
+        if (!MealPlan.STATUS_ACTIVE.equals(plan.getStatus())) {
             return 1;
         }
         long offset = ChronoUnit.DAYS.between(plan.getStartDate(), LocalDate.now()) + 1;
-        int days = plan.getDays() == null || plan.getDays() < 1 ? 1 : plan.getDays();
         return (int) Math.min(Math.max(offset, 1), days);
     }
 
@@ -1450,5 +1846,139 @@ public class MealPlanService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  AI 智能生成完整食谱
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * AI 智能生成完整 N 天膳食计划。
+     *
+     * <p>流程：创建空食谱 → 组装食物库白名单 → 调 ai-service 生成 →
+     * 解析返回 JSON → 食物名匹配 food 表 → 批量写入 meal_plan_item → 返回 planId。</p>
+     *
+     * <p>核心原则：AI 只输出食物名+克数，营养值一律按 food 表换算；
+     * 匹配不到的食物标记为 SOURCE_AI（foodId=null）。</p>
+     */
+    @Transactional
+    public Map<String, Object> generate(Long userId, MealPlanGenerateRequest request) {
+        // 1. 参数校验与标准化
+        String goal = normalizeGoal(request.getGoal());
+        int days = normalizeDays(request.getDays());
+        List<String> meals = normalizeMeals(request.getMeals());
+
+        // 2. 创建空食谱（复用现有逻辑）
+        MealPlanSaveRequest saveReq = new MealPlanSaveRequest();
+        saveReq.setGoal(goal);
+        saveReq.setDays(days);
+        saveReq.setMeals(meals);
+        saveReq.setDailyCalories(request.getDailyCalories());
+        // 页面不展示「AI 生成」标识：AI 初稿与手动创建的食谱在 UI 上一视同仁，
+        // 因此自动命名不再追加 "(AI生成)" 后缀，沿用与手动创建一致的口径。
+        String autoName = days + "天" + GOAL_LABELS.get(goal) + "食谱";
+        saveReq.setName(autoName);
+        if (request.getIdea() != null && !request.getIdea().isBlank()) {
+            saveReq.setSummary(trimTo(request.getIdea(), 500));
+        }
+        MealPlanVO vo = create(userId, saveReq);
+        Long planId = vo.getId();
+
+        // 3. 加载食物池，组装白名单发给 ai-service
+        FoodPool pool = loadFoodPool(userId);
+        List<Map<String, Object>> foodLibrary = new ArrayList<>();
+        for (FoodRef ref : pool.all()) {
+            Map<String, Object> item = new java.util.LinkedHashMap<>();
+            item.put("name", ref.name());
+            item.put("calories", ref.calories() != null ? ref.calories().doubleValue() : null);
+            item.put("protein", ref.protein() != null ? ref.protein().doubleValue() : null);
+            item.put("carbohydrate", ref.carbohydrate() != null ? ref.carbohydrate().doubleValue() : null);
+            item.put("fat", ref.fat() != null ? ref.fat().doubleValue() : null);
+            foodLibrary.add(item);
+        }
+
+        // 4. 调用 ai-service
+        Map<String, Object> body = new HashMap<>();
+        body.put("goal", goal);
+        body.put("days", days);
+        body.put("meals", meals);
+        body.put("idea", request.getIdea());
+        body.put("daily_calories", request.getDailyCalories() != null ? request.getDailyCalories().doubleValue() : null);
+        body.put("dislikes", cleanList(request.getDislikes()));
+        body.put("preferences", cleanList(request.getPreferences()));
+        body.put("food_library", foodLibrary);
+
+        Map<?, ?> response = callAiService("/api/meal-plan/generate", body, "AI 智能生成食谱");
+
+        // 5. 解析返回结果并写入 meal_plan_item
+        Object rawDays = response.get("days");
+        if (!(rawDays instanceof List<?> dayList)) {
+            throw new BusinessException("AI 返回数据格式异常：缺少 days 数组");
+        }
+
+        int totalItems = 0;
+        int matchedItems = 0;
+        int aiItems = 0;
+
+        for (Object dayObj : dayList) {
+            if (!(dayObj instanceof Map<?, ?> dayData)) continue;
+            Object dayIndexObj = dayData.get("day_index");
+            int dayIndex = dayIndexObj instanceof Number ? ((Number) dayIndexObj).intValue() : 1;
+            Object mealsObj = dayData.get("meals");
+            if (!(mealsObj instanceof Map<?, ?> mealsMap)) continue;
+
+            for (String mealType : meals) {
+                Object mealItemsObj = mealsMap.get(mealType);
+                if (!(mealItemsObj instanceof List<?> mealItems)) continue;
+
+                List<MealPlanItem> exist = itemRepository
+                        .findByPlanIdAndDayIndexOrderBySortOrderAscIdAsc(planId, dayIndex);
+                int nextOrder = exist.stream()
+                        .filter(i -> mealType.equals(i.getMealType()))
+                        .mapToInt(i -> i.getSortOrder() == null ? 0 : i.getSortOrder())
+                        .max().orElse(-1) + 1;
+
+                for (Object itemObj : mealItems) {
+                    if (!(itemObj instanceof Map<?, ?> itemMap)) continue;
+                    String foodName = str(itemMap.get("food"));
+                    if (foodName.isBlank()) continue;
+                    BigDecimal amount = toDecimal(itemMap.get("amount"));
+                    if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+                    totalItems++;
+                    FoodRef ref = pool.match(foodName);
+
+                    if (ref != null) {
+                        // 匹配到食物库 → 用库中的营养值
+                        itemRepository.save(buildItem(planId, dayIndex, mealType, ref, amount, nextOrder));
+                        matchedItems++;
+                    } else {
+                        // 匹配不到 → 标记为 AI 估算，营养值留零（前端展示时显示 "AI估算"）
+                        itemRepository.save(buildItem(planId, dayIndex, mealType,
+                                foodName, null, null, MealPlanItem.SOURCE_AI,
+                                amount, null, null,
+                                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                                nextOrder));
+                        aiItems++;
+                    }
+                    nextOrder++;
+                }
+            }
+        }
+
+        // 6. 记录生成日志
+        writeGenerationLog(userId, "AI生成" + days + "天" + GOAL_LABELS.get(goal) + "食谱",
+                totalItems + "条食物(匹配" + matchedItems + "+AI估算" + aiItems + ")");
+
+        log.info("AI生成食谱完成: userId={}, planId={}, 总条目={}, 匹配={}, AI估算={}",
+                userId, planId, totalItems, matchedItems, aiItems);
+
+        // 7. 返回 planId，前端用它打开编辑器
+        Map<String, Object> result = new HashMap<>();
+        result.put("planId", planId);
+        result.put("totalItems", totalItems);
+        result.put("matchedItems", matchedItems);
+        result.put("aiItems", aiItems);
+        return result;
     }
 }

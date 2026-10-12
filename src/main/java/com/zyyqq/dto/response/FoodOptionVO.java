@@ -41,6 +41,9 @@ public class FoodOptionVO {
 
     private String imageUrl;
 
+    /** 食物类型：ingredient 基础食材 / dish 成品菜肴 */
+    private String foodType;
+
     /** 常用计量单位名称（个/份/盒/片…），为空表示只能按克数记录 */
     private String unitName;
 
@@ -49,6 +52,9 @@ public class FoodOptionVO {
 
     /** 是否为用户自定义（私有）食物 */
     private boolean custom;
+
+    /** 是否为组合食谱（由若干食材组合累加营养） */
+    private boolean recipe;
 
     public static FoodOptionVO fromFood(Food food) {
         return FoodOptionVO.builder()
@@ -61,6 +67,7 @@ public class FoodOptionVO {
                 .fat(food.getFat())
                 .fiber(food.getFiber())
                 .imageUrl(food.getImageUrl())
+                .foodType(food.getFoodType())
                 .unitName(food.getUnitName())
                 .unitWeight(food.getUnitWeight())
                 .custom(false)
@@ -80,6 +87,7 @@ public class FoodOptionVO {
                 .unitName(food.getUnitName())
                 .unitWeight(food.getUnitWeight())
                 .custom(true)
+                .recipe(Boolean.TRUE.equals(food.getIsRecipe()))
                 .build();
     }
 }
