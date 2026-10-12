@@ -69,4 +69,20 @@ public class MealPlanVO {
     private boolean onSquare;
     /** 从广场复制而来时，指回原食谱 */
     private Long sourcePlanId;
+
+    // ── 来源溯源 / 编辑权限 ───────────────────────────────────────
+
+    /** 来源类型：original 用户原创 / copied 应用自他人公开食谱 */
+    private String origin;
+    /** 来源类型的展示文案，如「原创」「应用来源」 */
+    private String originLabel;
+    /** 来源原作者昵称（应用他人食谱时记录，脱敏如「用户**9」） */
+    private String sourceAuthorName;
+    /** 来源原作者用户 id（溯源用） */
+    private Long sourceAuthorId;
+    /**
+     * 是否允许修改「基础信息」与发布（名称 / 简介 / 封面 / 周期 / 发布）。
+     * 原创食谱为 true；应用来源食谱（copied）恒为 false。
+     */
+    private boolean basicEditable;
 }

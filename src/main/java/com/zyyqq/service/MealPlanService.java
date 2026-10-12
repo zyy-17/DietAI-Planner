@@ -115,6 +115,9 @@ public class MealPlanService {
     /** 广场一页最多返回多少条 */
     private static final int SQUARE_MAX_PAGE_SIZE = 24;
 
+    /** 热门榜单只展示前 N 条（按收藏人数倒序） */
+    private static final int HOT_TOP_N = 10;
+
     private final MealPlanRepository planRepository;
     private final MealPlanItemRepository itemRepository;
     private final MealPlanFavoriteRepository favoriteRepository;
@@ -166,6 +169,8 @@ public class MealPlanService {
     @Transactional
     public MealPlanVO updateBasic(Long userId, Long planId, MealPlanSaveRequest request) {
         MealPlan plan = requireOwnedPlan(userId, planId);
+        // 应用来源食谱属于他人作品，只允许调整食材，不允许改基础信息
+        requireOriginalForBasicEdit(plan);
         if (request.getName() != null && !request.getName().isBlank()) {
             plan.setName(trimTo(request.getName().trim(), 100));
         }
@@ -706,6 +711,8 @@ public class MealPlanService {
     @Transactional
     public void updateCover(Long userId, Long planId, String coverUrl) {
         MealPlan plan = requireOwnedPlan(userId, planId);
+        // 封面属于发布资料（基础信息），应用来源食谱不可改
+        requireOriginalForBasicEdit(plan);
         plan.setCoverUrl(trimTo(coverUrl, 255));
         markEdited(plan);
         planRepository.save(plan);
@@ -715,6 +722,10 @@ public class MealPlanService {
     @Transactional
     public MealPlanVO publish(Long userId, Long planId, MealPlanPublishRequest request) {
         MealPlan plan = requireOwnedPlan(userId, planId);
+        // 应用来源食谱不允许二次发布，防止把他人原创作品重新投稿
+        if (plan.isCopied()) {
+            throw new BusinessException("这是应用自他人分享的食谱，不能发布到广场");
+        }
         long itemCount = itemRepository.countByPlanId(planId);
         if (itemCount == 0) {
             throw new BusinessException("食谱里还没有食物，先加几样再发布");
@@ -765,23 +776,41 @@ public class MealPlanService {
     //  食谱广场
     // ══════════════════════════════════════════════════════════════
 
-    /** 广场列表：只返回审核通过的，支持热门 / 最新排序与名称搜索。 */
+    /**
+     * 广场列表：只返回审核通过的，支持<b>热门 / 最新</b>排序与名称搜索。
+     *
+     * <p><b>热门口径</b>：按 {@code favorite_count}（收藏人数）从高到低，且<b>只展示 Top10</b>——
+     * 榜单页数到第 10 条即为止，不再往下翻。最新口径照旧按上架时间倒序、可分页。</p>
+     */
     public Page<MealPlanVO> square(Long userId, String sort, String keyword, int page, int size) {
+        int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), SQUARE_MAX_PAGE_SIZE);
-        Pageable pageable = PageRequest.of(Math.max(page, 0), safeSize);
         boolean byHot = !MealPlan.SORT_NEW.equals(sort);
         String kw = keyword == null ? null : keyword.trim();
+
+        Pageable pageable;
+        if (byHot) {
+            // 热门只展示 Top10：越界的页直接返回空页，尾页按剩余条数裁剪
+            int offset = safePage * safeSize;
+            if (offset >= HOT_TOP_N) {
+                return Page.empty(PageRequest.of(safePage, safeSize));
+            }
+            int remain = Math.min(safeSize, HOT_TOP_N - offset);
+            pageable = PageRequest.of(safePage, remain);
+        } else {
+            pageable = PageRequest.of(safePage, safeSize);
+        }
 
         Page<MealPlan> plans;
         if (kw != null && !kw.isEmpty()) {
             plans = byHot
-                    ? planRepository.findByPublishStatusAndNameContainingOrderByUsageCountDesc(
+                    ? planRepository.findByPublishStatusAndNameContainingOrderByFavoriteCountDesc(
                             MealPlan.PUBLISH_APPROVED, kw, pageable)
                     : planRepository.findByPublishStatusAndNameContainingOrderByPublishedAtDesc(
                             MealPlan.PUBLISH_APPROVED, kw, pageable);
         } else {
             plans = byHot
-                    ? planRepository.findByPublishStatusOrderByUsageCountDescPublishedAtDescIdDesc(
+                    ? planRepository.findByPublishStatusOrderByFavoriteCountDescPublishedAtDescIdDesc(
                             MealPlan.PUBLISH_APPROVED, pageable)
                     : planRepository.findByPublishStatusOrderByPublishedAtDescIdDesc(
                             MealPlan.PUBLISH_APPROVED, pageable);
@@ -855,7 +884,14 @@ public class MealPlanService {
         return result;
     }
 
-    /** 「保存为我的食谱」：复制一份到自己账号，原食谱使用人数 +1。 */
+    /**
+     * 「应用到我的食谱」：把广场上的他人食谱引入自己账号，<b>仅用于查看与调整食材</b>。
+     *
+     * <p><b>版权保护</b>：副本 {@code origin=copied}，同时落库来源溯源
+     * （{@code sourcePlanId} 原食谱 id、{@code sourceAuthorId} 原作者 id、
+     * {@code sourceAuthorName} 原作者昵称快照）。服务层据此禁止副本修改基础信息与二次发布，
+     * 用户只能在副本里替换 / 增删食材。</p>
+     */
     @Transactional
     public MealPlanVO copyToMine(Long userId, Long planId) {
         MealPlan source = planRepository.findById(planId)
@@ -864,7 +900,7 @@ public class MealPlanService {
             throw new BusinessException("这份食谱还没有上架");
         }
         if (source.getUserId().equals(userId)) {
-            throw new BusinessException("这就是你自己的食谱，不用再保存一份");
+            throw new BusinessException("这就是你自己的食谱，不用再应用一份");
         }
         List<MealPlanItem> sourceItems = itemRepository
                 .findByPlanIdOrderByDayIndexAscSortOrderAscIdAsc(planId);
@@ -884,7 +920,11 @@ public class MealPlanService {
                 .expectedLoss(source.getExpectedLoss())
                 .status(MealPlan.STATUS_IDLE)
                 .publishStatus(MealPlan.PUBLISH_NONE)
+                // ── 来源溯源：标记为「应用来源食谱」，记录原食谱与原作者 ──
+                .origin(MealPlan.ORIGIN_COPIED)
                 .sourcePlanId(source.getId())
+                .sourceAuthorId(source.getUserId())
+                .sourceAuthorName(maskAuthor(source.getUserId()))
                 .build();
         planRepository.save(copy);
 
@@ -898,7 +938,8 @@ public class MealPlanService {
 
         source.setUsageCount(nz(source.getUsageCount()) + 1);
         planRepository.save(source);
-        log.info("保存他人食谱为我的: userId={}, sourcePlanId={}, newPlanId={}", userId, planId, copy.getId());
+        log.info("应用他人食谱为我的: userId={}, sourcePlanId={}, sourceAuthorId={}, newPlanId={}",
+                userId, planId, source.getUserId(), copy.getId());
         return withStats(copy, userId, null, false);
     }
 
@@ -1387,7 +1428,26 @@ public class MealPlanService {
                 .favorited(favorited)
                 .onSquare(plan.isOnSquare())
                 .sourcePlanId(plan.getSourcePlanId())
+                .origin(plan.isCopied() ? MealPlan.ORIGIN_COPIED : MealPlan.ORIGIN_ORIGINAL)
+                .originLabel(plan.isCopied() ? "应用来源" : "原创")
+                .sourceAuthorId(plan.getSourceAuthorId())
+                .sourceAuthorName(resolveSourceAuthorName(plan))
+                .basicEditable(plan.isOriginal())
                 .build();
+    }
+
+    /**
+     * 来源原作者昵称：优先用落库快照；老数据（迁移回填）只有 authorId 时，
+     * 现场按脱敏规则补一个，保证「应用来源」卡片永远能显示来源人。
+     */
+    private String resolveSourceAuthorName(MealPlan plan) {
+        if (!plan.isCopied()) {
+            return null;
+        }
+        if (plan.getSourceAuthorName() != null && !plan.getSourceAuthorName().isBlank()) {
+            return plan.getSourceAuthorName();
+        }
+        return plan.getSourceAuthorId() != null ? maskAuthor(plan.getSourceAuthorId()) : "匿名用户";
     }
 
     /** 补上条目数与平均每日热量（要查条目表，列表里批量做）。 */
@@ -1471,6 +1531,18 @@ public class MealPlanService {
         return plan;
     }
 
+    /**
+     * 校验这份食谱允许修改「基础信息」（名称 / 简介 / 封面 / 周期 / 发布等）。
+     *
+     * <p>应用来源食谱（{@code origin=copied}）源自他人公开作品，为规避版权风险，
+     * 用户只能在其内部替换 / 增删食材，不能改基础信息或重新发布。</p>
+     */
+    private void requireOriginalForBasicEdit(MealPlan plan) {
+        if (plan.isCopied()) {
+            throw new BusinessException("这是应用自他人分享的食谱，仅可替换食材，不能修改食谱信息");
+        }
+    }
+
     private MealPlanItem requireItem(MealPlan plan, Long itemId) {
         MealPlanItem item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new BusinessException("该食物条目不存在"));
@@ -1486,6 +1558,13 @@ public class MealPlanService {
      * 被驳回的食谱改完可以重新提交。
      */
     private void markEdited(MealPlan plan) {
+        // 应用来源食谱永不进入广场，不需要触发重新审核
+        if (plan.isCopied()) {
+            plan.setPublishStatus(MealPlan.PUBLISH_NONE);
+            plan.setPublishedAt(null);
+            plan.setRejectReason(null);
+            return;
+        }
         if (MealPlan.PUBLISH_APPROVED.equals(plan.getPublishStatus())) {
             plan.setPublishStatus(MealPlan.PUBLISH_PENDING);
             plan.setPublishedAt(null);
@@ -1781,7 +1860,9 @@ public class MealPlanService {
         saveReq.setDays(days);
         saveReq.setMeals(meals);
         saveReq.setDailyCalories(request.getDailyCalories());
-        String autoName = days + "天" + GOAL_LABELS.get(goal) + "食谱(AI生成)";
+        // 页面不展示「AI 生成」标识：AI 初稿与手动创建的食谱在 UI 上一视同仁，
+        // 因此自动命名不再追加 "(AI生成)" 后缀，沿用与手动创建一致的口径。
+        String autoName = days + "天" + GOAL_LABELS.get(goal) + "食谱";
         saveReq.setName(autoName);
         if (request.getIdea() != null && !request.getIdea().isBlank()) {
             saveReq.setSummary(trimTo(request.getIdea(), 500));

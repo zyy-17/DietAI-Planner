@@ -41,13 +41,22 @@ public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
 
     // ── 食谱广场 ───────────────────────────────────────────────────
 
-    /** 广场：按人气（使用人数）排序 */
+    /**
+     * 广场「热门」：按<b>收藏人数</b>从高到低排序。
+     * 收藏数相同再按上架时间、id 兜底，保证分页稳定。
+     */
+    Page<MealPlan> findByPublishStatusOrderByFavoriteCountDescPublishedAtDescIdDesc(String publishStatus, Pageable pageable);
+
+    /** 广场：按人气（使用人数）排序（保留：用于「被应用次数」排行等场景） */
     Page<MealPlan> findByPublishStatusOrderByUsageCountDescPublishedAtDescIdDesc(String publishStatus, Pageable pageable);
 
     /** 广场：按最新上架排序 */
     Page<MealPlan> findByPublishStatusOrderByPublishedAtDescIdDesc(String publishStatus, Pageable pageable);
 
-    /** 广场：按名称模糊搜索（同样是已上架的） */
+    /** 广场：按名称模糊搜索 + 热门（收藏数倒序） */
+    Page<MealPlan> findByPublishStatusAndNameContainingOrderByFavoriteCountDesc(String publishStatus, String keyword, Pageable pageable);
+
+    /** 广场：按名称模糊搜索（按人气/使用人数） */
     Page<MealPlan> findByPublishStatusAndNameContainingOrderByUsageCountDesc(String publishStatus, String keyword, Pageable pageable);
 
     Page<MealPlan> findByPublishStatusAndNameContainingOrderByPublishedAtDesc(String publishStatus, String keyword, Pageable pageable);

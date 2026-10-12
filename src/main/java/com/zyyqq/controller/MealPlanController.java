@@ -43,9 +43,12 @@ import java.util.UUID;
 /**
  * 食谱 / 膳食方案接口。
  *
- * <p>这个模块负责三件事：<b>自己写食谱</b>（选食物、填克数）、<b>看今天吃什么</b>
- * （当前执行的食谱 + 今日进度）、<b>食谱广场</b>（发布 / 收藏 / 保存成自己的）。
- * 不再有「AI 生成方案」这一步；AI 只在单条食物的「替换」里做可选的候选排序。</p>
+ * <p>这个模块负责三件事：<b>自己写食谱</b>（选食物、填克数，也支持 AI 智能生成初稿）、
+ * <b>看今天吃什么</b>（当前执行的食谱 + 今日进度）、<b>食谱广场</b>（发布 / 收藏 / 应用他人食谱）。
+ * AI 除生成初稿外，还在单条食物的「替换」里做可选的候选排序。</p>
+ *
+ * <p>版权约束：从广场「应用」来的食谱属于他人作品，只能替换 / 增删食材，
+ * 不能修改基础信息，也不能二次发布。</p>
  */
 @RestController
 @RequestMapping("/api/meal-plan")
@@ -314,10 +317,15 @@ public class MealPlanController {
         return ApiResponse.success(mealPlanService.setFavorite(getUserId(authentication), id, false));
     }
 
-    /** 保存为我的食谱（复制一份到自己账号） */
+    /**
+     * 应用他人食谱到「我的食谱」（复制一份到自己账号）。
+     *
+     * <p>副本会标记为「应用来源食谱」并记录来源追溯信息（原食谱 id + 原作者），
+     * 用户只能在其中替换 / 增删食材，不能修改基础信息，也不能发布到广场。</p>
+     */
     @PostMapping("/square/{id}/copy")
     public ApiResponse<MealPlanVO> copyToMine(Authentication authentication, @PathVariable Long id) {
-        return ApiResponse.success("已保存为我的食谱", mealPlanService.copyToMine(getUserId(authentication), id));
+        return ApiResponse.success("已应用到我的食谱", mealPlanService.copyToMine(getUserId(authentication), id));
     }
 
     private Long getUserId(Authentication authentication) {

@@ -134,12 +134,20 @@ def _build_food_library_section(food_library: list) -> str:
         return "（未提供食物库）"
     lines = []
     for item in food_library:
-        name = getattr(item, "name", item.get("name", "??"))
-        cal = getattr(item, "calories", item.get("calories")) or "-"
-        pro = getattr(item, "protein", item.get("protein")) or "-"
-        carb = getattr(item, "carbohydrate", item.get("carbohydrate")) or "-"
-        fat = getattr(item, "fat", item.get("fat")) or "-"
-        cat = getattr(item, "category", item.get("category"))
+        if isinstance(item, dict):
+            name = item.get("name", "??")
+            cal = item.get("calories") or "-"
+            pro = item.get("protein") or "-"
+            carb = item.get("carbohydrate") or "-"
+            fat = item.get("fat") or "-"
+            cat = item.get("category")
+        else:
+            name = getattr(item, "name", "??")
+            cal = getattr(item, "calories", None) or "-"
+            pro = getattr(item, "protein", None) or "-"
+            carb = getattr(item, "carbohydrate", None) or "-"
+            fat = getattr(item, "fat", None) or "-"
+            cat = getattr(item, "category", None)
         cat_str = f" [{cat}]" if cat else ""
         lines.append(f"- {name}{cat_str} | {cal} kcal | 蛋白质{pro}g / 碳水{carb}g / 脂肪{fat}g (每100g)")
     return "\n".join(lines)

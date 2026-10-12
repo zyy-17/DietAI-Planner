@@ -12,11 +12,16 @@
           </div>
           <div class="hero-meta">
             <template v-if="mode !== 'mine'">
-              <span>🔥 {{ plan?.usageCount || 0 }}+ 人使用中</span>
+              <span>⭐ {{ plan?.favoriteCount || 0 }} 人收藏</span>
               <span class="dot">·</span>
               <span>由{{ plan?.authorName || '匿名用户' }}创建并投稿</span>
               <span class="dot" v-if="mode === 'admin'">·</span>
               <span v-if="mode === 'admin'">{{ publishText }}</span>
+            </template>
+            <template v-else-if="isCopied">
+              <span>🔗 应用自「{{ plan?.sourceAuthorName || '匿名用户' }}」的食谱</span>
+              <span class="dot">·</span>
+              <span>{{ plan?.statusLabel || '未执行' }}</span>
             </template>
             <template v-else>
               <span>{{ plan?.statusLabel || '未执行' }}</span>
@@ -47,6 +52,15 @@
             <div class="stat-value">{{ plan?.expectedLoss || '-' }}</div>
             <div class="stat-label">减脂 Kg</div>
           </div>
+        </div>
+
+        <!-- 来源提示：应用自他人食谱，只可调整食材 -->
+        <div class="src-note" v-if="isCopied && mode === 'mine'">
+          <span class="src-note-icon">🔗</span>
+          <span>
+            本食谱应用自「{{ plan?.sourceAuthorName || '匿名用户' }}」分享的公开食谱：
+            你可以替换 / 增删其中的食材，但不能修改食谱名称、简介等基础信息，也不能重新发布到广场。
+          </span>
         </div>
 
         <!-- 标签 -->
@@ -117,7 +131,8 @@
         <!-- 工具行 -->
         <div class="tools" v-if="editable">
           <button class="tool" @click="copyDialog = true">复制到其他日期</button>
-          <button class="tool" @click="changeDaysDialog = true">修改计划天数</button>
+          <!-- 应用来源食谱不能改周期（基础信息），只保留食材层面的操作 -->
+          <button class="tool" v-if="basicEditable" @click="changeDaysDialog = true">修改计划天数</button>
         </div>
 
         <div class="tip" v-if="plan?.rejectReason">审核未通过：{{ plan.rejectReason }}</div>
@@ -131,7 +146,7 @@
             <button class="btn-ghost" @click="toggleFavorite">
               {{ plan?.favorited ? '★ 已收藏' : '☆ 收藏' }}
             </button>
-            <button class="btn-primary" @click="$emit('copy')">保存为我的食谱</button>
+            <button class="btn-primary" @click="$emit('copy')">应用到我的食谱</button>
           </template>
           <template v-else-if="mode === 'admin'">
             <button class="btn-ghost" @click="close">关闭</button>
@@ -323,6 +338,10 @@ const changeDaysDialog = ref(false)
 const newDays = ref(7)
 
 const editable = computed(() => props.mode === 'mine' && plan.value && plan.value.status !== 'archived')
+/** 是否「应用自他人食谱」：只能调整食材，不能改基础信息 / 发布 */
+const isCopied = computed(() => plan.value?.origin === 'copied' || plan.value?.basicEditable === false)
+/** 是否允许修改基础信息（名称/简介/周期/封面）与发布（原创食谱才允许） */
+const basicEditable = computed(() => editable.value && plan.value?.basicEditable !== false)
 const tags = computed(() => plan.value?.tags || [])
 const dayList = computed(() => planDays.value.length
   ? planDays.value
@@ -662,8 +681,15 @@ async function applyPlan() {
 .stat-value { font-size: 20px; font-weight: 700; color: #3fae74; line-height: 1.2; }
 .stat-label { margin-top: 6px; font-size: 12px; color: #8b98a5; }
 
-.tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.tag { padding: 5px 12px; border-radius: 6px; font-size: 12px; color: #fff; }
+/* 来源提示：应用自他人食谱 */
+.src-note {
+  margin-top: 16px; padding: 10px 14px; border-radius: 10px;
+  background: #fff8ee; border: 1px dashed #f6d9ab; color: #b8802f;
+  font-size: 12px; line-height: 1.6; display: flex; gap: 8px; align-items: flex-start;
+}
+.src-note-icon { flex: none; }
+
+.tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }.tag { padding: 5px 12px; border-radius: 6px; font-size: 12px; color: #fff; }
 .tag-0 { background: #4caf7d; } .tag-1 { background: #b3c96a; }
 .tag-2 { background: #6fa8dc; } .tag-3 { background: #f08baf; } .tag-4 { background: #9aa7b4; }
 
@@ -762,6 +788,7 @@ html.dark .sheet-footer { background: #1b2129; border-top-color: #2a333d; }
 html.dark .btn-ghost { background: #232b34; border-color: #333e49; color: #c8d6e5; }
 html.dark .tool { background: #24322b; }
 html.dark .food-empty { background: #202730; }
+html.dark .src-note { background: #2a2418; border-color: #4a3b22; color: #e0a75b; }
 html.dark .add-mode-switch { border-color: #333e49; }
 html.dark .mode-tab { background: #1b2129; color: #8ea0b0; }
 html.dark .mode-tab:hover { background: #232b34; color: #5b9bd5; }

@@ -10,15 +10,25 @@
             <div class="page-head">
               <div>
                 <h2 class="page-title">我的食谱</h2>
-                <p class="page-sub">管理自己创建和收藏的食谱，随时应用到膳食方案</p>
+                <p class="page-sub">管理自己创建和应用的食谱，随时应用到膳食方案</p>
               </div>
-              <el-button type="primary" round class="btn-create" @click="openCreate">
-                <span class="btn-create-icon">＋</span> 新建食谱
-              </el-button>
+              <div class="page-head-actions">
+                <el-button
+                  round class="btn-fav-view"
+                  :class="{ 'is-on': mineView === 'favorites' }"
+                  @click="toggleFavView"
+                >
+                  ⭐ 我的收藏
+                  <em class="fav-count" v-if="favorites.length">{{ favorites.length }}</em>
+                </el-button>
+                <el-button type="primary" round class="btn-create" @click="openCreate">
+                  <span class="btn-create-icon">＋</span> 新建食谱
+                </el-button>
+              </div>
             </div>
 
-        <!-- 状态筛选区（数量内联到 pill 中） -->
-        <div class="status-filter">
+        <!-- 状态筛选区（数量内联到 pill 中）—— 仅「我的食谱」视图展示 -->
+        <div class="status-filter" v-if="mineView === 'recipes'">
           <span
             v-for="f in statusFilters" :key="f.key"
             class="status-pill"
@@ -29,8 +39,8 @@
           </span>
         </div>
 
-        <!-- 搜索工具栏 -->
-        <div class="tool-bar">
+        <!-- 搜索工具栏 —— 仅「我的食谱」视图展示 -->
+        <div class="tool-bar" v-if="mineView === 'recipes'">
           <el-input
             v-model="mineKeyword" placeholder="搜索食谱名称" clearable
             class="search-input" @keyup.enter="loadMine" @clear="loadMine"
@@ -54,13 +64,13 @@
         </div>
 
         <!-- 执行横幅 - 紧凑版 -->
-        <div class="exec-banner" v-if="current.plan" @click="openSheet(current.plan.id, 'mine')">
+        <div class="exec-banner" v-if="current.plan && mineView === 'recipes'" @click="openSheet(current.plan.id, 'mine')">
           <div class="exec-banner-left">
             <span class="exec-badge" :class="current.plan.status === 'paused' ? 'badge-paused' : 'badge-active'">
               {{ current.plan.status === 'paused' ? '⏸' : '●' }}
             </span>
             <div class="exec-info">
-              <span class="exec-name">{{ current.plan.name }}</span>
+              <span class="exec-name">{{ displayName(current.plan) }}</span>
               <span class="exec-detail">
                 {{ current.plan.goalLabel }} · {{ current.plan.days }}天 · {{ fmt(current.plan.plannedDailyCalories) }} kcal/天
               </span>
@@ -87,122 +97,132 @@
           </div>
         </div>
 
-        <!-- 食谱卡片区 -->
-        <div class="recipe-grid" v-loading="mineLoading">
-          <div
-            class="recipe-card" v-for="plan in filteredMyRecipes" :key="plan.id"
-            @click="openSheet(plan.id, 'mine')"
-          >
-            <!-- 封面 -->
-            <div class="rc-cover" :style="coverStyle(plan)">
-              <div class="rc-cover-placeholder" v-if="!plan.coverUrl">
-                <span class="rc-cover-emoji">{{ coverEmoji(plan) }}</span>
-              </div>
-              <span v-if="plan.status === 'active' || plan.status === 'paused'" class="rc-exec-dot"></span>
-              <span class="rc-vis-badge" :class="{ pub: plan.onSquare }">
-                {{ plan.onSquare ? '公开' : '个人' }}
-              </span>
-            </div>
-            <!-- 卡片内容 -->
-            <div class="rc-body">
-              <div class="rc-title-row">
-                <span class="rc-name" :title="plan.name">{{ plan.name }}</span>
-                <span class="rc-status-tag" :class="statusTagClass(plan)">{{ cardStatusText(plan) }}</span>
-              </div>
-              <div class="rc-meta">
-                <span>{{ mealTypeLabel(plan) }}</span>
-                <span class="rc-meta-dot">·</span>
-                <span>{{ plan.days }}天</span>
-                <span class="rc-meta-dot">·</span>
-                <span>{{ totalMeals(plan) }}餐</span>
-              </div>
-              <div class="rc-nutrition">
-                <template v-if="plan.itemCount > 0">
-                  <span class="rn-kcal">{{ fmt(plan.plannedDailyCalories) }}</span>
-                  <span class="rn-unit"> kcal/天</span>
-                  <span class="rn-sep">|</span>
-                  <span class="rn-label">营养估算</span>
-                </template>
-                <span v-else class="rn-empty">待计算</span>
-              </div>
-              <div class="rc-progress" v-if="plan.status === 'active' && execution && execution.planId === plan.id">
-                <div class="rc-progress-bar">
-                  <div class="rc-progress-fill" :style="{ width: execution.progressPercent + '%' }"></div>
+        <!-- ══════ 我的食谱 视图 ══════ -->
+        <template v-if="mineView === 'recipes'">
+          <div class="recipe-grid" v-loading="mineLoading">
+            <div
+              class="recipe-card" v-for="plan in filteredMyRecipes" :key="plan.id"
+              @click="openSheet(plan.id, 'mine')"
+            >
+              <!-- 封面 -->
+              <div class="rc-cover" :style="coverStyle(plan)">
+                <div class="rc-cover-placeholder" v-if="!plan.coverUrl">
+                  <span class="rc-cover-emoji">{{ coverEmoji(plan) }}</span>
                 </div>
-                <span class="rp-text">已完成 {{ execution.currentDayIndex }}/{{ plan.days }} 天</span>
+                <span v-if="plan.status === 'active' || plan.status === 'paused'" class="rc-exec-dot"></span>
+                <span class="rc-vis-badge" :class="{ pub: plan.onSquare }" v-if="plan.basicEditable">
+                  {{ plan.onSquare ? '公开' : '个人' }}
+                </span>
+                <span class="rc-vis-badge src" v-else>应用来源</span>
               </div>
-              <div class="rc-divider"></div>
-              <div class="rc-actions" @click.stop>
-                <span class="rc-action-left">
-                  <el-button size="small" text class="action-btn" @click="openSheet(plan.id, 'mine')">
-                    编辑
-                  </el-button>
-                </span>
-                <span class="rc-action-right">
-                  <!-- 未发布 -->
-                  <template v-if="plan.publishStatus === 'none'">
-                    <el-button size="small" text type="primary" class="action-btn" @click="openPublish(plan)">
-                      发布
-                    </el-button>
+              <!-- 卡片内容 -->
+              <div class="rc-body">
+                <div class="rc-title-row">
+                  <span class="rc-name" :title="displayName(plan)">{{ displayName(plan) }}</span>
+                  <span class="rc-status-tag" :class="statusTagClass(plan)">{{ cardStatusText(plan) }}</span>
+                </div>
+                <div class="rc-meta">
+                  <span>{{ mealTypeLabel(plan) }}</span>
+                  <span class="rc-meta-dot">·</span>
+                  <span>{{ plan.days }}天</span>
+                  <span class="rc-meta-dot">·</span>
+                  <span>{{ totalMeals(plan) }}餐</span>
+                </div>
+                <!-- 应用来源提示：他人作品，仅可调整食材 -->
+                <div class="rc-origin" v-if="!plan.basicEditable">
+                  🔗 应用自「{{ plan.sourceAuthorName || '匿名用户' }}」
+                </div>
+                <div class="rc-nutrition">
+                  <template v-if="plan.itemCount > 0">
+                    <span class="rn-kcal">{{ fmt(plan.plannedDailyCalories) }}</span>
+                    <span class="rn-unit"> kcal/天</span>
+                    <span class="rn-sep">|</span>
+                    <span class="rn-label">营养估算</span>
                   </template>
-                  <!-- 审核中 -->
-                  <template v-else-if="plan.publishStatus === 'pending'">
-                    <el-button size="small" text class="action-btn" @click="unpublish(plan)">
-                      撤回申请
+                  <span v-else class="rn-empty">待计算</span>
+                </div>
+                <div class="rc-progress" v-if="plan.status === 'active' && execution && execution.planId === plan.id">
+                  <div class="rc-progress-bar">
+                    <div class="rc-progress-fill" :style="{ width: execution.progressPercent + '%' }"></div>
+                  </div>
+                  <span class="rp-text">已完成 {{ execution.currentDayIndex }}/{{ plan.days }} 天</span>
+                </div>
+                <div class="rc-divider"></div>
+                <div class="rc-actions" @click.stop>
+                  <span class="rc-action-left">
+                    <el-button size="small" text class="action-btn" @click="openSheet(plan.id, 'mine')">
+                      {{ plan.basicEditable ? '编辑' : '调整食材' }}
                     </el-button>
-                  </template>
-                  <!-- 审核驳回 -->
-                  <template v-else-if="plan.publishStatus === 'rejected'">
-                    <el-button size="small" text type="warning" class="action-btn" @click="openSheet(plan.id, 'mine')">
-                      查看原因
-                    </el-button>
-                  </template>
-                  <!-- 已发布 -->
-                  <template v-else-if="plan.publishStatus === 'approved' && plan.status !== 'active' && plan.status !== 'paused'">
-                    <el-button size="small" text type="primary" class="action-btn" @click="applyPlan(plan)">
-                      开始执行
-                    </el-button>
-                  </template>
-                  <!-- 执行中 / 暂停 -->
-                  <template v-if="plan.status === 'active' || plan.status === 'paused'">
-                    <el-button size="small" text type="primary" class="action-btn" @click="openExecution">
-                      执行详情
-                    </el-button>
-                  </template>
-                  <el-dropdown trigger="click" @command="(cmd) => onPlanCommand(cmd, plan)">
-                    <el-button size="small" text class="action-btn action-more">⋯</el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="edit">编辑食谱</el-dropdown-item>
-                        <el-dropdown-item v-if="plan.publishStatus === 'none' || plan.publishStatus === 'rejected'" command="publish">发布到广场</el-dropdown-item>
-                        <el-dropdown-item v-if="plan.onSquare" command="unpublish">取消公开</el-dropdown-item>
-                        <el-dropdown-item v-if="plan.status === 'active'" command="pause">暂停执行</el-dropdown-item>
-                        <el-dropdown-item v-if="plan.status === 'paused'" command="resume">恢复执行</el-dropdown-item>
-                        <el-dropdown-item v-if="plan.status === 'active' || plan.status === 'paused'" command="finish">结束执行</el-dropdown-item>
-                        <el-dropdown-item command="delete" divided>删除食谱</el-dropdown-item>
-                      </el-dropdown-menu>
+                  </span>
+                  <span class="rc-action-right">
+                    <!-- 原创食谱：完整的发布 / 撤回 / 执行操作 -->
+                    <template v-if="plan.basicEditable">
+                      <template v-if="plan.publishStatus === 'none'">
+                        <el-button size="small" text type="primary" class="action-btn" @click="openPublish(plan)">
+                          发布
+                        </el-button>
+                      </template>
+                      <template v-else-if="plan.publishStatus === 'pending'">
+                        <el-button size="small" text class="action-btn" @click="unpublish(plan)">
+                          撤回申请
+                        </el-button>
+                      </template>
+                      <template v-else-if="plan.publishStatus === 'rejected'">
+                        <el-button size="small" text type="warning" class="action-btn" @click="openSheet(plan.id, 'mine')">
+                          查看原因
+                        </el-button>
+                      </template>
+                      <template v-else-if="plan.publishStatus === 'approved' && plan.status !== 'active' && plan.status !== 'paused'">
+                        <el-button size="small" text type="primary" class="action-btn" @click="applyPlan(plan)">
+                          开始执行
+                        </el-button>
+                      </template>
                     </template>
-                  </el-dropdown>
-                </span>
+                    <!-- 应用来源食谱：不提供任何发布操作，但可以开始执行 -->
+                    <template v-else-if="plan.status !== 'active' && plan.status !== 'paused'">
+                      <el-button size="small" text type="primary" class="action-btn" @click="applyPlan(plan)">
+                        开始执行
+                      </el-button>
+                    </template>
+                    <!-- 执行中 / 暂停 -->
+                    <template v-if="plan.status === 'active' || plan.status === 'paused'">
+                      <el-button size="small" text type="primary" class="action-btn" @click="openExecution">
+                        执行详情
+                      </el-button>
+                    </template>
+                    <el-dropdown trigger="click" @command="(cmd) => onPlanCommand(cmd, plan)">
+                      <el-button size="small" text class="action-btn action-more">⋯</el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="edit">{{ plan.basicEditable ? '编辑食谱' : '查看食谱' }}</el-dropdown-item>
+                          <el-dropdown-item v-if="plan.basicEditable && (plan.publishStatus === 'none' || plan.publishStatus === 'rejected')" command="publish">发布到广场</el-dropdown-item>
+                          <el-dropdown-item v-if="plan.basicEditable && plan.onSquare" command="unpublish">取消公开</el-dropdown-item>
+                          <el-dropdown-item v-if="plan.status === 'active'" command="pause">暂停执行</el-dropdown-item>
+                          <el-dropdown-item v-if="plan.status === 'paused'" command="resume">恢复执行</el-dropdown-item>
+                          <el-dropdown-item v-if="plan.status === 'active' || plan.status === 'paused'" command="finish">结束执行</el-dropdown-item>
+                          <el-dropdown-item command="delete" divided>删除食谱</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </span>
+                </div>
               </div>
             </div>
+            <div class="empty-box" v-if="!filteredMyRecipes.length && !mineLoading">
+              <div class="empty-icon">📋</div>
+              <div class="empty-text">还没有食谱</div>
+              <div class="empty-sub">点右上角「＋ 新建食谱」开始创建你的第一份食谱吧</div>
+            </div>
           </div>
-          <div class="empty-box" v-if="!filteredMyRecipes.length && !mineLoading">
-            <div class="empty-icon">📋</div>
-            <div class="empty-text">还没有食谱</div>
-            <div class="empty-sub">点右上角「＋ 新建食谱」开始创建你的第一份食谱吧</div>
-          </div>
-        </div>
+        </template>
 
-        <!-- 收藏区 -->
-        <template v-if="favorites.length">
-          <div class="section-head">
-            <span class="section-title">
-              <span class="section-icon">⭐</span> 我收藏的
-              <span class="section-count">{{ favorites.length }}</span>
-            </span>
+        <!-- ══════ 我的收藏 视图（点击「⭐ 我的收藏」切换进来） ══════ -->
+        <template v-else>
+          <div class="fav-view-head">
+            <span class="fav-view-title">⭐ 我的收藏</span>
+            <span class="fav-view-sub" v-if="favorites.length">共 {{ favorites.length }} 份食谱</span>
           </div>
-          <div class="recipe-grid">
+          <div class="recipe-grid" v-loading="favLoading">
             <div
               class="recipe-card" v-for="plan in favorites" :key="'f' + plan.id"
               @click="openSheet(plan.id, 'square')"
@@ -214,7 +234,7 @@
               </div>
               <div class="rc-body">
                 <div class="rc-title-row">
-                  <span class="rc-name" :title="plan.name">{{ plan.name }}</span>
+                  <span class="rc-name" :title="displayName(plan)">{{ displayName(plan) }}</span>
                 </div>
                 <div class="rc-meta">
                   <span>{{ mealTypeLabel(plan) }}</span>
@@ -241,6 +261,11 @@
                 </div>
               </div>
             </div>
+            <div class="empty-box" v-if="!favorites.length && !favLoading">
+              <div class="empty-icon">⭐</div>
+              <div class="empty-text">还没有收藏的食谱</div>
+              <div class="empty-sub">去「食谱广场」逛逛，收藏喜欢的食谱吧</div>
+            </div>
           </div>
         </template>
           </div><!-- /page-card -->
@@ -257,8 +282,8 @@
               <div class="hot-item" v-for="plan in hotList" :key="'hot' + plan.id" @click="openSheet(plan.id, 'square')">
                 <img class="hot-cover" :src="plan.coverUrl || defaultCoverSmall" alt="" />
                 <div class="hot-info">
-                  <div class="hot-name">{{ plan.name }}</div>
-                  <div class="hot-stats">{{ plan.usageCount || 0 }}人收藏</div>
+                  <div class="hot-name">{{ displayName(plan) }}</div>
+                  <div class="hot-stats">⭐ {{ plan.favoriteCount || 0 }}人收藏</div>
                 </div>
                 <button class="hot-fav-btn" :class="{ on: plan.favorited }" @click.stop="toggleHotFavorite(plan)">
                   {{ plan.favorited ? '已收藏' : '收藏' }}
@@ -345,7 +370,7 @@
                 </span>
               </div>
               <div class="fc-body">
-                <div class="fc-name">{{ plan.name }}</div>
+                <div class="fc-name">{{ displayName(plan) }}</div>
                 <div class="fc-meta">
                   <span>{{ mealTypeLabel(plan) }}</span>
                   <span class="rc-meta-dot">·</span>
@@ -359,7 +384,7 @@
                 </div>
                 <div class="fc-foot">
                   <span class="fc-author">👤 {{ plan.authorName || '匿名用户' }}</span>
-                  <span class="fc-usage">🔥 {{ plan.usageCount || 0 }} 人使用</span>
+                  <span class="fc-usage">⭐ {{ plan.favoriteCount || 0 }} 人收藏</span>
                 </div>
               </div>
             </div>
@@ -388,7 +413,7 @@
             </div>
             <div class="rc-body">
               <div class="rc-title-row">
-                <span class="rc-name" :title="plan.name">{{ plan.name }}</span>
+                <span class="rc-name" :title="displayName(plan)">{{ displayName(plan) }}</span>
               </div>
               <div class="rc-meta">
                 <span>{{ mealTypeLabel(plan) }}</span>
@@ -491,20 +516,16 @@
             <span class="form-tip">kcal/天，留空由 AI 根据目标自动估算</span>
           </el-form-item>
           <el-form-item label="忌口食物">
-            <el-select
-              v-model="createForm.dislikes" multiple filterable allow-create default-first-option
-              placeholder="不吃的食物，可选"
-              class="tag-select"
-            >
-            </el-select>
+            <div class="tags-input">
+              <el-tag v-for="(t, i) in createForm.dislikes" :key="t" closable @close="createForm.dislikes.splice(i, 1)">{{ t }}</el-tag>
+              <input v-model="dislikesDraft" class="tag-input" placeholder="直接输入，回车添加" @keydown.enter.prevent="addTag(createForm.dislikes, 'dislikesDraft')" @keydown.backspace="removeLastOnEmpty(createForm.dislikes, 'dislikesDraft')" />
+            </div>
           </el-form-item>
           <el-form-item label="饮食偏好">
-            <el-select
-              v-model="createForm.preferences" multiple filterable allow-create default-first-option
-              placeholder="偏好或过敏原，可选"
-              class="tag-select"
-            >
-            </el-select>
+            <div class="tags-input">
+              <el-tag v-for="(t, i) in createForm.preferences" :key="t" closable @close="createForm.preferences.splice(i, 1)">{{ t }}</el-tag>
+              <input v-model="preferencesDraft" class="tag-input" placeholder="直接输入，回车添加" @keydown.enter.prevent="addTag(createForm.preferences, 'preferencesDraft')" @keydown.backspace="removeLastOnEmpty(createForm.preferences, 'preferencesDraft')" />
+            </div>
           </el-form-item>
         </template>
       </el-form>
@@ -531,8 +552,10 @@
           </div>
         </el-form-item>
         <el-form-item label="展示标签">
-          <el-select v-model="publishForm.tags" multiple filterable allow-create default-first-option
-            placeholder="回车添加，如「经典碳循环」" style="width: 100%" />
+          <div class="tags-input">
+            <el-tag v-for="(t, i) in publishForm.tags" :key="t" closable @close="publishForm.tags.splice(i, 1)">{{ t }}</el-tag>
+            <input v-model="tagDraft" class="tag-input" placeholder="直接输入，回车添加" @keydown.enter.prevent="addTag(publishForm.tags, 'tagDraft')" @keydown.backspace="removeLastOnEmpty(publishForm.tags, 'tagDraft')" />
+          </div>
         </el-form-item>
         <el-form-item label="难度">
           <el-radio-group v-model="publishForm.difficulty">
@@ -622,12 +645,15 @@ const activeTab = ref(route.path === '/meal-plan/square' ? 'square' : 'mine')
 const current = ref({})
 const myRecipes = ref([])
 const favorites = ref([])
+// 我的食谱页两种视图：recipes 我的食谱 / favorites 我的收藏（默认不展示收藏，点按钮才切换）
+const mineView = ref('recipes')
 const mineFilter = ref('all')
 const mineKeyword = ref('')
 const mineMealType = ref(null)
 const mineVisibility = ref(null)
 const mineSort = ref('updated')
 const mineLoading = ref(false)
+const favLoading = ref(false)
 const mineCounts = ref({ publish: {}, status: {} })
 
 const squareList = ref([])
@@ -652,6 +678,22 @@ const createForm = reactive({
   // AI 模式专属字段
   idea: '', dailyCalories: null, dislikes: [], preferences: []
 })
+
+// 标签直接输入（忌口/偏好/展示标签）：输入 + 回车添加，退格删除末尾
+const tagDraft = ref('')
+const dislikesDraft = ref('')
+const preferencesDraft = ref('')
+function addTag(list, draftKey) {
+  const map = { tagDraft, dislikesDraft, preferencesDraft }
+  const val = (map[draftKey]?.value || '').trim()
+  if (val && !list.includes(val)) list.push(val)
+  map[draftKey].value = ''
+}
+function removeLastOnEmpty(list, draftKey) {
+  const map = { tagDraft, dislikesDraft, preferencesDraft }
+  if (!(map[draftKey]?.value || '').trim() && list.length) list.pop()
+}
+
 const publishDialog = ref(false)
 const publishPlan = ref(null)
 const publishForm = reactive({
@@ -709,6 +751,16 @@ function fmt(v) {
   return Number.isInteger(n) ? String(n) : n.toFixed(1)
 }
 
+/**
+ * 食谱名称展示：不展示「AI生成」标识。
+ * 历史数据里 AI 生成的食谱名带了「(AI生成)」后缀，这里统一抹掉，
+ * 让 AI 初稿与手动创建的食谱在页面上完全一视同仁。
+ */
+function displayName(plan) {
+  const raw = plan?.name || ''
+  return raw.replace(/[（(]\s*AI\s*生成\s*[)）]/gi, '').trim() || '未命名食谱'
+}
+
 function coverStyle(plan) {
   if (plan.coverUrl) {
     return { backgroundImage: `url(${plan.coverUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
@@ -749,11 +801,14 @@ function mealTypeLabel(plan) {
 function cardStatusText(plan) {
   if (plan.status === 'active') return '执行中'
   if (plan.status === 'paused') return '已暂停'
+  // 应用来源食谱永不参与发布，不展示「未发布」这类发布状态
+  if (plan.basicEditable === false) return '应用来源'
   const map = { none: '未发布', pending: '审核中', approved: '已发布', rejected: '未通过' }
   return map[plan.publishStatus] || '未发布'
 }
 
 function statusTagClass(plan) {
+  if (plan.basicEditable === false) return 'tag-src'
   const base = 'tag-' + (plan.publishStatus || 'none')
   if (plan.status === 'active' || plan.status === 'paused') return base + ' tag-executing'
   return base
@@ -839,18 +894,28 @@ async function loadMine() {
 }
 
 async function loadFavorites() {
+  favLoading.value = true
   try {
     favorites.value = (await api.get('/meal-plan/favorites')) || []
   } catch (e) {
     favorites.value = []
+  } finally {
+    favLoading.value = false
   }
+}
+
+/** 切换「我的食谱 / 我的收藏」视图；进收藏时顺手刷新一次 */
+function toggleFavView() {
+  mineView.value = mineView.value === 'favorites' ? 'recipes' : 'favorites'
+  if (mineView.value === 'favorites') loadFavorites()
 }
 
 async function loadHotRecipes() {
   hotLoading.value = true
   try {
-    const res = await api.get('/meal-plan/square', { params: { sort: 'hot', page: 0, size: 5 } })
-    hotList.value = (res?.content || []).slice(0, 5)
+    // 热门板块：按收藏人数倒序，后端只返回 Top10
+    const res = await api.get('/meal-plan/square', { params: { sort: 'hot', page: 0, size: 10 } })
+    hotList.value = (res?.content || []).slice(0, 10)
   } catch (e) {
     hotList.value = []
   } finally {
@@ -997,9 +1062,10 @@ async function onCopyFromSquare() {
   if (!sheetPlanId.value) return
   try {
     await api.post(`/meal-plan/square/${sheetPlanId.value}/copy`)
-    ElMessage.success('已保存到「我的食谱」')
+    ElMessage.success('已应用到「我的食谱」，可在其中调整食材')
     sheetVisible.value = false
     activeTab.value = 'mine'
+    mineView.value = 'recipes'
     await Promise.all([loadMine(), loadSquare(true)])
   } catch (e) {}
 }
@@ -1042,6 +1108,43 @@ function openPublish(plan) {
   publishForm.summary = plan.summary || ''
   publishForm.description = plan.description || ''
   publishDialog.value = true
+  // 「预期减重」为空时按热量缺口自动估算（7700 kcal ≈ 1kg 脂肪）
+  if (!publishForm.expectedLoss) {
+    estimateExpectedLoss(plan).then(v => {
+      if (v && !publishForm.expectedLoss) publishForm.expectedLoss = v
+    })
+  }
+}
+
+/**
+ * 按每日热量缺口估算周期内体重变化：
+ * TDEE(Mifflin-St Jeor) − 计划每日摄入 = 每日缺口；
+ * 体重变化 = 缺口 × 天数 ÷ 7700，展示 ±20% 的区间。
+ * 档案数据缺失时返回空，不阻塞手填。
+ */
+async function estimateExpectedLoss(plan) {
+  const daily = Number(plan?.plannedDailyCalories || 0)
+  if (!daily) return ''
+  try {
+    const p = await api.get('/user/profile')
+    if (!p?.height || !p?.weight) return ''
+    const age = p.birthDate
+      ? Math.max(10, Math.floor((Date.now() - new Date(p.birthDate)) / 31557600000))
+      : 22
+    const isFemale = String(p.gender || '').toLowerCase().startsWith('f')
+    const bmr = isFemale
+      ? 10 * p.weight + 6.25 * p.height - 5 * age - 161
+      : 10 * p.weight + 6.25 * p.height - 5 * age + 5
+    const factors = { 1: 1.2, 2: 1.375, 3: 1.55, 4: 1.725, 5: 1.9 }
+    const tdee = bmr * (factors[Number(p.activityLevel)] || 1.4)
+    const gap = tdee - daily                      // 正 = 缺口 → 减重
+    const kg = Math.abs(gap) * (plan.days || 7) / 7700
+    if (kg < 0.05) return '≈ 维持体重'
+    const sign = gap > 0 ? '-' : '+'
+    return `${sign}${(kg * 0.8).toFixed(1)}~${sign}${(kg * 1.2).toFixed(1)} kg`
+  } catch (e) {
+    return ''
+  }
 }
 
 function onPlanCommand(cmd, plan) {
@@ -1084,7 +1187,7 @@ async function submitPublish() {
 watch(activeTab, (tab) => {
   router.replace(tab === 'square' ? '/meal-plan/square' : '/meal-plan')
   if (tab === 'square') loadSquare(true)
-  else loadMine()
+  else { mineView.value = 'recipes'; loadMine() }
 })
 
 watch(() => route.path, (path) => {
@@ -1122,6 +1225,19 @@ onMounted(() => {
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
 .page-title { margin: 0; font-size: 22px; font-weight: 700; color: #1f2d3a; }
 .page-sub { margin: 6px 0 0; font-size: 13px; color: #8b98a5; line-height: 1.5; }
+.page-head-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+.btn-fav-view {
+  border-radius: 10px; font-size: 14px; padding: 12px 20px;
+  background: #fff; border: 1px solid #e3e8ee; color: #5b6b7a; font-weight: 600;
+}
+.btn-fav-view:hover { border-color: #f0a04b; color: #e08a2b; }
+.btn-fav-view.is-on {
+  background: #fff6e9; border-color: #f0a04b; color: #e08a2b;
+}
+.fav-count {
+  font-style: normal; margin-left: 6px; padding: 1px 8px; border-radius: 10px;
+  background: #f0a04b; color: #fff; font-size: 12px; font-weight: 700;
+}
 .btn-create {
   background: #2b7de9 !important; border-color: #2b7de9 !important;
   font-weight: 600; padding: 12px 24px; font-size: 14px; border-radius: 10px;
@@ -1129,6 +1245,14 @@ onMounted(() => {
 .btn-create:hover { background: #1a6dd4 !important; }
 .btn-create-icon { font-size: 16px; margin-right: 2px; }
 .btn-share { border-radius: 10px; font-size: 13px; padding: 10px 18px; }
+
+/* ====== 我的收藏视图 ====== */
+.fav-view-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 20px 0 16px; padding-bottom: 14px; border-bottom: 1px solid #f0f2f5;
+}
+.fav-view-title { font-size: 16px; font-weight: 700; color: #1f2d3a; }
+.fav-view-sub { font-size: 13px; color: #8b98a5; }
 
 /* ====== 热门推荐侧边栏 ====== */
 .sidebar-card {
@@ -1140,7 +1264,10 @@ onMounted(() => {
   margin-bottom: 16px;
 }
 .sidebar-title { font-size: 16px; font-weight: 700; color: #1f2d3a; }
-.sidebar-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.sidebar-list {
+  display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;
+  max-height: 380px; overflow-y: auto; /* 热门榜单 Top10，超高滚动 */
+}
 .hot-item {
   display: flex; align-items: center; gap: 10px;
   padding: 8px; border-radius: 10px; cursor: pointer;
@@ -1286,6 +1413,7 @@ onMounted(() => {
   backdrop-filter: blur(4px);
 }
 .rc-vis-badge.pub { color: #2b7de9; background: rgba(232,241,253,.9); }
+.rc-vis-badge.src { color: #e08a2b; background: rgba(255,246,233,.95); }
 
 /* 卡片内容 */
 .rc-body { padding: 14px 16px 16px; display: flex; flex-direction: column; flex: 1; }
@@ -1300,9 +1428,18 @@ onMounted(() => {
 .tag-approved { background: #e8f1fd; color: #2b7de9; }
 .tag-rejected { background: #fdeceb; color: #e06055; }
 .tag-executing { background: #e6f6ec !important; color: #3fae74 !important; }
+.tag-src { background: #fff1de; color: #e08a2b; }
 
 .rc-meta { margin-top: 8px; font-size: 12px; color: #8b98a5; display: flex; align-items: center; gap: 4px; }
 .rc-meta-dot { color: #c8cdd4; }
+
+/* 应用来源提示：他人作品，仅可调整食材 */
+.rc-origin {
+  margin-top: 8px; font-size: 12px; color: #e08a2b;
+  background: #fff8ee; border: 1px dashed #f6d9ab; border-radius: 8px;
+  padding: 5px 10px; line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .rc-nutrition { margin-top: 10px; display: flex; align-items: baseline; flex-wrap: wrap; }
 .rn-kcal { font-size: 18px; font-weight: 700; color: #1f2d3a; }
@@ -1481,10 +1618,17 @@ html.dark .day-progress.done { background: #203028; border-color: #2e4637; }
 html.dark .dp-meal { background: #232b34; }
 html.dark .exec-summary-item { background: #202730; }
 html.dark .tag-none { background: #232b34; color: #9aabba; }
+html.dark .tag-src { background: #2a2418; color: #e0a75b; }
 html.dark .publish-note { background: #202730; }
 html.dark .cover-preview { background: #232b34; }
 html.dark .rc-vis-badge { background: rgba(27,33,41,.85); color: #8ea0b0; }
 html.dark .rc-vis-badge.pub { background: rgba(29,51,77,.9); color: #5b9bd5; }
+html.dark .rc-vis-badge.src { background: rgba(64,45,20,.9); color: #e0a75b; }
+html.dark .rc-origin { background: #2a2418; border-color: #4a3b22; color: #e0a75b; }
+html.dark .fav-view-head { border-bottom-color: #2a333d; }
+html.dark .fav-view-title { color: #d8e2ea; }
+html.dark .btn-fav-view { background: #1b2129; border-color: #333e49; color: #c8d6e5; }
+html.dark .btn-fav-view.is-on { background: #2a2418; border-color: #b8802f; color: #e0a75b; }
 html.dark .sidebar-card { background: #1b2129; border-color: #2a333d; }
 html.dark .sidebar-title { color: #d8e2ea; }
 html.dark .hot-item:hover { background: #232b34; }
@@ -1511,6 +1655,21 @@ html.dark .sidebar-deco { background: linear-gradient(180deg, transparent, #1a28
 }
 .form-tip { margin-left: 10px; font-size: 12px; color: #c0c4cc; }
 .tag-select { width: 100%; }
+/* 标签直接输入框：回车添加，退格删除 */
+.tags-input {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  width: 100%; min-height: 32px; padding: 4px 10px;
+  border: 1px solid #dcdfe6; border-radius: 6px; background: #fff;
+  transition: border-color .2s;
+}
+.tags-input:focus-within { border-color: #3292f3; }
+.tag-input {
+  flex: 1; min-width: 140px; border: none; outline: none;
+  font-size: 13px; color: #244b6b; background: transparent;
+}
+.tag-input::placeholder { color: #a8abb2; }
+html.dark .tags-input { background: #1a1a2e; border-color: #3a3a55; }
+html.dark .tag-input { color: #e0e6f0; }
 html.dark .create-mode-tabs { border-bottom-color: #333e49; }
 html.dark .mode-tab { color: #6b7a8a; }
 html.dark .mode-tab:hover { color: #5b9bd5; }
