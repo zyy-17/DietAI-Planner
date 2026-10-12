@@ -1,1023 +1,320 @@
-# 🍽️ DietAI-Planner — AI 个性化膳食规划与饮食健康管理系统
+# DietAI-Planner
 
-<p align="center">
-  <b>基于 Spring Boot + Vue 3 + FastAPI 的全栈智能饮食管理平台</b><br/>
-  科学饮食 · 精准营养 · AI 赋能
-</p>
+> 基于 AI 的智能饮食规划与营养管理系统
 
----
-
-## 📖 目录
-
-- [项目简介](#-项目简介)
-- [项目背景](#-项目背景)
-- [技术栈](#-技术栈)
-- [功能模块](#-功能模块)
-- [项目结构](#-项目结构)
-- [数据库设计](#-数据库设计)
-- [前端设计](#-前端设计)
-- [后端 API 接口](#-后端-api-接口)
-- [AI 服务详解](#-ai-服务详解)
-- [快速开始](#-快速开始)
-- [默认账号](#-默认账号)
-- [项目截图](#-项目截图)
+DietAI-Planner 是一个全栈智能饮食管理平台，支持用户记录每日饮食、生成 AI 膳食方案、管理个人食谱、浏览食谱广场，并通过体重追踪和营养分析辅助健康管理。
 
 ---
 
-## 📝 项目简介
+## 技术栈
 
-DietAI-Planner 是一个面向个人用户的 **AI 驱动饮食健康管理平台**，帮助用户：
-
-- 📊 **记录每日饮食**：早餐 / 午餐 / 晚餐 / 加餐，支持一次添加多种食物
-- 🎯 **自定义营养目标**：热量、蛋白质、碳水、脂肪四项目标自由设定，修改即时同步
-- 🤖 **AI 膳食建议**：支持 **云端大模型 API**（豆包/DeepSeek/通义/Kimi 等，填个 key 就能用）与 **本机 Ollama** 双后端，结合用户画像生成个性化建议，4种套餐方案一键切换
-- 📈 **营养分析**：今日营养、趋势图、营养素分析、热量分析、目标完成度、营养报告，六大维度差异化展示
-- 🧬 **智能营养评估**：BMI/BMR/TDEE自动计算 + 营养评分 + 状态判定 + 改进建议
-- 🍱 **食物库管理**：内置 30+ 常见食物，支持搜索、分类、用户添加，点击食物直接添加到今日饮食
-- 👤 **个人中心**：身体数据、饮食偏好、忌口设置、活动水平
-- ⚙️ **系统设置**：通知提醒、界面主题、隐私控制、密码修改
-- 🛡️ **管理后台**：用户管理、食物审核、分类管理、AI 日志监控
-
----
-
-## 🌍 项目背景
-
-随着健康意识提升，越来越多人关注日常饮食的营养搭配。传统饮食记录 App 存在以下痛点：
-
-| 痛点 | 本项目解决方案 |
-|------|---------------|
-| 手动查食物营养太麻烦 | 内置食物库 + 搜索，一键添加到今日饮食 |
-| 不知道该吃什么 | AI 根据用户画像 + 剩余目标推荐，4种套餐方案换一换 |
-| 目标设置不灵活 | 四大营养素目标可自由调整，修改即时同步到所有页面 |
-| 记录效率低 | 支持一次选择多种食物批量添加 |
-| 缺乏长期趋势分析 | 六大维度营养分析 + 智能评估 + 综合报告 |
-| 各分析页面千篇一律 | 营养素分析/热量分析/目标完成度/营养报告各自独立后端接口+差异化展示 |
-
----
-
-## 🛠️ 技术栈
-
-### 后端
-
-| 技术 | 版本 | 说明 |
+| 层级 | 技术 | 版本 |
 |------|------|------|
-| Java | 25 | 编程语言 |
-| Spring Boot | 4.1.1 | 应用框架 |
-| Spring Security | — | 认证授权 |
-| Spring Data JPA | — | ORM 持久层 |
-| MySQL | 8.0 | 关系型数据库 |
-| JWT (jjwt) | 0.12.6 | 无状态认证令牌 |
-| Lombok | — | 减少样板代码 |
-| BCrypt | — | 密码加密 |
-
-### 前端
-
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Vue | 3.5.x | 渐进式前端框架 |
-| Vue Router | 4.4.x | 路由管理 |
-| Pinia | 2.2.x | 状态管理 |
-| Element Plus | 2.8.x | UI 组件库 |
-| ECharts | 5.5.x | 数据可视化 |
-| Axios | 1.7.x | HTTP 客户端 |
-| Day.js | 1.11.x | 日期处理 |
-| Vite | 5.4.x | 构建工具 |
-
-### AI 服务
-
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Python | 3.10+ | 编程语言 |
-| FastAPI | 0.115.0 | 高性能 Web 框架 |
-| Uvicorn | 0.30.6 | ASGI 服务器 |
-| Pydantic | 2.9.2 | 数据校验 |
-| HTTPX | 0.28+ | 调用云端大模型 API（OpenAI 兼容） |
-| 云端 API | — | **默认推荐**，任选一家 OpenAI 兼容接口（豆包/DeepSeek/通义/Kimi） |
-| Ollama | — | 可选后端，本地大模型推理（默认 qwen2.5:3b） |
+| 后端框架 | Spring Boot | 4.1.1 |
+| 安全认证 | Spring Security | - |
+| 数据持久层 | JPA (Hibernate) | - |
+| 数据库 | MySQL | 8.0 |
+| 前端框架 | Vue 3 + Composition API | - |
+| UI 组件库 | Element Plus | - |
+| 构建工具 | Vite | - |
+| AI 服务 | Python FastAPI | 5.1.0 |
+| AI 模型 | 阿里云通义千问 | DashScope |
 
 ---
 
-## 🧩 功能模块
+## 功能模块
 
-### 用户端
+### 1. 用户系统
+- 注册/登录（用户名 + 明文密码登录，开发调试模式）
+- 健康档案管理（身高、体重、体脂率、过敏食物、疾病、用药等）
+- 角色权限：普通用户 `user` 与管理员 `admin`
+- 逻辑删除（`deleted` 标记，数据不物理删除）
 
-```
-🏠 今日饮食
-   ├─ 🏠 今日概览        每日摄入总览、目标进度、快速记录
-   ├─ 🍳 早餐            按餐次记录食物（支持多选批量添加）
-   ├─ 🥗 午餐
-   ├─ 🍗 晚餐
-   ├─ 🍎 加餐
-   └─ 🤖 AI今日建议      4种套餐方案换一换 + 结构化膳食方案(AI)
+### 2. 饮食记录
+- 按餐次（早餐/午餐/晚餐/加餐）记录每日饮食
+- 支持从**公共食物库**和**用户自定义食物库**选择食物
+- 每次记录保存营养快照（热量、蛋白质、碳水、脂肪）
+- 按日期查看饮食汇总
 
-📋 饮食记录
-   ├─ 📅 历史记录        按日期范围浏览饮食记录
-   ├─ 📆 周记录          近7天记录汇总 + 统计摘要
-   ├─ 🗓️ 月记录          近30天记录汇总 + 统计摘要
-   ├─ 🔍 条件查询        按餐次/食物名/日期范围筛选排序
-   └─ 📊 饮食统计        每日热量趋势图 + 三大营养素占比饼图 + 达标天数
-
-📊 营养分析
-   ├─ 📊 今日营养        四大营养素摄入详情 + 智能营养评估
-   ├─ 📈 营养趋势        近7天/30天热量趋势 + 营养素占比 + AI解读
-   ├─ 🥩 营养素分析      每日营养素三线趋势图 + 供能占比饼图 + 日均vs目标 + 建议
-   ├─ 🔥 热量分析        每日热量柱状图vs目标线 + 时段分布饼图 + 达标率 + 偏差
-   ├─ 🎯 目标完成度      四项环形进度条 + 综合完成度 + 改进建议
-   └─ 📄 营养报告        综合评分 + 各项评价 + 关键发现 + 改善建议 + 供能比例
-
-🤖 AI饮食助手（页面自带三栏，不显示外层左侧导航）
-   ├─ 第一栏 会话列表     新建对话 + 历史会话（标题由 AI 自动概括，如「晚餐推荐」）
-   ├─ 第二栏 对话区       首次进入自动欢迎语 + 4 个引导问题；底部常驻快捷操作
-   │                      🍱 推荐晚餐 / 📊 分析今日饮食 / 🔄 替换食物 / 🥗 推荐健康食物
-   └─ 第三栏 今日营养数据 热量 / 蛋白质 / 碳水 / 脂肪 进度条 + 今日目标
-
-   每次提问都会自动携带当前登录用户的数据（无需用户手动提供）：
-   · 健康档案（性别/年龄/身高/体重/活动水平）+ 饮食目标（减脂/维持/增肌）+ 饮食偏好
-   · 每日营养目标（热量 + 三大营养素）
-   · 今日已摄入与「还差多少」
-   · 今日饮食明细（按早/午/晚/加餐列出食物名、克重、热量）
-   · 近 7 天逐日饮食明细（每天合计 + 各餐食物）与趋势（日均热量/三大营养素）
-   · 算法评分 Top5 候选食物
-
-🍱 食物库（侧边栏辅助）
-   ├─ 🍎 全部食物        浏览所有食物，点击可添加到今日饮食
-   ├─ 🔍 食物搜索        按名称搜索
-   ├─ 🥩 食物分类        按分类浏览
-   └─ ➕ 添加食物        用户添加新食物（直接可用）
-
-👤 个人中心（侧边栏辅助）
-   ├─ 👤 基本资料        姓名/性别/生日
-   ├─ 📏 身体数据        身高/体重
-   ├─ 🎯 饮食目标        减脂/维持/增肌
-   ├─ 🥗 饮食偏好        清淡/素食/低糖等
-   ├─ 🚫 忌口设置
-   ├─ 🏃 活动水平        久坐~重度运动5级
-   └─ ❤️ 健康信息
-
-⚙️ 系统设置（侧边栏辅助）
-   ├─ 🔔 通知设置        饮食提醒/提醒时间/目标提醒/AI推送
-   ├─ 🎨 界面设置        主题(浅色/深色/跟随系统)/语言/侧边栏(展开/收起)
-   ├─ 🔐 隐私设置        数据共享/记录公开
-   └─ 🔑 修改密码        校验旧密码+新密码确认
-```
-
-### 管理端
+### 3. 食物数据（三层架构）
 
 ```
-🛡️ 后台管理
-   ├─ 👥 用户管理        列表/禁用/删除
-   ├─ 🍱 食物管理        列表/编辑/审核/删除
-   ├─ 📂 分类管理        增删改分类
-   └─ 🤖 AI日志          生成记录/异常标记
+┌─────────────────────────────────────────────┐
+│  第一层：公共基础食材库 (food, food_type=ingredient) │
+│  系统内置 47 种常见食材，按分类树形组织            │
+│  支持用户提交新食材，管理员审核后入库              │
+├─────────────────────────────────────────────┤
+│  第二层：成品菜肴库 (food, food_type=dish)        │
+│  系统内置 24 种常见成品菜（行业平均估算值，仅供参考）│
+│  支持按"个/份/盒/杯"等计量单位记录                │
+├─────────────────────────────────────────────┤
+│  第三层：用户自定义食物 (user_custom_food)        │
+│  与公共食物库物理隔离，仅创建者可见                │
+│  支持自定义组合食谱（is_recipe=1，多食材累加营养） │
+└─────────────────────────────────────────────┘
 ```
+
+### 4. 计量单位支持
+- 食物可配置常用计量单位（`unit_name`：个/份/盒/杯等）
+- 配置单位克重（`unit_weight`），自动换算营养值
+- 兼容按克数记录 + 按个数/份数记录两种方式
+
+### 5. 食谱模块
+
+#### 5.1 我的食谱
+- AI 一键生成膳食方案（指定目标、周期、偏好、忌口）
+- 手动创建和编辑食谱
+- 按天组织饮食（D1 早餐/午餐/晚餐、D2 早餐...）
+- 每条食谱项包含营养快照，保证历史食谱数据稳定
+
+#### 5.2 食谱执行
+- 食谱状态流转：`idle` → `active` → `paused` → `archived`
+- 支持暂停/恢复执行（记录 `paused_at_day`，恢复时从该天继续）
+- 软删除（`deleted` 标记，保留数据）
+
+#### 5.3 食谱广场
+- 用户可将食谱发布到公共广场
+- 发布审核：`pending` 待审 → `approved` 已上架 / `rejected` 已拒绝
+- 支持食谱封面图、标签、难度、预计减重效果、说明心得
+- **来源溯源**：每条食谱标记 `origin`（`original` 原创 / `copied` 应用自他人）
+- 应用他人食谱时自动记录来源作者信息，**禁止二次发布**（版权保护）
+
+#### 5.4 收藏与热门
+- 食谱收藏（`meal_plan_favorite` 表，用户-食谱 M:N 关联）
+- 热门 Top10 排行（基于 `favorite_count` 降序）
+- 被保存/应用次数统计（`usage_count`）
+
+### 6. AI 对话助手
+- 多轮对话，上下文感知（携带用户健康档案快照）
+- AI 生成记录归档（`ai_generation_log`，含模型、Token 消耗、异常标记）
+- 支持三种场景：闲聊对话、膳食方案生成、营养分析
+
+### 7. 健康追踪
+- 每日体重记录（`weight_record`，每人每天唯一一条）
+- 体脂率跟踪
+- 目标体重/体脂率/达成日期设定
+- 自定义三大营养素目标
+
+### 8. 系统配置
+- **营养标准配置**（`nutrition_standard`）：按性别 + 年龄段提供推荐每日摄入量
+- **可配置字典选项**（`profile_option`）：活动水平、疾病选项等下拉列表的动态配置
 
 ---
 
-## 📁 项目结构
+## 项目结构
 
 ```
 DietAI-Planner/
-│
-├── src/main/java/com/zyyqq/          # ☕ Spring Boot 后端
-│   ├── entity/                        # JPA 实体类（8 张表）
-│   │   ├── User.java                  # 用户
-│   │   ├── Food.java                  # 食物
-│   │   ├── FoodCategory.java          # 食物分类
-│   │   ├── DietRecord.java            # 饮食记录
-│   │   ├── AiChatSession.java         # AI 会话
-│   │   ├── AiChatMessage.java         # AI 消息
-│   │   ├── AiGenerationLog.java       # AI 生成日志
-│   │   └── NutritionStandard.java     # 营养标准配置
-│   ├── repository/                    # 数据访问层
-│   ├── service/                       # 业务逻辑层
-│   │   ├── UserService.java           # 用户服务（BMR/TDEE/目标计算）
-│   │   ├── DietRecordService.java     # 饮食记录服务
-│   │   ├── FoodService.java           # 食物服务（用户添加直接可用）
-│   │   ├── NutritionAnalysisService.java # 营养分析服务（6个专用分析方法）
-│   │   └── AiChatService.java         # AI 对话服务
-│   ├── controller/                    # API 控制器
-│   │   ├── AuthController.java        # 认证（注册/登录）
-│   │   ├── UserController.java        # 用户（资料/设置/密码）
-│   │   ├── TodayDietController.java   # 今日饮食
-│   │   ├── FoodController.java        # 食物
-│   │   ├── FoodCategoryController.java# 分类
-│   │   ├── AiChatController.java      # AI 对话
-│   │   ├── NutritionAnalysisController.java # 营养分析
-│   │   └── admin/                     # 管理员控制器
-│   ├── dto/
-│   │   ├── request/                   # 请求 DTO
-│   │   └── response/                  # 响应 DTO
-│   │       ├── NutrientDetailResponse.java  # 营养素分析响应
-│   │       ├── CalorieDetailResponse.java  # 热量分析响应
-│   │       ├── GoalCompletionResponse.java # 目标完成度响应
-│   │       └── NutritionReportResponse.java # 营养报告响应
-│   ├── config/                        # 配置类（CORS/MVC）
-│   ├── security/                      # JWT 安全组件
-│   └── exception/                     # 全局异常处理
-│
-├── frontend/                          # 🖥️ Vue 3 前端
+├── ai-service/                  # Python AI 服务
+│   ├── main.py                  # FastAPI 主入口 (v5.1.0)
+│   ├── env.py                   # 环境变量与 API 密钥
+│   ├── .venv/                   # Python 3.13 虚拟环境
+│   └── utils/
+│       └── dashscope_client.py  # 通义千问 API 封装
+├── frontend/                    # Vue 3 前端
 │   └── src/
-│       ├── views/                     # 页面组件
-│       │   ├── Login.vue              # 登录页
-│       │   ├── TodayDiet.vue          # 今日概览
-│       │   ├── MealDetail.vue         # 餐次详情（早/午/晚/加餐）
-│       │   ├── DietRecords.vue        # 饮食记录
-│       │   ├── DietStats.vue          # 饮食统计
-│       │   ├── NutritionAnalysis.vue  # 营养分析
-│       │   ├── AiChat.vue             # AI 对话
-│       │   ├── AiChatHistory.vue      # 历史对话
-│       │   ├── AiSuggest.vue          # AI 今日建议
-│       │   ├── FoodLibrary.vue        # 食物库
-│       │   ├── Profile.vue            # 个人中心
-│       │   ├── Settings.vue           # 系统设置
-│       │   └── admin/                 # 管理员页面
-│       ├── layouts/
-│       │   └── MainLayout.vue         # 主布局（顶栏+侧栏+内容区）
-│       ├── router/
-│       │   └── index.js               # 路由配置
-│       ├── stores/
-│       │   └── user.js                # 用户状态（Pinia）
-│       └── utils/
-│           └── api.js                 # Axios 封装
-│
-├── ai-service/                        # 🐍 Python AI 服务
-│   ├── main.py                        # FastAPI 主程序
-│   └── requirements.txt               # Python 依赖
-│
-└── src/main/resources/
-    ├── application.yml                # 后端配置
-    └── db/
-        └── init.sql                   # 数据库初始化脚本
+│       ├── views/               # 页面组件
+│       │   ├── MealPlan.vue     # 食谱页面（已完整重写）
+│       │   ├── DietRecord.vue   # 饮食记录页面
+│       │   ├── FoodDatabase.vue # 食物数据库页面
+│       │   ├── UserProfile.vue  # 用户档案页面
+│       │   └── ...
+│       ├── api/                 # API 请求层
+│       └── router/              # 前端路由
+├── src/main/java/com/zyyqq/    # Spring Boot 后端
+│   ├── controller/              # REST API 控制器
+│   ├── service/                 # 业务逻辑
+│   ├── entity/                  # JPA 实体
+│   ├── repository/              # 数据仓库
+│   └── config/
+│       └── SecurityConfig.java  # 安全配置（明文密码模式）
+├── src/main/resources/
+│   ├── db/
+│   │   └── init.sql             # 数据库初始化脚本（单文件，全部 16 张表）
+│   └── application.yml          # 应用配置
+└── pom.xml                      # Maven 配置
 ```
 
 ---
 
-## 🗄️ 数据库设计
+## 数据库设计
 
-### 数据库：`diet_ai_planner`（MySQL 8.0，utf8mb4）
+### 表概览（共 16 张表）
 
-### 表结构总览
+| # | 表名 | 说明 | 所属模块 |
+|---|------|------|----------|
+| 1 | `user` | 用户账号、健康档案、饮食目标、UI 偏好 | 用户系统 |
+| 2 | `food_category` | 食品分类（树形结构，11 个一级分类） | 食物数据 |
+| 3 | `food` | 公共食物库（基础食材 + 成品菜肴） | 食物数据 |
+| 4 | `user_custom_food` | 用户自定义食物（物理隔离，仅创建者可见） | 食物数据 |
+| 5 | `user_custom_food_item` | 自定义组合食谱的食材组成明细 | 食物数据 |
+| 6 | `diet_record` | 每日饮食记录（含营养快照） | 饮食记录 |
+| 7 | `meal_plan` | 食谱主表（方案、执行状态、发布状态、来源溯源） | 食谱模块 |
+| 8 | `meal_plan_item` | 食谱明细（每天每餐具体食物及用量快照） | 食谱模块 |
+| 9 | `meal_plan_review` | 食谱审核记录（管理员审核历史） | 食谱模块 |
+| 10 | `meal_plan_favorite` | 食谱收藏（用户-食谱 M:N 关联） | 食谱模块 |
+| 11 | `weight_record` | 体重/体脂率每日记录 | 健康追踪 |
+| 12 | `ai_chat_session` | AI 对话会话 | AI 对话 |
+| 13 | `ai_chat_message` | AI 对话消息 | AI 对话 |
+| 14 | `ai_generation_log` | AI 生成记录（模型、Token、异常标记） | AI 对话 |
+| 15 | `nutrition_standard` | 营养标准配置（按性别+年龄段） | 系统配置 |
+| 16 | `profile_option` | 可配置字典选项（活动水平、疾病等） | 系统配置 |
 
-| # | 表名 | 说明 | 核心字段 |
-|---|------|------|---------|
-| 1 | `user` | 用户表 | id, username, email, password_hash, 身体数据, 饮食目标, 设置项 |
-| 2 | `food_category` | 食物分类表 | id, name, parent_id, sort_order |
-| 3 | `food` | 食物表 | id, name, category_id, calories, protein, carbohydrate, fat, fiber |
-| 4 | `diet_record` | 饮食记录表 | id, user_id, food_id, meal_type, amount, record_date |
-| 5 | `ai_chat_session` | AI 会话表 | id, user_id, title |
-| 6 | `ai_chat_message` | AI 消息表 | id, session_id, user_id, role, content |
-| 7 | `ai_generation_log` | AI 生成日志表 | id, user_id, type, model_name, tokens_used |
-| 8 | `nutrition_standard` | 营养标准表 | id, gender, age_min, age_max, calories_kcal |
+### 关键设计原则
 
-### ER 关系图
-
-```
-┌──────────┐       ┌──────────────┐       ┌──────────┐
-│   user   │1─────N│ diet_record  │N─────1│   food   │
-│          │       │              │       │          │
-│ id (PK)  │       │ user_id (FK) │       │ id (PK)  │
-│ username │       │ food_id (FK) │       │ name     │
-│ email    │       │ meal_type    │       │ calories │
-│ ...      │       │ amount       │       │ protein  │
-│ settings │       │ record_date  │       │ ...      │
-└──────────┘       └──────────────┘       └──────────┘
-     │                                          │
-     │1                                         │N
-     │                                          │
-     N                                          1
-┌──────────────┐                        ┌──────────────┐
-│ai_chat_session│                       │food_category │
-│              │                        │              │
-│ id (PK)      │                        │ id (PK)      │
-│ user_id (FK) │                        │ name         │
-│ title        │                        │ parent_id    │
-└──────────────┘                        └──────────────┘
-     │1
-     │
-     N
-┌──────────────┐       ┌──────────────────┐       ┌──────────────────┐
-│ai_chat_message│       │ai_generation_log │       │nutrition_standard│
-│              │       │                  │       │                  │
-│ id (PK)      │       │ id (PK)          │       │ id (PK)          │
-│ session_id   │       │ user_id (FK)     │       │ gender           │
-│ role         │       │ type             │       │ age_min/max      │
-│ content      │       │ model_name       │       │ calories_kcal    │
-└──────────────┘       └──────────────────┘       └──────────────────┘
-```
-
-### 核心关系说明
-
-- **user → diet_record**：一对多，一个用户有多条饮食记录
-- **food → diet_record**：一对多，一个食物可出现在多条记录中
-- **food_category → food**：一对多，一个分类下有多个食物
-- **user → ai_chat_session**：一对多，一个用户有多个 AI 会话
-- **ai_chat_session → ai_chat_message**：一对多，一个会话包含多条消息
-- **user → ai_generation_log**：一对多，一个用户有多条 AI 生成记录
-- **nutrition_standard**：独立配置表，按性别+年龄段提供推荐摄入量
-
-### user 表详细字段
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | BIGINT PK | 自增主键 |
-| username | VARCHAR(50) UK | 用户名 |
-| email | VARCHAR(100) UK | 邮箱 |
-| password_hash | VARCHAR(100) | BCrypt 加密密码 |
-| real_name | VARCHAR(50) | 真实姓名 |
-| gender | TINYINT | 0未知/1男/2女 |
-| birth_date | DATE | 出生日期 |
-| height | DECIMAL(5,1) | 身高 cm |
-| weight | DECIMAL(5,1) | 体重 kg |
-| activity_level | TINYINT | 活动水平 1-5 |
-| diet_goal | VARCHAR(20) | lose/maintain/gain |
-| diet_preference | VARCHAR(200) | 饮食偏好 |
-| target_calories | DECIMAL(7,2) | 自定义热量目标 kcal |
-| target_protein | DECIMAL(7,2) | 自定义蛋白质目标 g |
-| target_carbohydrate | DECIMAL(7,2) | 自定义碳水目标 g |
-| target_fat | DECIMAL(7,2) | 自定义脂肪目标 g |
-| diet_reminder | TINYINT(1) | 饮食提醒开关 |
-| reminder_time | VARCHAR(5) | 提醒时间 HH:mm |
-| goal_reminder | TINYINT(1) | 目标提醒开关 |
-| ai_suggestion | TINYINT(1) | AI 建议推送开关 |
-| theme | VARCHAR(10) | 主题 light/dark/auto |
-| language | VARCHAR(10) | 语言 |
-| collapsed_sidebar | TINYINT(1) | 侧边栏收起 |
-| data_sharing | TINYINT(1) | 数据共享开关 |
-| public_records | TINYINT(1) | 饮食记录公开开关 |
-| avatar_url | VARCHAR(255) | 头像 URL |
-| role | VARCHAR(20) | 角色 user/admin |
-| status | TINYINT | 1正常/0禁用 |
-| created_at | DATETIME | 注册时间 |
-| updated_at | DATETIME | 更新时间 |
-| deleted | TINYINT | 逻辑删除 0/1 |
+1. **物理隔离**：用户自定义食物与公共食物库分表存储，互不干扰
+2. **营养快照**：`diet_record`、`meal_plan_item`、`user_custom_food_item` 均存储营养快照值，保证历史数据不受食物表后续变更影响
+3. **逻辑删除**：`user.deleted`、`meal_plan.deleted` 采用软删除标记，保留数据
+4. **来源溯源**：`meal_plan.origin` + `source_plan_id` + `source_author_id` 形成完整版权溯源链，禁止对 `copied` 食谱二次发布
+5. **审计字段**：所有核心表均包含 `created_at` / `updated_at` 时间戳
 
 ---
 
-## 🎨 前端设计
+## API 接口
 
-### 导航架构：一级导航 + 二级导航
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  顶部导航栏：🏠今日饮食  📋饮食记录  📊营养分析  🤖AI饮食助手  │
-├──────────┬──────────────────────────────────────────────┤
-│ 左侧边栏  │  主内容区                                     │
-│          │                                              │
-│ 二级菜单  │  ┌──────────────────────────────────────┐   │
-│ (动态)   │  │ 标签页导航（二级功能切换）              │   │
-│          │  ├──────────────────────────────────────┤   │
-│ ──────── │  │                                      │   │
-│ 🍱食物库  │  │  页面内容                             │   │
-│ 👤个人中心│  │                                      │   │
-│ ⚙️系统设置│  └──────────────────────────────────────┘   │
-└──────────┴──────────────────────────────────────────────┘
-```
-
-- **顶部导航**：4 个核心一级模块，始终可见
-- **左侧二级菜单**：根据当前一级模块动态切换
-- **侧边栏辅助区域**：食物库 / 个人中心 / 系统设置固定在底部，不随一级模块变化
-- **主区域标签页**：辅助模块的子功能通过顶部标签页切换，无需展开折叠
-
-### 技术要点
-
-| 方面 | 实现 |
-|------|------|
-| 路由 | Vue Router 4，嵌套路由 + meta 参数实现同组件多模式 |
-| 状态管理 | Pinia，存储用户登录态和 token |
-| HTTP 请求 | Axios 封装，自动携带 JWT，统一错误处理 |
-| 代理 | Vite devServer proxy，`/api` → `localhost:8080`，`/ai-api` → `localhost:8000` |
-| 组件库 | Element Plus，按需自动导入 |
-| 图表 | ECharts 5，营养趋势图、目标完成度环形图、时段分布饼图 |
-| 图表切换 | 路由切换时 dispose 旧实例 + 重新 init，解决 v-if 导致的图表消失问题 |
-| 主题切换 | 支持浅色/深色/跟随系统三种模式，后端持久化 + 前端 CSS 类切换（html.dark），登录时自动加载 |
-| 布局 | MainLayout.vue，顶栏 + 侧栏 + 内容区响应式 |
-
-### 营养分析算法
-
-#### 基础代谢率 BMR（Mifflin-St Jeor 公式）
-
-```
-男性: BMR = 10 × 体重(kg) + 6.25 × 身高(cm) - 5 × 年龄 + 5
-女性: BMR = 10 × 体重(kg) + 6.25 × 身高(cm) - 5 × 年龄 - 161
-```
-
-#### 总消耗 TDEE（活动系数法）
-
-| 活动水平 | 系数 | 说明 |
-|---------|------|------|
-| 久坐 | 1.2 | 几乎不运动 |
-| 轻度活动 | 1.375 | 每周1-3天轻度运动 |
-| 中度活动 | 1.55 | 每周3-5天中等运动 |
-| 高度活动 | 1.725 | 每周6-7天高强度运动 |
-| 极高强度 | 1.9 | 每天高强度训练或体力劳动 |
-
-#### 目标热量计算
-
-```
-减脂: target = TDEE × 0.8
-维持: target = TDEE
-增肌: target = TDEE × 1.15
-
-优先级: 用户手动设置 > 饮食目标自动计算
-```
-
-#### 智能营养评估评分
-
-| 评估项 | 权重 | 说明 |
-|--------|------|------|
-| 热量匹配度 | 40% | 实际热量与目标热量的接近程度 |
-| 蛋白质匹配度 | 30% | 实际蛋白质与目标蛋白质的接近程度 |
-| 用户偏好匹配 | 15% | 饮食偏好符合度 |
-| 饮食目标匹配 | 15% | 减脂/增肌/维持目标符合度 |
-
-#### 营养素供能比例计算
-
-```
-蛋白质供能比 = (蛋白质g × 4) / 总热量 × 100%
-碳水供能比   = (碳水g × 4) / 总热量 × 100%
-脂肪供能比   = (脂肪g × 9) / 总热量 × 100%
-
-推荐比例: 碳水 50% / 蛋白质 20% / 脂肪 30%
-```
-
-#### 热量达标判定
-
-```
-达标条件: |实际热量 - 目标热量| ≤ 目标热量 × 10%
-达标率 = 达标天数 / 有记录天数 × 100%
-```
-
----
-
-## 🔌 后端 API 接口
-
-### 认证模块 `/api/auth`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| POST | `/register` | 用户注册 | ❌ |
-| POST | `/login` | 用户登录，返回 JWT | ❌ |
-
-### 用户模块 `/api/user`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/profile` | 获取用户资料 | ✅ |
-| PUT | `/profile` | 更新用户资料 | ✅ |
-| POST | `/avatar` | 上传头像（multipart） | ✅ |
-| GET | `/settings` | 获取用户设置 | ✅ |
-| PUT | `/settings` | 保存用户设置 | ✅ |
-| PUT | `/password` | 修改密码（校验旧密码） | ✅ |
-
-### 今日饮食模块 `/api/diet`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/today` | 获取今日饮食概览（摄入/目标/剩余） | ✅ |
-| GET | `/today/records` | 获取今日饮食记录列表 | ✅ |
-| POST | `/today/add` | 添加单条饮食记录 | ✅ |
-| POST | `/today/add-batch` | 批量添加饮食记录 | ✅ |
-| PUT | `/today/target` | 更新用户自定义目标 | ✅ |
-| DELETE | `/record/{id}` | 删除饮食记录 | ✅ |
-| GET | `/records` | 按日期/范围查询记录 | ✅ |
-| GET | `/records/week` | 获取近7天记录（专用接口） | ✅ |
-| GET | `/records/month` | 获取近30天记录（专用接口） | ✅ |
-| GET | `/stats` | 饮食统计（支持week/month/year周期） | ✅ |
-
-### 食物模块 `/api/foods`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/` | 分页获取食物列表 | ✅ |
-| GET | `/{id}` | 获取食物详情 | ✅ |
-| GET | `/search` | 按名称搜索食物 | ✅ |
-| GET | `/all` | 获取全部食物 | ✅ |
-| POST | `/` | 添加新食物 | ✅ |
-
-### 分类模块 `/api/categories`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/` | 获取所有分类 | ✅ |
-| GET | `/{parentId}/sub` | 获取子分类 | ✅ |
-
-### AI 对话模块 `/api/chat`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/sessions` | 获取用户会话列表 | ✅ |
-| GET | `/sessions/{sessionId}/messages` | 获取会话消息 | ✅ |
-| POST | `/send` | 发送消息（调用 AI） | ✅ |
-| POST | `/sessions` | 创建新会话 | ✅ |
-| DELETE | `/sessions/{sessionId}` | 删除会话 | ✅ |
-
-### 营养分析模块 `/api/nutrition`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/analysis` | 获取营养分析数据（趋势+占比） | ✅ |
-| GET | `/evaluate` | 智能营养评估（BMI/BMR/TDEE/评分） | ✅ |
-| GET | `/nutrients` | 营养素详细分析（每日趋势+比例+建议） | ✅ |
-| GET | `/calorie` | 热量详细分析（每日热量+时段分布+达标率） | ✅ |
-| GET | `/goal` | 目标完成度分析（各营养素完成百分比+建议） | ✅ |
-| GET | `/report` | 营养报告（综合评分+关键发现+建议） | ✅ |
-
-### 管理员模块 `/api/admin`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/users` | 用户列表 | 🔒 Admin |
-| GET | `/users/{id}` | 用户详情 | 🔒 Admin |
-| PUT | `/users/{id}/status` | 修改用户状态 | 🔒 Admin |
-| DELETE | `/users/{id}` | 删除用户 | 🔒 Admin |
-| GET | `/foods` | 食物列表 | 🔒 Admin |
-| PUT | `/foods/{id}` | 编辑食物 | 🔒 Admin |
-| PUT | `/foods/{id}/status` | 审核食物状态 | 🔒 Admin |
-| DELETE | `/foods/{id}` | 删除食物 | 🔒 Admin |
-| GET | `/foods/pending` | 待审核食物 | 🔒 Admin |
-| POST | `/categories` | 添加分类 | 🔒 Admin |
-| PUT | `/categories/{id}` | 编辑分类 | 🔒 Admin |
-| DELETE | `/categories/{id}` | 删除分类 | 🔒 Admin |
-| GET | `/ai-logs` | AI 生成日志 | 🔒 Admin |
-| PUT | `/ai-logs/{id}/abnormal` | 标记异常 | 🔒 Admin |
-
-### AI 服务接口（FastAPI `localhost:8000`）
-
+### 用户
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/chat` | 单轮对话 |
-| POST | `/api/chat/history` | 多轮对话（带历史上下文） |
-| POST | `/api/diet-plan` | 生成膳食规划 |
-| POST | `/api/diet-plan/structured` | 生成结构化膳食方案（Pydantic校验） |
-| GET | `/api/health` | 健康检查（返回当前后端 backend / 模型 model / 接口地址） |
+| POST | `/api/users/register` | 用户注册 |
+| POST | `/api/users/login` | 用户登录 |
+| GET | `/api/users/{id}` | 获取用户信息 |
+| PUT | `/api/users/{id}` | 更新用户档案 |
 
----
-
-## 🤖 AI 服务详解
-
-### 架构概览
-
-```
-用户提问 → Spring Boot 后端 → FastAPI AI 服务 → 云端大模型 API / 本机 Ollama → 返回结果
-                │                    │
-                │                    ├─ 成功：返回 AI 生成内容
-                │                    └─ 失败：返回 fallback 提示
-                │
-                ├─ 保存会话和消息到数据库
-                └─ 记录 AI 生成日志（token 消耗、异常标记）
-```
-
-### AI 服务技术栈
-
-| 组件 | 版本 | 说明 |
+### 食物
+| 方法 | 路径 | 说明 |
 |------|------|------|
-| Python | 3.10+ | 运行环境 |
-| FastAPI | 0.115.0 | 高性能异步 Web 框架 |
-| Uvicorn | 0.30.6 | ASGI 服务器，默认监听 `127.0.0.1:8000`（仅本机，可用 `AI_SERVICE_HOST` 调整） |
-| Pydantic | 2.9.2 | 请求/响应数据校验 |
-| HTTPX | 0.28+ | 调用云端 OpenAI 兼容 API（非流式 + SSE 流式） |
-| Ollama Python SDK | latest | 调用本地 Ollama 推理服务（可选后端） |
-| 云端后端 | — | **默认**，OpenAI 兼容接口，模型名在 `.env` 里配 |
-| Ollama | 最新 | 可选后端，本地大模型运行时 |
-
-### AI 服务文件结构
-
-```
-ai-service/
-├── main.py              # FastAPI 主程序（路由注册、启动入口）
-├── requirements.txt     # Python 依赖清单
-├── .env.example         # ⭐ 配置模板（复制为 .env 后填自己的 API_KEY）
-├── .env                 # 本地实际配置（含密钥，已被 gitignore，不会提交）
-├── api/                 # API 路由层
-│   ├── chat.py          # 对话接口（单轮/多轮）
-│   ├── diet_plan.py     # 膳食规划接口（普通/结构化）
-│   └── health.py        # 健康检查接口（显示当前后端与模型）
-├── config/              # 配置层
-│   └── settings.py      # 全局配置（.env 读取、后端选择、模型名、超时等）
-├── model/               # 数据模型层
-│   ├── request.py       # 请求模型（Pydantic）
-│   └── response.py      # 响应模型（Pydantic）
-├── prompt/              # Prompt 模板层
-│   └── system_prompt.py # 系统提示词模板
-└── service/             # 业务逻辑层
-    ├── chat_service.py  # 对话服务（上下文构建、历史管理）
-    ├── diet_plan_service.py # 膳食规划服务
-    └── llm_service.py   # LLM 调用服务（云端 API + Ollama 双后端）
-```
-
-### 核心 System Prompt
-
-AI 助手名为 **"智慧膳食"**，具备以下能力：
-
-1. 根据用户健康数据（身高/体重/年龄/活动水平/饮食目标/饮食偏好）提供个性化膳食建议
-2. 分析每日营养摄入是否合理，指出营养缺口和改进方向
-3. 推荐适合用户目标（减脂/维持/增肌）的食物和食谱，优先考虑饮食偏好
-4. 回答食物营养、热量、健康饮食相关问题
-5. 结合剩余热量和营养素缺口给出精准建议
-
-**个性化规则**：
-- 根据性别、年龄、体重、身高给出针对性建议
-- 根据饮食偏好调整推荐（偏好清淡→少油少盐，偏好中式→中式食谱）
-- 根据活动水平判断热量需求（久坐人群适当降低碳水比例）
-- 严格遵守用户饮食偏好（素食、低糖、无辣等）
-- 营养均衡推荐比例：碳水 50%、蛋白质 20%、脂肪 30%
-
-### 接口详细说明
-
-#### POST `/api/chat` — 单轮对话
-
-请求体：
-```json
-{
-  "message": "我今天还能吃什么？",
-  "context": "性别:男, 身高:175cm, 体重:70kg, 目标:减脂, 今日已摄入:1200kcal, 剩余:400kcal",
-  "session_id": 1,
-  "user_id": 1
-}
-```
-
-响应：
-```json
-{
-  "response": "根据您今日剩余400kcal，建议...",
-  "session_id": 1
-}
-```
-
-> `context` 由 Spring Boot 后端根据用户画像 + 今日摄入自动构建，传入 AI 服务
-
-#### POST `/api/chat/history` — 多轮对话
-
-请求体：
-```json
-{
-  "message": "那晚餐呢？",
-  "context": "...",
-  "session_id": 1,
-  "user_id": 1,
-  "history": [
-    {"role": "user", "content": "我今天还能吃什么？"},
-    {"role": "assistant", "content": "根据您今日剩余400kcal，建议..."}
-  ]
-}
-```
-
-> `history` 携带历史对话，AI 基于上下文连贯回答
-
-#### POST `/api/diet-plan` — 生成膳食规划
-
-请求体：
-```json
-{
-  "user_id": 1,
-  "target_calories": 2000,
-  "diet_goal": "lose",
-  "remaining_calories": 800
-}
-```
-
-响应：
-```json
-{
-  "target_calories": 1600,
-  "ai_plan": "AI 生成的详细膳食计划文本...",
-  "meals": {
-    "breakfast": {"calories": 480, "suggestion": "燕麦+鸡蛋+牛奶"},
-    "lunch": {"calories": 640, "suggestion": "糙米饭+鸡胸肉+蔬菜"},
-    "dinner": {"calories": 400, "suggestion": "清蒸鱼+蔬菜+少量主食"},
-    "snack": {"calories": 80, "suggestion": "水果或坚果"}
-  }
-}
-```
-
-> `diet_goal` 为 `lose` 时自动乘 0.8，`gain` 时乘 1.15
-
-#### GET `/api/health` — 健康检查
-
-响应：
-```json
-{
-  "status": "ok",
-  "service": "DietAI AI Service",
-  "model": "qwen2.5-coder:7b"
-}
-```
-
-### AI 对话用户体验优化
-
-#### 智能加载状态
-- ✅ **打字机效果**："正在思考中，请稍候..." 逐字显示 + 闪烁光标 `|`
-- ✅ **实时等待计时**：显示 `⏱️ 已等待 X 秒`，每秒更新
-- ✅ **取消请求按钮**：支持中断正在进行的 AI 调用（`AbortController`）
-- ✅ **优雅降级**：组件卸载时自动清理定时器，防止内存泄漏
-
-#### 超时保护机制
-为适配 Ollama 本地模型生成时间（通常 5-30 秒），系统配置了完整的超时保护：
-
-| 组件 | 超时设置 | 说明 |
-|------|---------|------|
-| 前端 Axios | **300 秒（5分钟）** | HTTP 请求总超时 |
-| 后端 RestTemplate 连接 | **10 秒** | 连接 AI 服务超时 |
-| 后端 RestTemplate 读取 | **300 秒（5分钟）** | 等待 AI 响应超时 |
-
-#### AI 响应时间参考
-
-| 场景 | 预计响应时间 | 说明 |
-|------|-------------|------|
-| 简单问题（如"你好"） | 2-5 秒 | 模型已加载到内存 |
-| 复杂问题（如"制定一周减脂餐"） | 10-30 秒 | 需要生成较长文本 |
-| 首次调用（冷启动） | 30-60 秒 | 模型需从磁盘加载到内存 |
-| 超长回复或复杂分析 | 60-180 秒 | 可能需要生成大量文本 |
-| 超过 300 秒（5分钟） | 自动超时 | 显示错误提示，建议重试 |
-
-#### 技术实现要点
-- 使用 `AbortController` 实现请求取消（现代浏览器原生支持）
-- `setInterval` 实现打字机动画（100ms/字符）和实时计时（1s/次）
-- CSS `@keyframes` 实现光标闪烁动画（1秒循环）
-- 组件 `onUnmounted` 生命周期清理所有定时器和未完成请求
-
-### Markdown 渲染支持
-
-#### 背景
-通义千问（Qwen）、Llama、ChatGPT 等现代大语言模型**倾向于使用 Markdown 格式**输出结构化内容：
-- `**文字**` → 加粗
-- `*文字*` → 斜体
-- `# 标题` → 标题
-- `- 列表项` → 无序列表
-- `` `代码` `` → 行内代码
-
-#### 解决方案
-前端使用 **`marked` + `DOMPurify`** 组合实现安全的 Markdown 渲染：
-
-| 技术 | 作用 | 安全性 |
-|------|------|--------|
-| **marked** | 将 Markdown 文本转换为 HTML | ⚠️ 可能包含危险标签 |
-| **DOMPurify** | 清理 HTML 防止 XSS 攻击 | ✅ 移除 `<script>`、`onclick` 等 |
-
-#### 支持的 Markdown 语法
-
-| 语法 | 渲染效果 | 示例 |
-|------|---------|------|
-| `**text**` | **加粗** | **核心原因** |
-| `*text*` | *斜体* | *重要提示* |
-| `# ## ###` | 标题（H1-H3） | 章节标题 |
-| `- item` / `1. item` | 列表 | • 第一项 |
-| `` `code` `` | 行内代码 | `const x = 1` |
-| ```code``` | 代码块 | 多行代码 |
-| `> quote` | 引用块 | 重要说明 |
-| `[text](url)` | 超链接 | 点击跳转 |
-
-#### 视觉效果对比
-
-**优化前** ❌：
-```
-🤖 **财政危机**：法国在18世纪中面临严重的财政问题...
-   **贵族与教士的特权**：贵族和教会享有免税权...
-```
-（用户看到原始的 `**` 符号，体验不佳）
-
-**优化后** ✅：
-```
-🤖 **财政危机**：法国在18世纪中面临严重的财政问题...
-   **贵族与教士的特权**：贵族和教会享有免税权...
-```
-（真正的**加粗**效果，专业美观）
-
-#### 技术实现
-```javascript
-// AiChat.vue - Markdown 渲染函数
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
-
-function renderMarkdown(content) {
-  const html = marked(content)           // Markdown → HTML
-  return DOMPurify.sanitize(html)        // 清理XSS攻击
-}
-
-// 模板中使用 v-html 渲染
-<div class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
-```
-
-#### 依赖包信息
-
-| 包名 | 版本 | 大小（gzip） | 用途 |
-|------|------|-------------|------|
-| **marked** | latest | ~10 KB | Markdown 解析器 |
-| **dompurify** | latest | ~8 KB | HTML 消毒剂 |
-| **总计** | — | **~18 KB** | 可接受范围 |
-
-### AI 回复耗时显示
-
-#### 功能说明
-每条 AI 回复消息的底部会显示**实际响应耗时**，帮助用户了解 AI 处理速度。
-
-#### 时间格式规则
-
-| 耗时范围 | 显示格式 | 示例 |
-|---------|---------|------|
-| < 60 秒 | `X秒` | `⏱️ 回复耗时：15秒` |
-| ≥ 60 秒 | `X分X秒` | `⏱️ 回复耗时：1分23秒` |
-
-#### 显示位置与样式
-- **位置**：AI 回复消息最下方
-- **分隔符**：虚线边框（`border-top: 1px dashed`）
-- **对齐方式**：右对齐
-- **字体颜色**：灰色次要文本（`#909399`）
-- **字体大小**：12px
-
-#### 界面效果示例
-```
-┌──────────────────────────────────────┐
-│ 🤖                                   │
-│ ┌──────────────────────────────────┐ │
-│ │ 根据您的问题，分析如下：          │ │
-│ │                                  │ │
-│ │ **核心原因**：                    │ │
-│ │ 1. **财政危机**                 │ │
-│ │ 2. **社会不平等**               │ │
-│ │                                  │ │
-│ │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │ │
-│ │     ⏱️ 回复耗时：1分23秒         │ │
-│ └──────────────────────────────────┘ │
-└──────────────────────────────────────┘
-```
-
-#### 技术实现
-```javascript
-// 记录请求开始时间
-requestStartTime = Date.now()
-
-// AI回复后计算耗时（秒）
-const duration = Math.round((Date.now() - requestStartTime) / 1000)
-
-// 格式化显示
-function formatDuration(seconds) {
-  if (seconds < 60) return `${seconds}秒`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return `${minutes}分${remainingSeconds}秒`
-}
-```
-
-#### 性能影响
-- ✅ 无额外网络请求（纯前端计算）
-- ✅ 内存占用极小（仅存储一个时间戳）
-- ✅ 不影响AI响应速度
-
-### Fallback 降级机制
-
-当云端 API 调用失败（key 错误、欠费、超时）或本机 Ollama 未就绪时，AI 服务会返回一条**明确的失败提示**，而不会伪造一条营养建议——这样用户能立刻分辨「模型真的回答了」还是「调用降级了」，排查问题不会被误导。
-
-> 降级响应中会附带 `"fallback": true` 和 `"error": "异常信息"` 字段
-
-常见的错误会翻译成人话提示，方便自己定位：
-
-| 现象 | 提示 |
-|------|------|
-| 401 | 认证失败：`API_KEY` 填错了或已失效 |
-| 403 | 无权限：这个 key 没开通该模型，或未完成开通流程 |
-| 404 | 接口/模型不存在：检查 `API_BASE_URL` 与 `API_MODEL` 是否匹配 |
-| 429 | 请求过于频繁或额度不足 |
-| 500+ | 云端服务暂时不可用，稍后重试 |
-
-> 401/403/404 属于配置错误，会**立即失败不重试**，避免让你白等；网络抖动类错误会自动重试。
-
-### 后端调用 AI 服务的流程
-
-```
-AiChatService.send(userId, message)
-  │
-  ├─ 1. 构建 context：用户画像 + 今日摄入 + 剩余目标
-  ├─ 2. 调用 FastAPI /api/chat/history（带历史消息）
-  ├─ 3. 保存用户消息到 ai_chat_message 表
-  ├─ 4. 保存 AI 回复到 ai_chat_message 表
-  ├─ 5. 记录到 ai_generation_log 表（token 消耗、是否异常）
-  └─ 6. 返回 AI 回复给前端
-```
-
-### 如何切换 AI 后端 / 更换模型
-
-所有 AI 配置都集中在 **`ai-service/.env`** 一个文件里，改完重启 AI 服务即可，**不用改代码**。
-
-#### 方式一：接云端 API（推荐）
-
-复制模板文件，填入自己的 key：
-
-```bash
-cd ai-service
-cp .env.example .env      # Windows: copy .env.example .env
-```
-
-然后编辑 `.env`，把 `API_KEY` 换成自己的：
-
-```ini
-LLM_BACKEND=auto          # auto = 填了 key 就用云端，没填就用 Ollama
-
-API_KEY=sk-你的密钥
-API_BASE_URL=https://api.deepseek.com
-API_MODEL=deepseek-flash
-```
-
-**各家厂商怎么填**（任选一家，其它 OpenAI 兼容接口同理）：
-
-| 厂商 | API_BASE_URL | API_MODEL 示例 | Key 获取地址 |
-|------|--------------|----------------|--------------|
-| DeepSeek | `https://api.deepseek.com` | `deepseek-flash` | platform.deepseek.com |
-| 火山方舟（豆包） | `https://ark.cn-beijing.volces.com/api/v3` | `doubao-seed-2-1-pro-260628` | console.volcengine.com/ark |
-| 阿里云百炼（通义） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` | bailian.console.aliyun.com |
-| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-5` | open.bigmodel.cn |
-| Kimi（月之暗面） | `https://api.moonshot.cn/v1` | `kimi-k3` | platform.moonshot.cn |
-
-> ⚠️ `API_BASE_URL` 填到**版本段为止**即可，程序会自动拼 `/chat/completions`。
-> DeepSeek 用 `https://api.deepseek.com`（官方规范写法，加 `/v1` 也兼容）；
-> 火山方舟和智谱分别是 `/api/v3`、`/api/paas/v4`，不是 `/v1`，照上表填。
->
-> ⚠️ **模型名会随厂商版本更新而变**。例如 DeepSeek 的 `deepseek-chat` 已于 2026-07 下线，
-> 现在要用 `deepseek-flash`。若报 404「模型不存在」，去厂商控制台的模型列表复制当前
-> 可用的模型 ID 替换 `API_MODEL` 即可。价格差异可能很大（DeepSeek 的 `deepseek-v4-pro`
-> 约为 `deepseek-flash` 的 3 倍），换模型前先看下计费。
-
-#### 方式二：用本机 Ollama
-
-```ini
-LLM_BACKEND=ollama
-```
-
-先拉取模型，再把想用的模型名写进 `PREFERRED_MODELS`（`ai-service/config/settings.py`）：
-
-| 模型 | 参数量 | 说明 | 拉取命令 |
-|------|--------|------|---------|
-| qwen2.5:7b | 7B | 通义千问通用版，中文好 | `ollama pull qwen2.5:7b` |
-| qwen2.5:3b | 3B | 体积小、速度快，精度一般 | `ollama pull qwen2.5:3b` |
-| llama3.1:8b | 8B | Meta Llama 3.1 | `ollama pull llama3.1:8b` |
-| mistral:7b | 7B | Mistral 7B | `ollama pull mistral:7b` |
-| glm4:9b | 9B | 智谱 GLM-4 | `ollama pull glm4:9b` |
-
-> 改完 `.env` 或模型后需重启 AI 服务：`python main.py`
-> 验证当前生效的后端与模型：浏览器打开 `http://localhost:8000/api/health`
+| GET | `/api/foods` | 搜索/列表食物 |
+| GET | `/api/foods/{id}` | 获取食物详情 |
+| POST | `/api/foods` | 提交新食物（管理员审核） |
+| GET | `/api/food-categories` | 获取分类列表 |
+| GET | `/api/user-custom-foods` | 获取用户自定义食物列表 |
+| POST | `/api/user-custom-foods` | 创建自定义食物/食谱 |
+| GET | `/api/user-custom-foods/{id}/items` | 获取组合食谱明细 |
+
+### 食谱
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/meal-plans` | 获取我的食谱列表 |
+| POST | `/api/meal-plans` | 创建食谱 |
+| PUT | `/api/meal-plans/{id}` | 更新食谱 |
+| DELETE | `/api/meal-plans/{id}` | 软删除食谱 |
+| PUT | `/api/meal-plans/{id}/status` | 更新执行状态（开始/暂停/恢复/归档） |
+| PUT | `/api/meal-plans/{id}/publish` | 发布到广场（待审核） |
+| GET | `/api/meal-plans/square` | 食谱广场列表（已上架 + 热门排序） |
+| POST | `/api/meal-plans/{id}/save` | 保存/应用他人食谱 |
+| POST | `/api/meal-plans/{id}/favorite` | 收藏/取消收藏 |
+| GET | `/api/meal-plans/square/hot` | 热门 Top10 |
+| POST | `/api/meal-plans/{id}/review` | 管理员审核食谱 |
+
+### AI
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/ai/chat` | AI 对话 |
+| POST | `/api/ai/generate-meal-plan` | AI 生成膳食方案 |
+| GET | `/api/ai-chat/sessions` | 获取对话会话列表 |
+| GET | `/api/ai-chat/sessions/{id}/messages` | 获取会话消息 |
+
+### 饮食记录
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/diet-records` | 记录饮食 |
+| GET | `/api/diet-records` | 查询饮食记录 |
+| DELETE | `/api/diet-records/{id}` | 删除记录 |
+
+### 健康
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/weight-records` | 记录体重 |
+| GET | `/api/weight-records` | 查询体重记录 |
+
+### 系统
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/profile-options` | 获取可配置字典选项 |
 
 ---
 
-## 🚀 快速开始
+## AI 服务详解
 
-### 环境要求
+AI 服务基于 Python FastAPI 构建，使用阿里云通义千问（DashScope）大模型。
 
-| 工具 | 版本要求 | 安装指引 |
-|------|---------|---------|
-| JDK | 25+ | [Adoptium](https://adoptium.net/) |
-| Maven | 3.9+ | [maven.apache.org](https://maven.apache.org/download.cgi) |
-| Node.js | 18+ | [nodejs.org](https://nodejs.org/) |
-| npm | 9+ | 随 Node.js 安装 |
-| MySQL | 8.0+ | [dev.mysql.com](https://dev.mysql.com/downloads/) |
-| Python | 3.10+ | [python.org](https://www.python.org/) |
-| Ollama | 最新（可选） | [ollama.com](https://ollama.com/) — 仅在用本机模型时需要 |
+**启动方式：**
+```bash
+# 方式一：激活虚拟环境后启动
+cd ai-service
+.venv\Scripts\Activate.ps1
+python main.py
 
-### 第一步：克隆项目
+# 方式二：直接指定 Python 解释器
+ai-service\.venv\Scripts\python.exe main.py
+```
+
+> ⚠️ 必须使用 `ai-service\.venv` 中的 Python 3.13 虚拟环境，系统默认 Python 为 3.14 alpha 测试版，会导致 FastAPI 原生依赖崩溃。
+
+**对话模型：**
+- 模型：`qwen-turbo`（日常对话）/ `qwen-plus`（复杂分析）
+- 上下文处理：携带用户档案快照（身高、体重、目标、偏好、过敏等）
+- 异常标记：每次 AI 调用记录 `is_abnormal` 标记，便于排查
+
+---
+
+## 快速开始
+
+### 1. 克隆项目
 
 ```bash
-git clone https://github.com/zyy-17/DietAI-Planner.git
+git clone <repository-url>
 cd DietAI-Planner
+git checkout feature/yuan80803-alt
 ```
 
-### 第二步：初始化数据库
-
-1. 启动 MySQL 服务
-2. 使用 MySQL 客户端（如 Navicat、MySQL Workbench 或命令行）执行初始化脚本：
+### 2. 初始化数据库
 
 ```bash
-mysql -u root -p < src/main/resources/db/init.sql
+mysql -uroot -p < src/main/resources/db/init.sql
 ```
 
-该脚本会：
-- 创建数据库 `diet_ai_planner`
-- 创建 8 张表
-- 插入管理员账号（admin / admin123）
-- 插入 10 个食物分类
-- 插入 30+ 常见食物数据
-- 插入 6 条营养标准配置
+此脚本会：
+- 创建 `diet_ai_planner` 数据库
+- 建立全部 16 张表（IF NOT EXISTS 保证幂等）
+- 插入初始数据：1 个管理员 + 11 个食品分类 + 47 种基础食材 + 24 种成品菜肴 + 6 条营养标准
 
-### 第三步：配置后端
+**默认管理员账号：**
+| 用户名 | 密码 | 角色 |
+|--------|------|------|
+| `admin` | `admin123` | admin |
 
-编辑 `src/main/resources/application.yml`：
+### 3. 配置数据库连接
 
+编辑 `src/main/resources/application.yml`，修改数据库连接信息：
 ```yaml
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/diet_ai_planner?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
-    username: root        # ← 改为你的 MySQL 用户名
-    password: 123456      # ← 改为你的 MySQL 密码
+    url: jdbc:mysql://localhost:3306/diet_ai_planner
+    username: root
+    password: your_password
 ```
 
-### 第四步：启动后端
+### 4. 启动后端
 
 ```bash
-# 在项目根目录
+# Maven 启动
 mvn spring-boot:run
 ```
 
-后端启动成功后访问：`http://localhost:8080`
+### 5. 配置并启动 AI 服务
 
-### 第五步：启动前端
+在 `ai-service/env.py` 中配置通义千问 API Key：
+```python
+DASHSCOPE_API_KEY = "your-api-key"
+```
+
+启动 AI 服务：
+```bash
+ai-service\.venv\Scripts\python.exe main.py
+```
+
+### 6. 启动前端
 
 ```bash
 cd frontend
@@ -1025,118 +322,44 @@ npm install
 npm run dev
 ```
 
-前端启动成功后访问：`http://localhost:3000`
+---
 
-> Vite 开发服务器已配置代理：`/api` → `localhost:8080`，无需额外配置跨域
+## 开发注意事项
 
-### 第六步：启动 AI 服务
+### 密码存储
+当前系统使用**明文密码**存储和对比（为教学/开发调试用途）。`SecurityConfig.java` 中实现了自定义 `PasswordEncoder`：
 
-> ⚠️ **重要提示**：AI 对话功能依赖以下三个服务同时运行：
-> - Spring Boot 后端（端口 `8080`）
-> - Vue 前端（端口 `3000` 或 `5173`）
-> - Python AI 服务（端口 `8000`）
->
-> 缺少任一服务，AI 对话功能将无法正常工作
-
-**第一步：配置大模型**（只需做一次）
-
-AI 服务支持两种后端，**二选一**即可，配置都写在 `ai-service/.env`：
-
-```bash
-cd ai-service
-cp .env.example .env      # Windows: copy .env.example .env
+```java
+@Bean
+public PasswordEncoder passwordEncoder() {
+    return new PasswordEncoder() {
+        @Override
+        public String encode(CharSequence rawPassword) {
+            return rawPassword.toString();
+        }
+        @Override
+        public boolean matches(CharSequence rawPassword, String encodedPassword) {
+            if (encodedPassword == null) return false;
+            return rawPassword.toString().equals(encodedPassword);
+        }
+    };
+}
 ```
 
-- **【推荐】接云端 API**：打开 `.env`，把 `API_KEY` 填成自己的密钥（DeepSeek / 豆包 / 通义 / Kimi 任选一家）。
-  详细的 `API_BASE_URL` + `API_MODEL` 对照表见下方 **「如何切换 AI 后端 / 更换模型」**。
-- **用本机 Ollama**：`.env` 里设 `LLM_BACKEND=ollama`，并先拉模型：
+> ⚠️ **正式上线前请务必更换为 BCryptPasswordEncoder**，并更新相关密码字段。
 
-```bash
-ollama pull qwen2.5:7b
-```
+### 数据库
+- 所有 16 张表均使用 `IF NOT EXISTS` 创建，`init.sql` 可重复执行
+- 迁移脚本已全部合并到 `init.sql`，无需单独执行零散迁移文件
+- 主表均含 `created_at` / `updated_at` 审计字段
+- `application.yml` 含数据库密码，**禁止提交到公开仓库**
 
-**第二步：启动 AI 服务**
-
-```bash
-cd ai-service
-pip install -r requirements.txt
-python main.py
-```
-
-AI 服务启动后运行在：`http://localhost:8000`
-
-接云端 API 时会看到：
-```
-INFO: 启动 AI 服务 v5.1 | 后端=云端API | 接口=https://api.deepseek.com | 模型=deepseek-flash
-INFO: 监听地址 http://127.0.0.1:8000
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-```
-
-> 🔒 默认只监听 **127.0.0.1**（仅本机可访问）。本服务没有鉴权接口，
-> 若改成 `0.0.0.0`，同一局域网下的其他人也能调用你的 AI 接口并消耗你的 API 额度。
-
-**第三步：验证 AI 服务是否正常**
-
-浏览器访问 `http://localhost:8000/api/health`，会直接告诉你当前生效的后端和模型：
-
-```json
-{ "status": "ok", "backend": "api", "model": "deepseek-flash", "api_base_url": "https://api.deepseek.com" }
-```
-
-也可以访问 `http://localhost:8000/docs` 查看 FastAPI 自动生成的 API 文档页面。
-
-> **AI 响应时间说明**：
-> - 接云端 API：**2-15 秒**（取决于厂商与网络）
-> - 本机 Ollama：简单问题 2-5 秒，复杂分析 60-180 秒（CPU 推理慢）
-> - 系统已配置 **300 秒（5分钟）超时保护**，超过此时间将自动显示错误提示
->
-> ⚠️ 改了 `.env` 或模型后**必须重启 AI 服务**才会生效
->
-> 如果不启动 AI 服务，AI 对话功能将不可用，但其他功能正常使用
-
-
-### 第七步：登录系统
-
-打开浏览器访问 `http://localhost:3000`，使用默认管理员账号登录：
-
-| 角色 | 用户名 | 密码 |
-|------|--------|------|
-| 管理员 | admin | admin123 |
-
-也可以点击"注册"创建新用户。
+### Git 分支
+- 开发者 `yuan80803-alt` 的所有改动统一提交到 `feature/yuan80803-alt` 分支
+- `main` 分支留给项目主线使用
 
 ---
 
-## 🔑 默认账号
+## License
 
-| 角色 | 用户名 | 密码 | 说明 |
-|------|--------|------|------|
-| admin | admin | admin123 | 系统管理员，可访问后台管理 |
-
----
-
-## 📸 项目截图
-
-> 以下为系统主要页面示意
-
-| 页面 | 说明 |
-|------|------|
-| 登录页 | 用户登录 / 注册 |
-| 今日概览 | 每日摄入总览、四大营养素进度、修改目标 |
-| 餐次详情 | 早/午/晚/加餐食物列表，多选批量添加 |
-| AI今日建议 | 4种套餐方案换一换，结构化膳食方案展示 |
-| 饮食记录 | 历史记录/周记录/月记录/条件查询，各模式独立后端接口 |
-| 饮食统计 | 每日热量趋势折线图 + 三大营养素占比饼图 + 达标统计 |
-| 营养素分析 | 每日营养素三线趋势图 + 供能占比饼图 + 日均vs目标 |
-| 热量分析 | 每日热量柱状图vs目标线 + 时段分布饼图 + 达标率 |
-| 目标完成度 | 四项环形进度条 + 综合完成度评价 + 改进建议 |
-| 营养报告 | 综合评分 + 各项评价 + 关键发现 + 改善建议 |
-| 食物库 | 食物浏览/搜索/分类，点击添加到今日饮食，用户可添加新食物 |
-| AI 对话 | 多轮对话，预设方案快捷入口，Markdown渲染 |
-| 管理后台 | 用户管理、食物审核、AI 日志监控 |
-
----
-
-## 📄 License
-
-本项目仅供学习交流使用。
+MIT License
