@@ -450,6 +450,17 @@ async function sendMessage(overrideText) {
   sending.value = true
   inputText.value = ''
 
+  // 两段式第一步：新会话时立即在侧边栏插入临时会话项，标题=用户问题截断。
+  // 用负数 id 避免和数据库正数 id 冲突；AI 回复后 loadSessions 会用真实数据替换。
+  if (targetSessionId === null) {
+    sessions.value.unshift({
+      id: -Date.now(),
+      title: content.length > 20 ? content.substring(0, 20) + '…' : content,
+      userId: 0,
+      createdAt: new Date().toISOString()
+    })
+  }
+
   messages.value.push({ id: Date.now(), role: 'user', content })
   await nextTick()
   scrollToBottom()
@@ -493,8 +504,12 @@ async function sendMessage(overrideText) {
       ElMessage.info('上一个问题的回复已生成，请回到原来的会话查看')
     }
 
+    // 移除乐观插入的临时会话项（负 id），loadSessions 拉真实列表（标题已是 AI 概括）
+    sessions.value = sessions.value.filter(s => s.id > 0)
     loadSessions()
   } catch (error) {
+    // 请求失败/取消时移除乐观插入的临时会话项，避免侧边栏残留无效会话
+    sessions.value = sessions.value.filter(s => s.id > 0)
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
       console.log('请求已取消')
     } else {

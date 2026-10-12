@@ -50,3 +50,28 @@ def chat_stream(message: str, context: str, session_id: int,
                 history: Optional[List[ChatHistoryItem]] = None):
     messages = build_messages(message, context, history)
     return call_llm_stream(messages)
+
+
+def generate_title(message: str, response: str) -> str:
+    """让 LLM 为一次对话生成不超过 12 字的概括性标题。
+
+    失败时返回空串，调用方自行兜底（如使用用户首句截断）。
+    max_tokens 给 512：思维链模型会先思考再输出正式答案，太小会被 reasoning_tokens 占满。
+    """
+    prompt = (
+        "请用不超过12个汉字概括下面这次对话的主题，只输出标题文字，"
+        "不要加引号、标点、解释或任何多余字符。\n\n"
+        f"用户问题：{message}\n\n"
+        f"AI回复（节选）：{response[:400]}"
+    )
+    messages = [{"role": "user", "content": prompt}]
+    try:
+        title = call_llm_text(messages, max_tokens=512).strip()
+        # 去掉模型可能自带的引号/书名号
+        title = title.strip('\'""《》 ')
+        if title and len(title) <= 24:
+            return title
+        return ""
+    except Exception as e:
+        logger.error(f"生成对话标题失败: {e}")
+        return ""

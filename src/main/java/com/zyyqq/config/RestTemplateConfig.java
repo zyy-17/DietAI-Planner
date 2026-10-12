@@ -68,4 +68,23 @@ public class RestTemplateConfig {
 
         return restTemplate;
     }
+
+    /**
+     * 专用于"对话标题概括"等短耗时调用的 RestTemplate。
+     * 读超时 15s——标题生成通常 2-5s，超过 15s 判定异常并兜底为用户首句截断。
+     */
+    @Bean
+    public RestTemplate aiTitleRestTemplate() {
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(Timeout.ofSeconds(connectTimeout))
+                .setResponseTimeout(Timeout.ofSeconds(15))
+                .build();
+
+        CloseableHttpClient httpClient = HttpClientBuilder.create()
+                .setDefaultRequestConfig(requestConfig)
+                .build();
+
+        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+        return new RestTemplate(factory);
+    }
 }

@@ -49,6 +49,7 @@ public class AiChatService {
     private final RecommendationService recommendationService;
     private final TransactionTemplate transactionTemplate;
     private final RestTemplate aiRestTemplate;
+    private final RestTemplate aiTitleRestTemplate;
     private final ProfileOptionService profileOptionService;
     private final WeightRecordService weightRecordService;
 
@@ -73,7 +74,9 @@ public class AiChatService {
         String contextSnapshot = buildContextSnapshot(userId);
         log.debug("上下文快照生成耗时: {}ms", System.currentTimeMillis() - start);
 
-        Long sessionId = transactionTemplate.execute(status -> {
+        // 第一个事务：创建/查找会话、保存用户消息。
+        // 第一轮（该会话尚无任何消息）时标题先设为用户问题截断——两段式第一步。
+        Map<String, Object> prepared = transactionTemplate.execute(status -> {
             AiChatSession session;
             if (request.getSessionId() == null) {
                 session = AiChatSession.builder()
@@ -86,8 +89,9 @@ public class AiChatService {
                         .orElseThrow(() -> new BusinessException("会话不存在"));
             }
 
-            if (messageRepository.countBySessionId(session.getId()) == 0) {
-                session.setTitle(generateSessionTitle(request.getContent()));
+            boolean isFirstMessage = messageRepository.countBySessionId(session.getId()) == 0;
+            if (isFirstMessage) {
+                session.setTitle(truncateAsTitle(request.getContent()));
                 sessionRepository.save(session);
             }
 
@@ -100,8 +104,14 @@ public class AiChatService {
                     .build();
             messageRepository.save(userMessage);
 
-            return session.getId();
+            Map<String, Object> map = new HashMap<>();
+            map.put("sessionId", session.getId());
+            map.put("isFirstMessage", isFirstMessage);
+            return map;
         });
+
+        Long sessionId = (Long) prepared.get("sessionId");
+        boolean isFirstMessage = (Boolean) prepared.get("isFirstMessage");
 
         long aiStart = System.currentTimeMillis();
         String aiResponse = callAiService(userId, request.getContent(), contextSnapshot, sessionId);
@@ -128,6 +138,12 @@ public class AiChatService {
 
             return msg;
         });
+
+        // 两段式第二步：第一轮 AI 回复完成后，同步调 ai-service 生成 ≤12 字概括替换标题。
+        // 同一会话后续消息（isFirstMessage=false）标题永不变。
+        if (isFirstMessage) {
+            updateTitleWithAiSummary(sessionId, request.getContent(), aiResponse);
+        }
 
         return assistantMessage;
     }
@@ -577,5 +593,52 @@ public class AiChatService {
             fallback = fallback.substring(0, 12) + "…";
         }
         return fallback;
+    }
+
+    /**
+     * 把用户首句截断为侧边栏标题（两段式第一步）。
+     * 保留原始问题文字，超过 20 字截断加省略号——让用户一眼认出"这就是我刚问的"。
+     */
+    private String truncateAsTitle(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            return "新对话";
+        }
+        String text = content.trim();
+        if (text.length() <= 20) {
+            return text;
+        }
+        return text.substring(0, 20) + "…";
+    }
+
+    /**
+     * 两段式第二步：第一轮 AI 回复完成后，调 ai-service 生成 ≤12 字概括替换标题。
+     * 失败/超时(15s)时不抛异常，保持第一步设的"用户问题"标题——侧边栏不会空白。
+     */
+    private void updateTitleWithAiSummary(Long sessionId, String userMessage, String aiResponse) {
+        try {
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("message", userMessage);
+            requestBody.put("response", aiResponse);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> resp = aiTitleRestTemplate.postForObject(
+                    aiServiceUrl + "/api/chat/title",
+                    requestBody,
+                    Map.class
+            );
+
+            if (resp != null && resp.get("title") != null) {
+                String title = resp.get("title").toString().trim();
+                if (!title.isEmpty() && title.length() <= 24) {
+                    sessionRepository.findById(sessionId).ifPresent(session -> {
+                        session.setTitle(title);
+                        sessionRepository.save(session);
+                        log.info("会话标题概括更新: sessionId={}, title={}", sessionId, title);
+                    });
+                }
+            }
+        } catch (Exception e) {
+            log.warn("AI标题概括失败，保持用户问题标题: sessionId={}, error={}", sessionId, e.getMessage());
+        }
     }
 }

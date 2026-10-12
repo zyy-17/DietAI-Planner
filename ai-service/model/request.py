@@ -22,6 +22,13 @@ class ChatWithHistoryRequest(BaseModel):
     history: Optional[List[ChatHistoryItem]] = None
 
 
+class TitleGenerateRequest(BaseModel):
+    """让 LLM 为一次对话生成不超过 12 字的概括性标题。"""
+
+    message: str
+    response: str
+
+
 class DietPlanRequest(BaseModel):
     user_id: int
     target_calories: Optional[float] = None

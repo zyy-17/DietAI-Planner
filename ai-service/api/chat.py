@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 import json
 import logging
-from model.request import ChatMessage, ChatWithHistoryRequest
-from service.chat_service import chat, chat_stream, FALLBACK_MSG
+from model.request import ChatMessage, ChatWithHistoryRequest, TitleGenerateRequest
+from service.chat_service import chat, chat_stream, generate_title, FALLBACK_MSG
 
 logger = logging.getLogger("dietai")
 router = APIRouter()
@@ -73,3 +73,10 @@ async def chat_with_history_stream_endpoint(request: ChatWithHistoryRequest):
             yield f"data: {json.dumps({'done': True, 'session_id': session_id}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/api/chat/title")
+async def generate_title_endpoint(request: TitleGenerateRequest):
+    """为一次对话生成不超过 12 字的概括性标题。"""
+    title = generate_title(message=request.message, response=request.response)
+    return {"title": title}
