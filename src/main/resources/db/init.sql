@@ -8,15 +8,21 @@ CREATE TABLE IF NOT EXISTS `user` (
     `id`             BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键，自增',
     `username`       VARCHAR(50)   NOT NULL COMMENT '用户名，唯一',
     `email`          VARCHAR(100)  DEFAULT NULL COMMENT '邮箱，唯一',
-    `password_hash`  VARCHAR(100)  NOT NULL COMMENT 'BCrypt加密密码',
+    `password_hash`  VARCHAR(100)  NOT NULL COMMENT '登录密码（明文存储，教学演示用）',
     `real_name`      VARCHAR(50)   DEFAULT NULL COMMENT '真实姓名',
     `gender`         TINYINT       DEFAULT NULL COMMENT '性别：0未知/1男/2女',
     `birth_date`     DATE          DEFAULT NULL COMMENT '出生日期',
     `height`         DECIMAL(5,1)  DEFAULT NULL COMMENT '身高(cm)',
     `weight`         DECIMAL(5,1)  DEFAULT NULL COMMENT '体重(kg)',
+    `target_weight_kg`         DECIMAL(5,1)  DEFAULT NULL COMMENT '目标体重(kg)，减重/增重时设定后据此算热量缺口',
+    `target_body_fat_percent`  DECIMAL(5,1)  DEFAULT NULL COMMENT '目标体脂率(%)，可选',
+    `target_deadline`          DATE          DEFAULT NULL COMMENT '期望达成目标日期，用于估算还需多久并提示是否过快',
     `activity_level` TINYINT       DEFAULT NULL COMMENT '活动水平1-5',
     `diet_goal`      VARCHAR(20)   DEFAULT NULL COMMENT '减脂/维持/增肌/健康管理',
     `diet_preference` VARCHAR(200) DEFAULT NULL COMMENT '饮食偏好，如：清淡、素食、低糖等',
+    `allergy_note`   VARCHAR(200)  DEFAULT NULL COMMENT '忌口食物，多个以「、」分隔，取值来自 profile_option 表 allergy 分组',
+    `disease`        VARCHAR(200)  DEFAULT NULL COMMENT '慢性疾病，多个以「、」分隔，取值来自 profile_option 表 disease 分组',
+    `medication`     VARCHAR(500)  DEFAULT NULL COMMENT '用药情况，自由文本',
     `target_calories`   DECIMAL(7,2) DEFAULT NULL COMMENT '自定义每日热量目标kcal',
     `target_protein`    DECIMAL(7,2) DEFAULT NULL COMMENT '自定义每日蛋白质目标g',
     `target_carbohydrate` DECIMAL(7,2) DEFAULT NULL COMMENT '自定义每日碳水目标g',
@@ -58,6 +64,7 @@ CREATE TABLE IF NOT EXISTS `food_category` (
 -- 3. 食物表 (food) —— 公共食物库
 -- 只存放系统食物（source='system'），由管理员维护。
 -- 用户自己填写的自定义食物不写入本表，见 user_custom_food 表。
+-- food_type 区分基础食材(ingredient)与成品菜肴(dish)。
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `food` (
     `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
@@ -149,7 +156,6 @@ CREATE TABLE IF NOT EXISTS `user_custom_food_item` (
     KEY `idx_recipe` (`recipe_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户自定义食谱组成明细表';
 
-
 -- ============================================================
 -- 5. AI对话会话表 (ai_chat_session)
 -- ============================================================
@@ -214,12 +220,160 @@ CREATE TABLE IF NOT EXISTS `nutrition_standard` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='营养标准配置表';
 
 -- ============================================================
+-- 9. 膳食方案/食谱表 (meal_plan)
+-- 用户「打算吃什么」的 N 天计划，与 diet_record（实际吃了什么）不同。
+-- 三种正交状态：
+--   status         执行状态：idle(未执行)/active(执行中)/paused(暂停)/archived(历史)
+--   publish_status 发布状态：none/pending/approved/rejected
+--   origin         来源类型：original(原创)/copied(应用自他人公开食谱)
+-- copied 食谱仅可替换/增删食材，不可改基础信息、不可二次发布，保护原创版权。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `meal_plan` (
+    `id`                  BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`             BIGINT        NOT NULL COMMENT '归属用户ID',
+    `status`              VARCHAR(20)   NOT NULL DEFAULT 'idle' COMMENT '执行状态：idle/active/paused/archived',
+    `name`                VARCHAR(100)  NOT NULL COMMENT '食谱名，如「7天健康减脂计划」',
+    `goal`                VARCHAR(20)   NOT NULL COMMENT '膳食目标：lose减脂/gain增重/maintain维持',
+    `days`                INT           NOT NULL COMMENT '方案周期（天）：3/7',
+    `meals`               VARCHAR(100)  NOT NULL COMMENT '每日餐次，逗号分隔：breakfast,lunch,dinner,snack',
+    `daily_calories`      DECIMAL(8,2)  DEFAULT NULL COMMENT '每日目标热量(kcal)，可空——实际热量按食物库累计',
+    `preferences`         VARCHAR(200)  DEFAULT NULL COMMENT '饮食偏好标签，以「、」分隔',
+    `dislikes`            VARCHAR(500)  DEFAULT NULL COMMENT '不喜欢/不能吃的食物，以「、」分隔',
+    `extra_requirement`   VARCHAR(500)  DEFAULT NULL COMMENT '其他要求（自由文本）',
+    `summary`             VARCHAR(500)  DEFAULT NULL COMMENT '一句话概述，卡片上展示',
+    `description`         VARCHAR(1000) DEFAULT NULL COMMENT '发布时的心得/整体思路，详情弹窗里可展开',
+    `publish_status`      VARCHAR(20)   NOT NULL DEFAULT 'none' COMMENT '发布状态：none/pending/approved/rejected',
+    `cover_url`           VARCHAR(255)  DEFAULT NULL COMMENT '封面图地址（相对路径）',
+    `tags`                VARCHAR(200)  DEFAULT NULL COMMENT '展示标签，以「、」分隔',
+    `difficulty`          VARCHAR(20)   DEFAULT NULL COMMENT '难度：入门/进阶',
+    `expected_loss`       VARCHAR(30)   DEFAULT NULL COMMENT '预期减重，如「-0.5~-1」或「-2kg」',
+    `source_plan_id`      BIGINT        DEFAULT NULL COMMENT '从广场复制而来时，指回原食谱ID',
+    `origin`              VARCHAR(20)   NOT NULL DEFAULT 'original' COMMENT '来源类型：original原创/copied应用自他人公开食谱',
+    `source_author_id`    BIGINT        DEFAULT NULL COMMENT '来源食谱原作者用户ID（应用他人食谱时记录，用于溯源）',
+    `source_author_name`  VARCHAR(100)  DEFAULT NULL COMMENT '来源食谱原作者昵称快照（脱敏，如「用户**9」）',
+    `usage_count`         INT           NOT NULL DEFAULT 0 COMMENT '被「保存为我的食谱」的次数',
+    `favorite_count`      INT           NOT NULL DEFAULT 0 COMMENT '被收藏次数',
+    `published_at`        DATETIME      DEFAULT NULL COMMENT '上架时间',
+    `reject_reason`       VARCHAR(500)  DEFAULT NULL COMMENT '审核不通过的原因',
+    `start_date`          DATE          DEFAULT NULL COMMENT '开始执行日期，未执行时为NULL',
+    `created_at`          DATETIME      NOT NULL COMMENT '创建时间',
+    `updated_at`          DATETIME      NOT NULL COMMENT '更新时间',
+    `deleted`             TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '软删除标记：0正常/1删除',
+    `paused_at_day`       INT           DEFAULT NULL COMMENT '暂停时第几天（恢复时从这天继续）',
+    PRIMARY KEY (`id`),
+    KEY `idx_user` (`user_id`),
+    KEY `idx_status` (`status`),
+    KEY `idx_publish` (`publish_status`),
+    KEY `idx_mp_square_hot` (`publish_status`, `favorite_count`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='膳食方案/食谱表';
+
+-- ============================================================
+-- 9.1 膳食方案食物条目表 (meal_plan_item)
+-- 方案里的一条食物（第几天 · 哪一餐 · 什么食物 · 多少克）。
+-- 营养值是按克数换算后的快照，食物名/单位也快照下来，
+-- 管理员后续改名或删掉食物，用户已采用的方案不会显示空白。
+-- food_source=ai 时 food_id 为空，营养值取 AI 估算值。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `meal_plan_item` (
+    `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `plan_id`       BIGINT        NOT NULL COMMENT '所属方案ID（meal_plan.id）',
+    `day_index`     INT           NOT NULL COMMENT '第几天，从1开始',
+    `meal_type`     VARCHAR(20)   NOT NULL COMMENT '餐次：breakfast/lunch/dinner/snack',
+    `food_id`       BIGINT        DEFAULT NULL COMMENT '食物库主键；AI估算的食物为空',
+    `food_source`   VARCHAR(20)   NOT NULL DEFAULT 'system' COMMENT '食物来源：system食物库/user自定义/ai估算',
+    `food_name`     VARCHAR(100)  NOT NULL COMMENT '食物名快照',
+    `image_url`     VARCHAR(255)  DEFAULT NULL COMMENT '食物图片快照',
+    `amount`        DECIMAL(8,2)  NOT NULL COMMENT '克数',
+    `unit_name`     VARCHAR(20)   DEFAULT NULL COMMENT '常用单位名快照（个/份/盒…）',
+    `unit_weight`   DECIMAL(8,2)  DEFAULT NULL COMMENT '每个/每份约多少克',
+    `calories`      DECIMAL(8,2)  NOT NULL COMMENT '该条目热量快照(kcal)',
+    `protein`       DECIMAL(8,2)  DEFAULT NULL COMMENT '该条目蛋白质快照(g)',
+    `carbohydrate`  DECIMAL(8,2)  DEFAULT NULL COMMENT '该条目碳水快照(g)',
+    `fat`           DECIMAL(8,2)  DEFAULT NULL COMMENT '该条目脂肪快照(g)',
+    `sort_order`    INT           DEFAULT 0 COMMENT '同一餐内的展示顺序',
+    `created_at`    DATETIME      NOT NULL COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_plan` (`plan_id`),
+    KEY `idx_plan_day` (`plan_id`, `day_index`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='膳食方案食物条目表';
+
+-- ============================================================
+-- 9.2 食谱审核记录表 (meal_plan_review)
+-- 每次通过/驳回都落一条，保留审核人、时间、结果与原因，保留完整审核历史。
+-- 与 meal_plan.reject_reason 不同，这里不覆盖，可追溯多次审核过程。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `meal_plan_review` (
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `plan_id`       BIGINT       NOT NULL COMMENT '所属方案ID（meal_plan.id）',
+    `reviewer_id`   BIGINT       DEFAULT NULL COMMENT '审核人用户ID（管理员），系统自动审核时可为空',
+    `reviewer_name` VARCHAR(50)  DEFAULT NULL COMMENT '审核人用户名快照，避免管理员改名/删号后显示空白',
+    `result`        VARCHAR(20)  NOT NULL COMMENT '审核结果：approved通过/rejected驳回',
+    `reason`        VARCHAR(500) DEFAULT NULL COMMENT '审核原因',
+    `reviewed_at`   DATETIME     NOT NULL COMMENT '审核时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_mpr_plan` (`plan_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='食谱审核记录表';
+
+-- ============================================================
+-- 9.3 食谱收藏表 (meal_plan_favorite)
+-- 谁收藏了广场上的哪份食谱。只存关系，不存食谱副本——
+-- 食谱被作者下架时收藏自然失效，不留下过期快照。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `meal_plan_favorite` (
+    `id`         BIGINT   NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`    BIGINT   NOT NULL COMMENT '收藏用户ID',
+    `plan_id`    BIGINT   NOT NULL COMMENT '被收藏的方案ID',
+    `created_at` DATETIME NOT NULL COMMENT '收藏时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_meal_plan_favorite` (`user_id`, `plan_id`),
+    KEY `idx_mpf_user` (`user_id`),
+    KEY `idx_mpf_plan` (`plan_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='食谱收藏表';
+
+-- ============================================================
+-- 10. 用户档案选项字典表 (profile_option)
+-- 个人中心里的饮食目标、活动水平、饮食偏好、忌口食物、慢性疾病
+-- 全部是下拉/多选，管理员可在后台增删改查。
+-- code 是存进 user 表的真实值，label 是给用户看的文案。
+-- 删除用 status=0 停用而非物理删除，不破坏已有用户数据。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `profile_option` (
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `option_type`   VARCHAR(30)  NOT NULL COMMENT '选项分组：diet_goal/activity_level/diet_preference/allergy/disease',
+    `option_code`   VARCHAR(50)  NOT NULL COMMENT '存入user表的值，如 lose/1/清淡。分组内唯一',
+    `option_label`  VARCHAR(100) NOT NULL COMMENT '界面展示文案，如 减脂/久坐（几乎不运动）',
+    `sort_order`    INT          NOT NULL DEFAULT 0 COMMENT '排序权重',
+    `status`        INT          NOT NULL DEFAULT 1 COMMENT '1启用/0停用（停用后用户端不再展示，历史用户数据不受影响）',
+    `remark`        VARCHAR(255) DEFAULT NULL COMMENT '备注，仅后台可见',
+    PRIMARY KEY (`id`),
+    KEY `idx_type` (`option_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户档案选项字典表';
+
+-- ============================================================
+-- 11. 体重/体脂记录表 (weight_record)
+-- 每天最多一条的身体数据快照，同一天重复提交会覆盖而非追加。
+-- 体脂率可空——很多人家里没有体脂秤，只记体重也是合法用法。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `weight_record` (
+    `id`                BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`           BIGINT       NOT NULL COMMENT '用户ID',
+    `record_date`       DATE         NOT NULL COMMENT '记录日期',
+    `weight_kg`         DECIMAL(5,1) NOT NULL COMMENT '体重(kg)',
+    `body_fat_percent`  DECIMAL(5,1) DEFAULT NULL COMMENT '体脂率(%)，可选',
+    `remark`            VARCHAR(200) DEFAULT NULL COMMENT '备注，如"早上空腹""刚运动完"',
+    `created_at`        DATETIME     NOT NULL COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_weight_user_date` (`user_id`, `record_date`),
+    KEY `idx_user_date` (`user_id`, `record_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='体重/体脂记录表';
+
+-- ============================================================
 -- 初始数据
 -- ============================================================
 
--- 管理员账号 (密码: admin123)
+-- 管理员账号 (密码明文存储: admin123)
 INSERT INTO `user` (`username`, `email`, `password_hash`, `real_name`, `gender`, `birth_date`, `height`, `weight`, `activity_level`, `diet_goal`, `role`, `status`, `created_at`, `updated_at`, `deleted`)
-VALUES ('admin', 'admin@dietai.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', 1, '1990-01-01', 175.0, 70.0, 3, 'maintain', 'admin', 1, NOW(), NOW(), 0)
+VALUES ('admin', 'admin@dietai.com', 'admin123', '系统管理员', 1, '1990-01-01', 175.0, 70.0, 3, 'maintain', 'admin', 1, NOW(), NOW(), 0)
 ON DUPLICATE KEY UPDATE `id`=`id`;
 
 -- 食品分类
@@ -236,7 +390,7 @@ INSERT INTO `food_category` (`name`, `parent_id`, `sort_order`, `icon`, `status`
 ('蛋类', 0, 10, 'egg', 1),
 ('成品菜肴', 0, 11, 'dish', 1);
 
--- 常见食物数据
+-- 常见食物数据（基础食材）
 INSERT INTO `food` (`name`, `category_id`, `calories`, `protein`, `carbohydrate`, `fat`, `fiber`, `image_url`, `source`, `status`, `created_by`, `created_at`, `updated_at`) VALUES
 ('白米饭', 1, 116.00, 2.60, 25.90, 0.30, 0.30, NULL, 'system', 'approved', NULL, NOW(), NOW()),
 ('馒头', 1, 221.00, 7.00, 47.00, 1.10, 1.30, NULL, 'system', 'approved', NULL, NOW(), NOW()),
@@ -322,3 +476,48 @@ INSERT INTO `nutrition_standard` (`gender`, `age_min`, `age_max`, `calories_kcal
 (2, 18, 30, 2100, 55.00, 263.00, 58.00),
 (2, 31, 50, 1900, 50.00, 238.00, 53.00),
 (2, 51, 70, 1700, 45.00, 213.00, 47.00);
+
+-- 用户档案选项（饮食目标）
+INSERT INTO `profile_option` (`option_type`, `option_code`, `option_label`, `sort_order`, `status`, `remark`) VALUES
+('diet_goal', 'lose', '减脂', 1, 1, '低热量高蛋白，缺口 15%~20%'),
+('diet_goal', 'maintain', '维持', 2, 1, '保持当前体重，热量持平'),
+('diet_goal', 'gain', '增肌', 3, 1, '热量盈余 10%~15%，配合力量训练');
+
+-- 用户档案选项（活动水平）
+INSERT INTO `profile_option` (`option_type`, `option_code`, `option_label`, `sort_order`, `status`, `remark`) VALUES
+('activity_level', '1', '久坐（几乎不运动）', 1, 1, '久坐办公，基本不锻炼'),
+('activity_level', '2', '轻度活动（每周1-3次）', 2, 1, '每周运动 1~3 次'),
+('activity_level', '3', '中度活动（每周3-5次）', 3, 1, '每周运动 3~5 次'),
+('activity_level', '4', '高度活动（每周6-7次）', 4, 1, '每周运动 6~7 次'),
+('activity_level', '5', '极高活动（体力劳动）', 5, 1, '重体力劳动或运动员');
+
+-- 用户档案选项（饮食偏好）
+INSERT INTO `profile_option` (`option_type`, `option_code`, `option_label`, `sort_order`, `status`, `remark`) VALUES
+('diet_preference', '清淡', '清淡', 1, 1, NULL),
+('diet_preference', '中式', '中式', 2, 1, NULL),
+('diet_preference', '西式', '西式', 3, 1, NULL),
+('diet_preference', '素食', '素食', 4, 1, NULL),
+('diet_preference', '低糖', '低糖', 5, 1, NULL),
+('diet_preference', '低脂', '低脂', 6, 1, NULL),
+('diet_preference', '高蛋白', '高蛋白', 7, 1, NULL),
+('diet_preference', '无辣', '无辣', 8, 1, NULL),
+('diet_preference', '地中海', '地中海饮食', 9, 1, NULL),
+('diet_preference', '生酮', '生酮饮食', 10, 1, NULL);
+
+-- 用户档案选项（忌口食物）
+INSERT INTO `profile_option` (`option_type`, `option_code`, `option_label`, `sort_order`, `status`, `remark`) VALUES
+('allergy', '海鲜', '海鲜', 1, 1, '虾蟹贝类'),
+('allergy', '牛奶', '牛奶', 2, 1, '乳制品'),
+('allergy', '鸡蛋', '鸡蛋', 3, 1, NULL),
+('allergy', '花生', '花生', 4, 1, NULL),
+('allergy', '大豆', '大豆', 5, 1, NULL),
+('allergy', '麸质', '麸质', 6, 1, '小麦、大麦等'),
+('allergy', '坚果', '坚果', 7, 1, NULL);
+
+-- 用户档案选项（慢性疾病）
+INSERT INTO `profile_option` (`option_type`, `option_code`, `option_label`, `sort_order`, `status`, `remark`) VALUES
+('disease', '糖尿病', '糖尿病', 1, 1, '需控糖'),
+('disease', '高血压', '高血压', 2, 1, '需控盐'),
+('disease', '高血脂', '高血脂', 3, 1, '需控脂'),
+('disease', '痛风', '痛风', 4, 1, '需控嘌呤'),
+('disease', '脂肪肝', '脂肪肝', 5, 1, '需控总热量');
